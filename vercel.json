@@ -1,18 +1,24 @@
 {
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.12",
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "/api"
+      "destination": "/api/index.py"
     },
     {
       "source": "/docs",
-      "destination": "/api"
+      "destination": "/api/index.py"
     },
     {
       "source": "/openapi.json",
-      "destination": "/api"
+      "destination": "/api/index.py"
     },
     {
       "source": "/(.*)",
