@@ -1,0 +1,27 @@
+# Node & build artifacts
+node_modules
+dist
+dist-ssr
+.next
+
+# Python virtual environment and caches
+backend/venv
+venv
+.venv
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+
+# Git & IDE
+.git
+.github
+.vscode
+.idea
+.DS_Store
+
+# Large documentation & temporary files
+*.log
+*.tar.gz
+*.zip
