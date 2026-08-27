@@ -14,8 +14,21 @@ from backend.models.schemas import (
     OrderType,
 )
 
-DATA_DIR = Path(__file__).resolve().parent.parent / "data"
-DATA_DIR.mkdir(parents=True, exist_ok=True)
+is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+if is_serverless:
+    DATA_DIR = Path("/tmp/data")
+else:
+    DATA_DIR = Path(__file__).resolve().parent.parent / "data"
+
+try:
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+except Exception:
+    DATA_DIR = Path("/tmp/data")
+    try:
+        DATA_DIR.mkdir(parents=True, exist_ok=True)
+    except Exception:
+        pass
+
 STORAGE_FILE = DATA_DIR / "paper_account.json"
 
 class VirtualPaperEngine:

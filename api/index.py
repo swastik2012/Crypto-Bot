@@ -8,5 +8,5 @@ if str(root_dir) not in sys.path:
 
 from backend.main import app
 
-# Vercel serverless entrypoint
-handler = app
+# Export FastAPI instance for Vercel Python Serverless ASGI
+app = app

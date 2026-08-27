@@ -48,7 +48,7 @@ class Settings(BaseSettings):
     AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 80.0
 
     class Config:
-        env_file = str(backend_env)
+        env_file = str(backend_env) if backend_env.exists() else None
         extra = "allow"
 
 settings = Settings()

@@ -12,13 +12,17 @@ from backend.api.websocket_stream import router as ws_router
 from backend.services.auto_scheduler import auto_scheduler
 from backend.services.telemetry import telemetry_service
 
+import os
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Start the 30-minute auto trading scheduler on boot
-    auto_scheduler.start()
+    # Only start background autonomous loop if NOT running in serverless environment
+    is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+    if not is_serverless:
+        auto_scheduler.start()
     yield
-    # Stop scheduler on shutdown
-    auto_scheduler.stop()
+    if not is_serverless:
+        auto_scheduler.stop()
 
 app = FastAPI(
     title=settings.APP_NAME,

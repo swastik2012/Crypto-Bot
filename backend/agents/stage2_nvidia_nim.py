@@ -1,5 +1,5 @@
 import time
-import numpy as np
+import random
 from typing import Dict, Any, Tuple, List
 from backend.models.schemas import Stage1GeminiVisionResult, Stage2NvidiaNimResult, DebateMessageSchema
 from backend.config import settings
@@ -41,12 +41,12 @@ async def run_stage2_nvidia_nim(
     effective_rr = round(reward / risk, 2) if risk > 0 else 3.5
     
     # Monte Carlo Simulations
-    np.random.seed(42)
-    drift = 0.0012
-    volatility = 0.024
+    random.seed(42)
+    volatility = stage1.atr_volatility.get("value", 1250.0) / current_price
+    drift = 0.005 if "bull" in str(stage1.initial_thesis).lower() else -0.002
+    
     simulations = 10000
-    simulated_returns = np.random.normal(drift, volatility, simulations)
-    win_count = np.sum(simulated_returns > 0)
+    win_count = sum(1 for _ in range(simulations) if random.gauss(drift, volatility) > 0)
     monte_carlo_win_rate = round(float(win_count / simulations * 100.0), 1)
 
     # Check cash sizing considering currently open positions
