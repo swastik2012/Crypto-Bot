@@ -159,6 +159,18 @@ class VirtualPaperEngine:
         order: PlacePaperOrderRequest,
         current_market_price: float,
     ) -> PaperPosition:
+        # 1. Protection Guard: Max 1 position per asset (prevent over-stacking / duplicate entries)
+        for existing_id, existing_pos in self.open_positions.items():
+            if existing_pos.symbol.upper() == order.symbol.upper():
+                print(f"[PaperEngine Guard] Position in {order.symbol} already exists ({existing_id}). Preventing duplicate stacking.")
+                return existing_pos
+
+        # 2. Protection Guard: Max 3 total concurrent positions across portfolio
+        if len(self.open_positions) >= 3:
+            print(f"[PaperEngine Guard] Max concurrent positions limit (3) reached. Skipping order on {order.symbol}.")
+            # Return first existing position as fallback
+            return list(self.open_positions.values())[0]
+
         leverage = min(max(1, order.leverage), self.max_leverage)
         entry_price = order.entry_price or current_market_price
         
@@ -229,6 +241,37 @@ class VirtualPaperEngine:
 
             pos.unrealized_pnl_pct = round(price_delta_pct * pos.leverage * 100.0, 2)
             pos.unrealized_pnl = round(pos.margin_used * (pos.unrealized_pnl_pct / 100.0), 2)
+
+            # ==========================================
+            # 🚀 DYNAMIC BREAKEVEN LOCK & TRAILING STOP
+            # ==========================================
+            if pos.side == PositionSide.LONG:
+                # 1. Breakeven Lock at +1.8% profit: Lock stop-loss at entry + 0.1% buffer
+                if price_delta_pct >= 0.018 and pos.stop_loss and pos.stop_loss < pos.entry_price:
+                    breakeven_sl = round(pos.entry_price * 1.001, 2)
+                    pos.stop_loss = max(pos.stop_loss, breakeven_sl)
+
+                # 2. Dynamic Trailing Stop above +2.5% profit: Trail by 1.2% behind current peak
+                if price_delta_pct >= 0.025:
+                    trailing_sl = round(current_price * 0.988, 2)
+                    if pos.stop_loss:
+                        pos.stop_loss = max(pos.stop_loss, trailing_sl)
+                    else:
+                        pos.stop_loss = trailing_sl
+
+            elif pos.side == PositionSide.SHORT:
+                # 1. Breakeven Lock for Short at +1.8% profit
+                if price_delta_pct >= 0.018 and pos.stop_loss and pos.stop_loss > pos.entry_price:
+                    breakeven_sl = round(pos.entry_price * 0.999, 2)
+                    pos.stop_loss = min(pos.stop_loss, breakeven_sl)
+
+                # 2. Dynamic Trailing Stop for Short above +2.5% profit
+                if price_delta_pct >= 0.025:
+                    trailing_sl = round(current_price * 1.012, 2)
+                    if pos.stop_loss:
+                        pos.stop_loss = min(pos.stop_loss, trailing_sl)
+                    else:
+                        pos.stop_loss = trailing_sl
 
             # Check Liquidation
             if (pos.side == PositionSide.LONG and current_price <= pos.liquidation_price) or \

@@ -25,6 +25,7 @@ class AutoTradingScheduler:
         self.execution_logs: List[Dict[str, Any]] = []
         self._task: Optional[asyncio.Task] = None
         self.monitored_pairs = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+        self.asset_cooldowns: Dict[str, float] = {}
 
     def start(self):
         if not self._task or self._task.done():
@@ -73,15 +74,12 @@ class AutoTradingScheduler:
         return await self._execute_cycle()
 
     async def _run_loop(self):
-        # Wait 3 seconds after boot to run initial analysis cycle immediately
-        await asyncio.sleep(3)
-        if self.is_running:
-            print("[AutoTrader] Running initial boot cycle...")
+        if not self.last_run_timestamp:
             await self._execute_cycle()
 
         while self.is_running:
             try:
-                # Continuously monitor live price ticks every 5s for immediate TP/SL execution
+                # Continuously monitor live price ticks every 5s for immediate TP/SL/Trailing execution
                 steps = max(1, self.interval_seconds // 5)
                 for _ in range(steps):
                     if not self.is_running:
@@ -106,18 +104,65 @@ class AutoTradingScheduler:
         cycle_results = []
         # Refresh live prices
         symbol_resolver.refresh_live_binance_prices()
-        
+
+        # ========================================================
+        # 🛑 RISK GUARD 1: 24-Hour Max Drawdown Circuit Breaker
+        # ========================================================
+        recent_24h_pnl = sum(
+            t.realized_pnl for t in paper_engine.trade_history
+            if t.closed_at and (time.time() - t.closed_at) <= 86400
+        )
+        if recent_24h_pnl <= -2500.0:
+            print(f"[AutoTrader Circuit Breaker Active] 24h loss (${recent_24h_pnl:,.2f}) exceeded safety limit (-$2,500). Halting automated entries to preserve fund capital.")
+            return {
+                "cycle": self.cycle_count,
+                "executed_at": self.last_run_timestamp,
+                "results": [{"error": "CIRCUIT_BREAKER_ACTIVE_24H_DRAWDOWN"}],
+            }
+
+        # Update dynamic stop-loss cooldowns from recent trade history (2h cooldown per stopped asset)
+        for t in paper_engine.trade_history[-10:]:
+            if t.exit_reason == "STOP_LOSS_TRIGGERED" and t.closed_at:
+                if (time.time() - t.closed_at) < 7200: # 2 hours
+                    self.asset_cooldowns[t.symbol] = max(self.asset_cooldowns.get(t.symbol, 0), t.closed_at + 7200)
+
         for pair in self.monitored_pairs:
             try:
                 base_sym = pair.split("/")[0]
                 match_res = symbol_resolver.resolve(base_sym, limit=1)
                 current_price = match_res.best_match.current_price if match_res.best_match else 78150.0
-                
-                # Check if we already have an open position on this pair
-                already_open = any(p.symbol == pair for p in paper_engine.open_positions.values())
-                
-                # Run the 4-Stage LangGraph multi-agent debate
-                # Providing complete persistent open positions & previous trade history context
+                change_24h = match_res.best_match.change_24h if match_res.best_match else 0.0
+
+                # ========================================================
+                # 🛑 RISK GUARD 2: Asset Stop-Loss Cooldown Guard
+                # ========================================================
+                cooldown_until = self.asset_cooldowns.get(pair, 0)
+                if time.time() < cooldown_until:
+                    mins_left = int((cooldown_until - time.time()) / 60)
+                    print(f"[AutoTrader Cooldown Guard] {pair} in loss cooldown ({mins_left}m remaining) after recent stop-loss. Skipping.")
+                    report_entry = {
+                        "cycle": self.cycle_count,
+                        "timestamp": time.time(),
+                        "pair": pair,
+                        "price": current_price,
+                        "signal": "COOLDOWN",
+                        "confidence": 0.0,
+                        "executed": False,
+                        "position": None,
+                        "already_open": False,
+                        "cooldown_remaining_mins": mins_left,
+                    }
+                    cycle_results.append(report_entry)
+                    self.execution_logs.append(report_entry)
+                    continue
+
+                # ========================================================
+                # 🛑 RISK GUARD 3: Strict Single-Position & Max Limit
+                # ========================================================
+                already_open = any(p.symbol.upper() == pair.upper() for p in paper_engine.open_positions.values())
+                portfolio_full = len(paper_engine.open_positions) >= 3
+
+                # Run the 5-Stage LangGraph multi-agent debate
                 response = await consensus_pipeline.run(
                     symbol=pair,
                     timeframe="1H",
@@ -125,7 +170,7 @@ class AutoTradingScheduler:
                     current_price=current_price,
                     account_state=paper_engine.get_state().dict(),
                     strategy_preset="Swing Trading",
-                    auto_execute=False, # Evaluated below
+                    auto_execute=False,
                 )
                 
                 signal = response.stage5.consensus_signal
@@ -133,8 +178,22 @@ class AutoTradingScheduler:
                 executed = False
                 pos_info = None
 
-                # If high conviction (>= 80.0%) and not already in trade, auto-execute LONG or SHORT
-                if confidence >= 80.0 and signal.value in ["STRONG BUY", "BUY", "STRONG SELL", "SELL"] and not already_open:
+                # ========================================================
+                # 🛑 RISK GUARD 4: Trend Alignment & Safe Execution
+                # ========================================================
+                can_execute = (
+                    confidence >= 80.0 and
+                    signal.value in ["STRONG BUY", "BUY", "STRONG SELL", "SELL"] and
+                    not already_open and
+                    not portfolio_full
+                )
+
+                # Prevent buying a falling knife if 24h change is heavily negative
+                if can_execute and signal.value in ["STRONG BUY", "BUY"] and change_24h < -1.0:
+                    print(f"[AutoTrader Trend Guard] Suppressing LONG on {pair} (24h change is {change_24h:+.2f}% in downtrend).")
+                    can_execute = False
+
+                if can_execute:
                     plan = response.stage5.execution_plan
                     pos_size = plan.get("recommended_position_usd", 5000.0) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", 5000.0)
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
