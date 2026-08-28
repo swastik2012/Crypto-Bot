@@ -140,6 +140,7 @@ async def run_stage3_nvidia_nim(
     start_time = time.time()
     latency_ms = 410
 
+    parsed_successfully = False
     if nvidia_key and not nvidia_key.startswith("your-"):
         try:
             headers = {
@@ -155,7 +156,7 @@ async def run_stage3_nvidia_nim(
                 "temperature": 0.1,
                 "max_tokens": 1000,
             }
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(1.0, connect=1.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -166,15 +167,42 @@ async def run_stage3_nvidia_nim(
                     raw_content = data["choices"][0]["message"]["content"]
                     cleaned_content = raw_content.replace("```json", "").replace("```", "").strip()
                     parsed = json.loads(cleaned_content)
-
                     stress_score = float(parsed.get("stress_test_score", stress_score))
                     calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
                     mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
                     verdict = parsed.get("verdict", verdict)
                     adjustments = parsed.get("adjustments_proposed", adjustments)
                     math_proof = parsed.get("mathematical_proof", math_proof)
+                    parsed_successfully = True
+        except Exception:
+            pass
+
+    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.6 Flash for quantitative synthesis
+    if not parsed_successfully and settings.GEMINI_API_KEY:
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=settings.GEMINI_API_KEY, temperature=0.2)
+            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            raw_text = resp.content
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                parsed = json.loads(json_str)
+            elif "{" in raw_text:
+                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                parsed = json.loads(json_str)
+            else:
+                parsed = {}
+            if parsed and "stress_test_score" in parsed:
+                stress_score = float(parsed.get("stress_test_score", stress_score))
+                calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
+                mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
+                verdict = parsed.get("verdict", verdict)
+                adjustments = parsed.get("adjustments_proposed", adjustments)
+                math_proof = parsed.get("mathematical_proof", math_proof)
+                parsed_successfully = True
         except Exception as e:
-            print(f"[Stage 3 NVIDIA Quant Notice] Falling back to quantitative proof: {e}")
+            print(f"[Stage 3 LLM Quant Notice]: {e}")
 
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:

@@ -76,10 +76,14 @@ class CryptoNewsScraper:
             if now - cache_entry["timestamp"] < self._cache_ttl:
                 return cache_entry["articles"]
 
+        # Fetch all feeds in parallel with strict 2.0s timeout
+        import asyncio
+        tasks = [self.fetch_feed_articles(s, u) for s, u in self.FEEDS.items()]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
         all_articles = []
-        for source_name, feed_url in self.FEEDS.items():
-            feed_items = await self.fetch_feed_articles(source_name, feed_url)
-            all_articles.extend(feed_items)
+        for r in results:
+            if isinstance(r, list):
+                all_articles.extend(r)
 
         # Keyword matching dictionary for crypto pairs
         crypto_keywords = {

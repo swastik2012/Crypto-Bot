@@ -84,39 +84,41 @@ async def run_stage4_openai_risk(
     start_time = time.time()
     latency_ms = 450
 
+    system_prompt = (
+        "You are the Chief Risk Officer and Devil's Advocate for an institutional AI crypto hedge fund. "
+        "Your sole duty is to protect fund equity by ruthlessly searching for reasons NOT to take the trade.\n\n"
+        "MANDATORY RISK AUDIT CHECKLIST:\n"
+        "1. LIQUIDITY TRAP & FAKEOUT AUDIT: Is price sweeping previous swing highs/lows just to trap retail breakout traders? Calculate false_breakout_probability (0.0 to 100.0).\n"
+        "2. NEWS EXHAUSTION: Is the Stage 2 narrative already priced in ('buy the rumor, sell the news')?\n"
+        "3. PORTFOLIO CORRELATION: Check existing open positions to ensure the portfolio is not over-concentrated in one direction.\n"
+        "4. VETO POWER: If false_breakout_probability >= 40.0% or the R:R is substandard, you MUST downgrade safety_score (< 65) and provide a macro_trap_alert warning.\n\n"
+        "Return ONLY a valid JSON object matching this schema:\n"
+        "{\n"
+        '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
+        '  "false_breakout_probability": float (0.0 to 100.0),\n'
+        '  "order_block_status": "Description of nearest institutional order block / supply-demand imbalance",\n'
+        '  "macro_trap_alert": null | "Explicit warning if fakeout or trap is detected",\n'
+        '  "critique_of_gemini": "Critical peer-review of Stage 1 Gemini Vision technical setup",\n'
+        '  "critique_of_nvidia": "Critical peer-review of Stage 3 NVIDIA Quant Monte Carlo assumptions",\n'
+        '  "safety_score": float (0.0 to 100.0)\n'
+        "}"
+    )
+    user_prompt = (
+        f"AUDIT TARGET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
+        f"STAGE 1 VISION PROPOSAL:\n- Patterns: {[p.name for p in stage1.patterns]}\n"
+        f"- Proposed Direction: {stage1.initial_thesis.get('direction', 'NEUTRAL') if stage1.initial_thesis else 'NEUTRAL'}\n"
+        f"- Targets: TP1=${stage1.initial_thesis.get('take_profit_1', 0):,.2f}, SL=${stage1.initial_thesis.get('stop_loss', 0):,.2f}\n\n"
+        f"STAGE 2 NEWS MACRO GIST:\n- Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}/100)\n"
+        f"- Gist: {stage2.news_gist}\n\n"
+        f"STAGE 3 QUANT CALCULATIONS:\n- Monte Carlo Win Rate: {stage3.monte_carlo_win_rate}%\n"
+        f"- R:R Ratio: 1:{stage3.risk_reward_ratio} | Stress Score: {stage3.stress_test_score}\n\n"
+        f"PORTFOLIO STATE:\n{_format_portfolio_summary(account_state)}\n\n"
+        f"Conduct devil's advocate risk audit, quantify false breakout probability, and issue safety score."
+    )
+
+    parsed_successfully = False
     if openai_key and not openai_key.startswith("your-"):
         try:
-            system_prompt = (
-                "You are the Chief Risk Officer and Devil's Advocate for an institutional AI crypto hedge fund. "
-                "Your sole duty is to protect fund equity by ruthlessly searching for reasons NOT to take the trade.\n\n"
-                "MANDATORY RISK AUDIT CHECKLIST:\n"
-                "1. LIQUIDITY TRAP & FAKEOUT AUDIT: Is price sweeping previous swing highs/lows just to trap retail breakout traders? Calculate false_breakout_probability (0.0 to 100.0).\n"
-                "2. NEWS EXHAUSTION: Is the Stage 2 narrative already priced in ('buy the rumor, sell the news')?\n"
-                "3. PORTFOLIO CORRELATION: Check existing open positions to ensure the portfolio is not over-concentrated in one direction.\n"
-                "4. VETO POWER: If false_breakout_probability >= 40.0% or the R:R is substandard, you MUST downgrade safety_score (< 65) and provide a macro_trap_alert warning.\n\n"
-                "Return ONLY a valid JSON object matching this schema:\n"
-                "{\n"
-                '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
-                '  "false_breakout_probability": float (0.0 to 100.0),\n'
-                '  "order_block_status": "Description of nearest institutional order block / supply-demand imbalance",\n'
-                '  "macro_trap_alert": null | "Explicit warning if fakeout or trap is detected",\n'
-                '  "critique_of_gemini": "Critical peer-review of Stage 1 Gemini Vision technical setup",\n'
-                '  "critique_of_nvidia": "Critical peer-review of Stage 3 NVIDIA Quant Monte Carlo assumptions",\n'
-                '  "safety_score": float (0.0 to 100.0)\n'
-                "}"
-            )
-            user_prompt = (
-                f"AUDIT TARGET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
-                f"STAGE 1 VISION PROPOSAL:\n- Patterns: {[p.name for p in stage1.patterns]}\n"
-                f"- Proposed Direction: {stage1.initial_thesis.get('direction', 'NEUTRAL') if stage1.initial_thesis else 'NEUTRAL'}\n"
-                f"- Targets: TP1=${stage1.initial_thesis.get('take_profit_1', 0):,.2f}, SL=${stage1.initial_thesis.get('stop_loss', 0):,.2f}\n\n"
-                f"STAGE 2 NEWS MACRO GIST:\n- Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}/100)\n"
-                f"- Gist: {stage2.news_gist}\n\n"
-                f"STAGE 3 QUANT CALCULATIONS:\n- Monte Carlo Win Rate: {stage3.monte_carlo_win_rate}%\n"
-                f"- R:R Ratio: 1:{stage3.risk_reward_ratio} | Stress Score: {stage3.stress_test_score}\n\n"
-                f"PORTFOLIO STATE:\n{_format_portfolio_summary(account_state)}\n\n"
-                f"Conduct devil's advocate risk audit, quantify false breakout probability, and issue safety score."
-            )
             headers = {
                 "Authorization": f"Bearer {openai_key}",
                 "Content-Type": "application/json",
@@ -130,7 +132,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             }
-            async with httpx.AsyncClient(timeout=8.0) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(1.0, connect=1.0)) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -145,8 +147,36 @@ async def run_stage4_openai_risk(
                     macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
                     critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                     critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                    parsed_successfully = True
+        except Exception:
+            pass
+
+    # If OpenAI is unavailable or 429 quota exceeded, invoke Google Gemini 3.6 Flash for Devil's Advocate risk audit
+    if not parsed_successfully and settings.GEMINI_API_KEY:
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=settings.GEMINI_API_KEY, temperature=0.2)
+            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            raw_text = resp.content
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                parsed = json.loads(json_str)
+            elif "{" in raw_text:
+                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                parsed = json.loads(json_str)
+            else:
+                parsed = {}
+            if parsed and "safety_score" in parsed:
+                safety_score = float(parsed.get("safety_score", safety_score))
+                false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                order_block_status = parsed.get("order_block_status", order_block_status)
+                macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                parsed_successfully = True
         except Exception as e:
-            print(f"[Stage 4 OpenAI Notice] Note: {e}")
+            print(f"[Stage 4 LLM Risk Notice]: {e}")
 
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:

@@ -203,14 +203,20 @@ class Stage5GeminiArbiterResult(BaseModel):
 class DebateMessageSchema(BaseModel):
     id: str
     stage_number: int
+    stageNumber: Optional[int] = None
     agent_id: str
+    agentId: Optional[str] = None
     agent_name: str
+    agentName: Optional[str] = None
     agent_badge: str
+    agentBadge: Optional[str] = None
     avatar_color: str
+    avatarColor: Optional[str] = None
     model: str
     timestamp: str
     content: str
     highlight_pills: Optional[List[str]] = []
+    highlightPills: Optional[List[str]] = []
 
 class AnalyzeAndTradeRequest(BaseModel):
     symbol: str = "BTC/USDT"
