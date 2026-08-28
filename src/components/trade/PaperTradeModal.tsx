@@ -52,18 +52,29 @@ export const PaperTradeModal: React.FC<PaperTradeModalProps> = ({
     }
   }, [isOpen]);
 
+  const isShort = consensusSignal === 'STRONG SELL' || consensusSignal === 'SELL';
+  const side: 'LONG' | 'SHORT' = isShort ? 'SHORT' : 'LONG';
+
   const entryPrice = executionPlan.recommendedEntry || asset.price;
   const marginRequired = Math.round((positionSizeUsd / leverage) * 100) / 100;
-  const estimatedLiqPrice = Math.round((entryPrice * (1 - 0.85 / leverage)) * 100) / 100;
-  const potentialProfit = Math.round((positionSizeUsd * ((executionPlan.takeProfit1 - entryPrice) / entryPrice)) * 100) / 100;
-  const potentialLoss = Math.round((positionSizeUsd * ((entryPrice - executionPlan.stopLoss) / entryPrice)) * 100) / 100;
+  const estimatedLiqPrice = isShort
+    ? Math.round((entryPrice * (1 + 0.85 / leverage)) * 100) / 100
+    : Math.round((entryPrice * (1 - 0.85 / leverage)) * 100) / 100;
+
+  const potentialProfit = isShort
+    ? Math.round((positionSizeUsd * (Math.abs(entryPrice - executionPlan.takeProfit1) / entryPrice)) * 100) / 100
+    : Math.round((positionSizeUsd * (Math.abs(executionPlan.takeProfit1 - entryPrice) / entryPrice)) * 100) / 100;
+
+  const potentialLoss = isShort
+    ? Math.round((positionSizeUsd * (Math.abs(executionPlan.stopLoss - entryPrice) / entryPrice)) * 100) / 100
+    : Math.round((positionSizeUsd * (Math.abs(entryPrice - executionPlan.stopLoss) / entryPrice)) * 100) / 100;
 
   const handleExecute = () => {
     setIsSubmitting(true);
 
     onExecuteTradeOrder({
       symbol: asset.pair,
-      side: 'LONG',
+      side,
       sizeUsd: positionSizeUsd,
       leverage,
       entryPrice,
@@ -85,7 +96,7 @@ export const PaperTradeModal: React.FC<PaperTradeModalProps> = ({
         setOrderFilled(false);
         onClose();
       }, 1200);
-    }, 250);
+    }, 300);
   };
 
   return (

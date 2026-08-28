@@ -133,8 +133,8 @@ class AutoTradingScheduler:
                 executed = False
                 pos_info = None
 
-                # If high conviction (>= 80.0%) and not already in trade, auto-execute
-                if confidence >= 80.0 and signal.value in ["STRONG BUY", "BUY"] and not already_open:
+                # If high conviction (>= 80.0%) and not already in trade, auto-execute LONG or SHORT
+                if confidence >= 80.0 and signal.value in ["STRONG BUY", "BUY", "STRONG SELL", "SELL"] and not already_open:
                     plan = response.stage5.execution_plan
                     pos_size = plan.get("recommended_position_usd", 5000.0) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", 5000.0)
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
@@ -142,9 +142,12 @@ class AutoTradingScheduler:
                     tp2 = plan.get("take_profit_2", round(current_price * 1.07, 2)) if isinstance(plan, dict) else getattr(plan, "take_profit_2", round(current_price * 1.07, 2))
                     sl = plan.get("stop_loss", round(current_price * 0.97, 2)) if isinstance(plan, dict) else getattr(plan, "stop_loss", round(current_price * 0.97, 2))
 
+                    is_short = signal.value in ["STRONG SELL", "SELL"]
+                    order_side = PositionSide.SHORT if is_short else PositionSide.LONG
+
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
-                        side=PositionSide.LONG,
+                        side=order_side,
                         size_usd=pos_size or 5000.0,
                         leverage=3,
                         entry_price=entry_p,
@@ -156,7 +159,7 @@ class AutoTradingScheduler:
                     pos = paper_engine.execute_order(order_req, current_price)
                     executed = True
                     pos_info = pos.dict()
-                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {pair} @ ${entry_p:,.2f} ({confidence}% conviction)")
+                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} ({confidence}% conviction)")
 
                 report_entry = {
                     "cycle": self.cycle_count,

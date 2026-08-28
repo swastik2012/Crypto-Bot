@@ -32,33 +32,101 @@ async def run_stage5_gemini_arbiter(
     gemini_key = api_key or settings.GEMINI_API_KEY
     model_name = settings.GEMINI_MODEL or "gemini-3.5-flash"
     
-    gemini_score = 94.5
-    news_score = stage2.sentiment_score
-    nvidia_score = stage3.stress_test_score
-    openai_score = stage4.safety_score
-    
-    # Harmonic Multi-Node Consensus Matrix Weighted Score
-    consensus_confidence = round(
-        (gemini_score * 0.25) +
-        (news_score * 0.20) +
-        (nvidia_score * 0.30) +
-        (openai_score * 0.25),
-        1
-    )
-
     thesis = stage1.initial_thesis or {}
-    entry = thesis.get("entry_price", current_price)
-    tp1 = thesis.get("take_profit_1", round(current_price * 1.042, 2))
-    tp2 = thesis.get("take_profit_2", round(current_price * 1.078, 2))
-    sl = thesis.get("stop_loss", round(current_price * 0.978, 2))
-    
-    signal = SignalAction.STRONG_BUY if consensus_confidence >= 90.0 else SignalAction.BUY if consensus_confidence >= 75.0 else SignalAction.HOLD
+    direction = str(thesis.get("direction", "LONG")).upper()
+    fakeout_risk = getattr(stage4, "false_breakout_probability", 15.0)
+
+    # Multi-directional signal arbitration
+    if direction in ["SHORT", "BEARISH"]:
+        gemini_score = 92.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = round(
+            (gemini_score * 0.25) +
+            ((100 - news_score) * 0.20) +
+            (nvidia_score * 0.30) +
+            (openai_score * 0.25),
+            1
+        )
+        if consensus_confidence >= 88.0 and fakeout_risk < 30.0:
+            signal = SignalAction.STRONG_SELL
+        elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+            signal = SignalAction.SELL
+        else:
+            signal = SignalAction.HOLD
+
+        entry = thesis.get("suggested_entry", current_price)
+        tp1 = thesis.get("take_profit_1", round(current_price * 0.958, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 0.922, 2))
+        sl = thesis.get("stop_loss", round(current_price * 1.022, 2))
+        invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates the bearish breakdown structure and triggers immediate stop-loss."
+        summary = (
+            f"Full 5-Stage Bearish Consensus Reconciled with {consensus_confidence}% conviction for {symbol}. "
+            f"Stage 1 Vision breakdown confirmed by Stage 2 news macro selling pressure ({stage2.sentiment_score}%), "
+            f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo short win rate, and cleared by Stage 4 OpenAI Risk Guard."
+        )
+
+    elif direction in ["NEUTRAL", "HOLD"]:
+        gemini_score = 68.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = round(
+            (gemini_score * 0.25) +
+            (news_score * 0.20) +
+            (nvidia_score * 0.30) +
+            (openai_score * 0.25),
+            1
+        )
+        signal = SignalAction.HOLD
+
+        entry = thesis.get("suggested_entry", current_price)
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
+        invalidation_cond = f"Asset trading inside equilibrium chop zone (${sl:,.2f} - ${tp1:,.2f}). Stand aside until confirmed directional breakout."
+        summary = (
+            f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction). "
+            f"Stage 1 detected range compression, Stage 3 quantified coin-flip expectancy ({stage3.monte_carlo_win_rate}%), "
+            f"and Stage 4 OpenAI flagged {fakeout_risk}% fakeout risk. Capital preservation advised."
+        )
+
+    else: # LONG / BULLISH
+        gemini_score = 94.5
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = round(
+            (gemini_score * 0.25) +
+            (news_score * 0.20) +
+            (nvidia_score * 0.30) +
+            (openai_score * 0.25),
+            1
+        )
+        if consensus_confidence >= 88.0 and fakeout_risk < 30.0:
+            signal = SignalAction.STRONG_BUY
+        elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+            signal = SignalAction.BUY
+        else:
+            signal = SignalAction.HOLD
+
+        entry = thesis.get("suggested_entry", current_price)
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.042, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.078, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.978, 2))
+        invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates the technical structure and triggers immediate stop-loss."
+        summary = (
+            f"Full 5-Stage Consensus Reconciled with {consensus_confidence}% conviction for {symbol}. "
+            f"Stage 1 Vision setup is validated by Stage 2's {stage2.sentiment_score}% macro news sentiment across CoinDesk/Cointelegraph, "
+            f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo win rate, and cleared by Stage 4 OpenAI Risk Guard."
+        )
 
     open_positions: List[Dict] = account_state.get("open_positions", [])
 
-    suggested_pos = 5000.0
+    suggested_pos = 5000.0 if signal != SignalAction.HOLD else 0.0
     if stage3.adjustments_proposed and isinstance(stage3.adjustments_proposed, dict):
-        suggested_pos = stage3.adjustments_proposed.get("suggested_position_usd", 5000.0)
+        suggested_pos = stage3.adjustments_proposed.get("suggested_position_usd", suggested_pos)
 
     exec_plan = {
         "recommended_entry": entry,
@@ -66,20 +134,10 @@ async def run_stage5_gemini_arbiter(
         "take_profit_2": tp2,
         "stop_loss": sl,
         "effective_rr": stage3.risk_reward_ratio,
-        "suggested_leverage": "3x - 5x Cross",
+        "suggested_leverage": "3x - 5x Cross" if signal != SignalAction.HOLD else "None (Cash)",
         "recommended_position_usd": suggested_pos,
-        "time_horizon": "12h - 48h (Swing)",
+        "time_horizon": "12h - 48h (Swing)" if signal != SignalAction.HOLD else "Waiting for Catalyst",
     }
-
-    invalidation_cond = (
-        f"Hourly candle close below ${sl:,.2f} invalidates the technical structure and triggers immediate stop-loss."
-    )
-    
-    summary = (
-        f"Full 5-Stage Consensus Reconciled with {consensus_confidence}% conviction for {symbol}. "
-        f"Stage 1 Vision setup is validated by Stage 2's {stage2.sentiment_score}% macro news sentiment across CoinDesk/Cointelegraph, "
-        f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo win rate, and cleared by Stage 4 OpenAI Risk Guard."
-    )
 
     latency = 310
 
@@ -97,7 +155,7 @@ async def run_stage5_gemini_arbiter(
             "news_sentiment_score": news_score,
             "nvidia_quant_score": nvidia_score,
             "openai_risk_score": openai_score,
-            "overall_agreement": f"Ultra-High Confluence ({consensus_confidence}%)",
+            "overall_agreement": f"Confluence ({consensus_confidence}%) - {signal.value}",
         },
     )
 

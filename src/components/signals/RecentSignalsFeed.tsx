@@ -14,15 +14,15 @@ interface RecentSignalsFeedProps {
   signals?: LiveSignalRecord[];
 }
 
-// Dynamically aligned consensus signals reflecting current live crypto market prices
+// Dynamically aligned consensus signals reflecting diverse multi-agent market conditions
 const DEFAULT_REALTIME_SIGNALS: LiveSignalRecord[] = [
   {
     id: 'sig_btc_01',
     symbol: 'BTC/USDT',
     time: '8m ago',
     timeframe: '1D',
-    signal: 'STRONG BUY',
-    consensusScore: 94.6,
+    signal: 'BUY',
+    consensusScore: 88.5,
     entry: 78150.00,
     target: 81432.30,
     status: 'In Progress',
@@ -33,12 +33,12 @@ const DEFAULT_REALTIME_SIGNALS: LiveSignalRecord[] = [
     symbol: 'ETH/USDT',
     time: '24m ago',
     timeframe: '4H',
-    signal: 'BUY',
-    consensusScore: 89.2,
+    signal: 'HOLD',
+    consensusScore: 62.0,
     entry: 2448.00,
     target: 2552.00,
     status: 'In Progress',
-    pnlPercent: 2.40,
+    pnlPercent: 0.15,
   },
   {
     id: 'sig_sol_01',
@@ -48,7 +48,7 @@ const DEFAULT_REALTIME_SIGNALS: LiveSignalRecord[] = [
     signal: 'STRONG BUY',
     consensusScore: 92.4,
     entry: 95.80,
-    target: 99.80,
+    target: 104.20,
     status: 'In Progress',
     pnlPercent: 3.15,
   },
@@ -57,24 +57,24 @@ const DEFAULT_REALTIME_SIGNALS: LiveSignalRecord[] = [
     symbol: 'AVAX/USDT',
     time: '2h ago',
     timeframe: '1D',
-    signal: 'BUY',
-    consensusScore: 87.0,
+    signal: 'SELL',
+    consensusScore: 84.1,
     entry: 7.27,
-    target: 7.58,
-    status: 'Target Hit',
-    pnlPercent: 4.26,
+    target: 6.85,
+    status: 'In Progress',
+    pnlPercent: -1.45,
   },
   {
     id: 'sig_xrp_01',
     symbol: 'XRP/USDT',
     time: '3h ago',
     timeframe: '4H',
-    signal: 'BUY',
-    consensusScore: 85.5,
+    signal: 'HOLD',
+    consensusScore: 58.4,
     entry: 1.38,
     target: 1.44,
     status: 'In Progress',
-    pnlPercent: 2.80,
+    pnlPercent: 0.05,
   },
 ];
 
@@ -115,7 +115,6 @@ export const RecentSignalsFeed: React.FC<RecentSignalsFeedProps> = ({
       {/* Horizontal Signals Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 font-mono">
         {feedSignals.map((sig) => {
-          const isBull = sig.signal === 'STRONG BUY' || sig.signal === 'BUY';
           const isTargetHit = sig.status === 'Target Hit';
 
           return (
@@ -136,7 +135,7 @@ export const RecentSignalsFeed: React.FC<RecentSignalsFeedProps> = ({
 
               {/* Signal Badge & Consensus Score */}
               <div className="flex items-center justify-between">
-                <Badge variant={isBull ? 'emerald' : 'rose'} size="sm">
+                <Badge signal={sig.signal} size="sm">
                   {sig.signal}
                 </Badge>
                 <span className="text-xs font-black text-cyan-700 dark:text-cyan-400">

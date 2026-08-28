@@ -2,6 +2,8 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import {
   TrendingUp,
+  TrendingDown,
+  PauseCircle,
   Target,
   AlertOctagon,
   Percent,
@@ -35,22 +37,42 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
     ? 'glow-cyan'
     : 'glow-rose';
 
+  const borderColor = isBullish
+    ? 'border-emerald-500/40 dark:border-emerald-500/25'
+    : isNeutral
+    ? 'border-amber-500/40 dark:border-amber-500/25'
+    : 'border-rose-500/40 dark:border-rose-500/25';
+
+  const glowColor = isBullish
+    ? 'bg-emerald-500/15'
+    : isNeutral
+    ? 'bg-amber-500/15'
+    : 'bg-rose-500/15';
+
   return (
     <GlassCard
       variant={cardVariant}
-      className="p-5 sm:p-7 border-2 border-emerald-500/40 dark:border-emerald-500/25 relative overflow-hidden shadow-glass-lg"
+      className={`p-5 sm:p-7 border-2 ${borderColor} relative overflow-hidden shadow-glass-lg`}
     >
       {/* Background ambient gradient flare */}
-      <div className="absolute top-0 right-0 w-80 h-80 rounded-full bg-emerald-500/15 dark:bg-emerald-500/15 blur-[80px] pointer-events-none" />
+      <div className={`absolute top-0 right-0 w-80 h-80 rounded-full ${glowColor} blur-[80px] pointer-events-none`} />
 
       <div className="relative z-10 flex flex-col gap-5">
         
         {/* Top Header: Signal Verdict + Confidence Meter */}
         <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300/80 dark:border-white/10 pb-4">
           <div className="flex items-center gap-3.5">
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-400 p-[1px] shadow-glow-emerald flex items-center justify-center">
+            <div className={`w-12 h-12 rounded-2xl p-[1px] flex items-center justify-center ${
+              isBullish ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-glow-emerald' : isNeutral ? 'bg-gradient-to-tr from-amber-500 to-yellow-400' : 'bg-gradient-to-tr from-rose-500 to-orange-500 shadow-glow-rose'
+            }`}>
               <div className="w-full h-full bg-slate-900 rounded-[15px] flex items-center justify-center">
-                <TrendingUp className="w-6 h-6 text-emerald-400" />
+                {isBullish ? (
+                  <TrendingUp className="w-6 h-6 text-emerald-400" />
+                ) : isNeutral ? (
+                  <PauseCircle className="w-6 h-6 text-amber-400" />
+                ) : (
+                  <TrendingDown className="w-6 h-6 text-rose-400" />
+                )}
               </div>
             </div>
             <div>
@@ -58,12 +80,14 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
                 <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
                   LangChain Consensus Verdict
                 </span>
-                <Badge variant="emerald" pulse size="sm">
-                  <CheckCircle2 className="w-3 h-3" /> Consensus Verified
+                <Badge signal={consensusSignal} pulse size="sm">
+                  <CheckCircle2 className="w-3 h-3" /> {isBullish ? 'Bullish Consensus' : isNeutral ? 'Neutral / Stand Aside' : 'Bearish Short Consensus'}
                 </Badge>
               </div>
               <div className="flex items-center gap-3">
-                <h2 className="text-2xl sm:text-3xl font-black font-mono tracking-tight text-emerald-600 dark:text-emerald-400">
+                <h2 className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${
+                  isBullish ? 'text-emerald-600 dark:text-emerald-400' : isNeutral ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
+                }`}>
                   {consensusSignal}
                 </h2>
                 <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-400 hidden sm:inline">
@@ -96,7 +120,7 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
                   cx="18"
                   cy="18"
                   r="15"
-                  className="stroke-cyan-500 dark:stroke-cyan-400"
+                  className={isBullish ? 'stroke-emerald-500 dark:stroke-emerald-400' : isNeutral ? 'stroke-amber-500 dark:stroke-amber-400' : 'stroke-rose-500 dark:stroke-rose-400'}
                   strokeWidth="3.5"
                   strokeDasharray={`${consensusConfidence}, 100`}
                   strokeLinecap="round"
@@ -113,44 +137,74 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
           
           {/* Entry Target */}
           <div className="p-3.5 rounded-xl bg-white/85 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5 shadow-sm">
-            <div className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase">Recommended Entry</div>
+            <div className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase">
+              {isNeutral ? 'Current Baseline' : 'Recommended Entry'}
+            </div>
             <div className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-slate-100 mt-1">
               {formatPrice(executionPlan.recommendedEntry)}
             </div>
-            <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">Market/Limit Zone</div>
+            <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
+              {isNeutral ? 'Range Median' : 'Market/Limit Zone'}
+            </div>
           </div>
 
           {/* Take Profit 1 */}
-          <div className="p-3.5 rounded-xl bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30">
-            <div className="text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-400 uppercase flex items-center gap-1">
-              <Target className="w-3 h-3" /> Target 1 (TP1)
+          <div className={`p-3.5 rounded-xl ${
+            isBullish
+              ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30'
+              : isNeutral
+              ? 'bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30'
+              : 'bg-rose-500/15 dark:bg-rose-500/10 border border-rose-500/30'
+          }`}>
+            <div className={`text-[10px] font-mono font-bold uppercase flex items-center gap-1 ${
+              isBullish ? 'text-emerald-800 dark:text-emerald-400' : isNeutral ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400'
+            }`}>
+              <Target className="w-3 h-3" /> {isNeutral ? 'Range Ceiling' : 'Target 1 (TP1)'}
             </div>
-            <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+            <div className={`text-base sm:text-lg font-black font-mono mt-1 ${
+              isBullish ? 'text-emerald-700 dark:text-emerald-400' : isNeutral ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400'
+            }`}>
               {formatPrice(executionPlan.takeProfit1)}
             </div>
-            <div className="text-[10px] font-mono font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-0.5">+4.2% (Take 50% Profit)</div>
+            <div className="text-[10px] font-mono font-semibold opacity-80 mt-0.5">
+              {isBullish ? '+4.2% (Take 50% Profit)' : isNeutral ? '+2.0% Upper Chop Bound' : '-4.2% (Take 50% Short Profit)'}
+            </div>
           </div>
 
           {/* Take Profit 2 */}
-          <div className="p-3.5 rounded-xl bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30">
-            <div className="text-[10px] font-mono font-bold text-emerald-800 dark:text-emerald-400 uppercase flex items-center gap-1">
-              <Target className="w-3 h-3" /> Target 2 (TP2)
+          <div className={`p-3.5 rounded-xl ${
+            isBullish
+              ? 'bg-emerald-500/15 dark:bg-emerald-500/10 border border-emerald-500/30'
+              : isNeutral
+              ? 'bg-amber-500/15 dark:bg-amber-500/10 border border-amber-500/30'
+              : 'bg-rose-500/15 dark:bg-rose-500/10 border border-rose-500/30'
+          }`}>
+            <div className={`text-[10px] font-mono font-bold uppercase flex items-center gap-1 ${
+              isBullish ? 'text-emerald-800 dark:text-emerald-400' : isNeutral ? 'text-amber-800 dark:text-amber-400' : 'text-rose-800 dark:text-rose-400'
+            }`}>
+              <Target className="w-3 h-3" /> {isNeutral ? 'Macro Extension' : 'Target 2 (TP2)'}
             </div>
-            <div className="text-base sm:text-lg font-black font-mono text-emerald-700 dark:text-emerald-400 mt-1">
+            <div className={`text-base sm:text-lg font-black font-mono mt-1 ${
+              isBullish ? 'text-emerald-700 dark:text-emerald-400' : isNeutral ? 'text-amber-700 dark:text-amber-400' : 'text-rose-700 dark:text-rose-400'
+            }`}>
               {formatPrice(executionPlan.takeProfit2)}
             </div>
-            <div className="text-[10px] font-mono font-semibold text-emerald-800/80 dark:text-emerald-400/80 mt-0.5">+7.8% (Trail Runner)</div>
+            <div className="text-[10px] font-mono font-semibold opacity-80 mt-0.5">
+              {isBullish ? '+7.8% (Trail Runner)' : isNeutral ? '+3.5% Range Expansion' : '-7.8% (Trail Short Runner)'}
+            </div>
           </div>
 
           {/* Invalidation Stop Loss */}
-          <div className="p-3.5 rounded-xl bg-rose-500/15 dark:bg-rose-500/10 border border-rose-500/30">
-            <div className="text-[10px] font-mono font-bold text-rose-800 dark:text-rose-400 uppercase flex items-center gap-1">
-              <AlertOctagon className="w-3 h-3" /> Invalidation (SL)
+          <div className="p-3.5 rounded-xl bg-slate-500/10 border border-slate-300 dark:border-white/10">
+            <div className="text-[10px] font-mono font-bold text-slate-700 dark:text-slate-300 uppercase flex items-center gap-1">
+              <AlertOctagon className="w-3 h-3" /> {isNeutral ? 'Range Floor' : 'Invalidation (SL)'}
             </div>
-            <div className="text-base sm:text-lg font-black font-mono text-rose-700 dark:text-rose-400 mt-1">
+            <div className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-slate-100 mt-1">
               {formatPrice(executionPlan.stopLoss)}
             </div>
-            <div className="text-[10px] font-mono font-semibold text-rose-800/80 dark:text-rose-400/80 mt-0.5">-2.2% Risk Boundary</div>
+            <div className="text-[10px] font-mono font-semibold text-slate-500 dark:text-slate-400 mt-0.5">
+              {isBullish ? '-2.2% Risk Boundary' : isNeutral ? '-2.0% Support Invalidation' : '+2.2% Upper Supply Stop'}
+            </div>
           </div>
 
           {/* Risk:Reward & Suggested Leverage */}
@@ -195,13 +249,19 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
 
           {/* 1-Click Paper Trade Button */}
           <motion.button
-            whileHover={{ scale: 1.04, boxShadow: '0 0 25px rgba(16, 185, 129, 0.4)' }}
+            whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onExecuteTrade}
-            className="w-full sm:w-auto px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 font-mono text-xs font-black flex items-center justify-center gap-2 shadow-glow-emerald cursor-pointer"
+            className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-mono text-xs font-black flex items-center justify-center gap-2 cursor-pointer ${
+              isBullish
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-glow-emerald'
+                : isNeutral
+                ? 'bg-gradient-to-r from-amber-500 to-yellow-500 text-slate-950 shadow-md'
+                : 'bg-gradient-to-r from-rose-500 to-red-600 text-white shadow-glow-rose'
+            }`}
           >
             <DollarSign className="w-4 h-4" />
-            <span>Execute Paper Trade</span>
+            <span>{isBullish ? 'Execute Long Paper Trade' : isNeutral ? 'Setup Range Monitor Order' : 'Execute Short Paper Trade'}</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </motion.button>
         </div>
