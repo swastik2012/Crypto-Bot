@@ -388,6 +388,23 @@ class VirtualPaperEngine:
         )
 
         self.trade_history.append(record)
+
+        # 🧠 Record Post-Mortem in Self-Learning Adaptive Memory
+        try:
+            from backend.services.learning_memory import learning_memory_service
+            learning_memory_service.record_closed_trade(
+                symbol=pos.symbol,
+                side=pos.side.value,
+                entry_price=pos.entry_price,
+                exit_price=exit_price,
+                pnl_usd=realized_pnl,
+                pnl_pct=pnl_pct * 100.0,
+                exit_reason=reason,
+                agent_rationale=f"Position opened at ${pos.entry_price:,.2f} exited via {reason}."
+            )
+        except Exception as e:
+            print(f"[PaperEngine] Learning memory record notice: {e}")
+
         return record
 
 paper_engine = VirtualPaperEngine()

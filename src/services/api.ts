@@ -262,6 +262,17 @@ export const api = {
     return null;
   },
 
+  async getTradeLearnings(): Promise<{ status: string; count: number; learnings: any[] }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/paper-trading/learnings`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return await res.json();
+    } catch (e) {
+      console.warn('[API] Failed to fetch trade learnings:', e);
+      return { status: 'fallback', count: 0, learnings: [] };
+    }
+  },
+
   // 7. Fetch Real-time Live Forex Exchange Rates (USD/INR etc)
   async fetchForexRates(): Promise<Record<string, number> | null> {
     try {

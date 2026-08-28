@@ -99,6 +99,7 @@ Return ONLY a valid JSON object matching this schema:
 }"""
 
 from backend.services.market_data import market_data_service
+from backend.services.learning_memory import learning_memory_service
 from backend.models.schemas import TimeframeScreenSchema, MultiTimeframeConfluenceSchema
 
 def _to_mtf_schema(mtf) -> MultiTimeframeConfluenceSchema:
@@ -186,6 +187,7 @@ async def run_stage1_gemini_vision(
                 f"• Screen 3 (15M Precision Trigger): {mtf_raw.screen_15m.trend} (RSI: {mtf_raw.screen_15m.rsi_14}, {mtf_raw.screen_15m.structure_signal})\n"
                 f"• MTF Alignment Score: {mtf_raw.alignment_score} ({mtf_raw.confluence_direction})\n"
                 f"• MTF Institutional Directive: {mtf_raw.recommended_action}\n\n"
+                f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
                 f"Portfolio & Past Trade Context:\n{portfolio_ctx}\n"
             )
 

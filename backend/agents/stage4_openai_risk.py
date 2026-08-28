@@ -10,6 +10,7 @@ from backend.models.schemas import (
     DebateMessageSchema,
 )
 from backend.config import settings
+from backend.services.learning_memory import learning_memory_service
 
 def _format_portfolio_summary(account_state: Dict[str, Any]) -> str:
     open_positions: List[Dict] = account_state.get("open_positions", [])
@@ -138,8 +139,8 @@ async def run_stage4_openai_risk(
         f"- Gist: {stage2.news_gist}\n\n"
         f"STAGE 3 QUANT CALCULATIONS:\n- Monte Carlo Win Rate: {stage3.monte_carlo_win_rate}%\n"
         f"- R:R Ratio: 1:{stage3.risk_reward_ratio} | Stress Score: {stage3.stress_test_score}\n\n"
-        f"PORTFOLIO STATE:\n{_format_portfolio_summary(account_state)}\n\n"
-        f"Conduct devil's advocate risk audit, quantify false breakout probability, and issue safety score."
+        f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
+        f"Conduct a ruthless risk audit. Cross-reference past failure modes, compute false breakout probability, and evaluate safety score."
     )
 
     parsed_successfully = False

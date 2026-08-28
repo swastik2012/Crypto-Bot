@@ -244,6 +244,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
   const [autoRefresh, setAutoRefresh] = useState<boolean>(true);
   const [selectedStageTab, setSelectedStageTab] = useState<string>('stage1');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
+  const [tradeLearnings, setTradeLearnings] = useState<any[]>([]);
 
   const fetchLogs = async () => {
     try {
@@ -254,15 +255,19 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
           setSummary(data.summary);
         }
       }
+      const learnData = await api.getTradeLearnings();
+      if (learnData && learnData.learnings) {
+        setTradeLearnings(learnData.learnings);
+      }
     } catch (e) {
-      console.warn('[Telemetry] Error loading logs:', e);
+      console.warn('[Telemetry] Error loading logs/learnings:', e);
     }
   };
 
   useEffect(() => {
     fetchLogs();
     if (!autoRefresh) return;
-    const timer = setInterval(fetchLogs, 1500);
+    const timer = setInterval(fetchLogs, 2000);
     return () => clearInterval(timer);
   }, [autoRefresh, selectedProvider]);
 
@@ -583,6 +588,71 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
           />
         </div>
       </div>
+
+      {/* ========================================================================= */}
+      {/* 🧠 AI SELF-LEARNING ADAPTIVE MEMORY & POST-MORTEM FEEDBACK LOOP */}
+      {/* ========================================================================= */}
+      <GlassCard className="p-4 sm:p-6 border border-purple-500/30 shadow-glass-lg">
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+              <Brain className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                <span>AI Self-Learning Memory & Post-Mortem Feedback Loop</span>
+                <Badge variant="purple" size="sm">
+                  Few-Shot Ingested
+                </Badge>
+              </h2>
+              <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                Closed trades undergo automated post-mortems. These historical lessons are injected into Stage 1 & Stage 4 prompts to eliminate repeating mistakes.
+              </p>
+            </div>
+          </div>
+          <Badge variant="purple" size="sm">
+            {tradeLearnings.length} Historical Rules Active
+          </Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
+          {tradeLearnings.map((learn, idx) => (
+            <div
+              key={learn.id || idx}
+              className="p-4 rounded-xl bg-white/90 dark:bg-dark-900/80 border border-purple-500/20 space-y-2.5 shadow-sm flex flex-col justify-between"
+            >
+              <div className="flex items-center justify-between border-b border-purple-500/10 pb-2">
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-xs text-slate-900 dark:text-slate-100">{learn.symbol}</span>
+                  <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">({learn.side})</span>
+                </div>
+                <Badge
+                  variant={learn.outcome === 'WIN' ? 'emerald' : learn.outcome === 'LOSS' ? 'rose' : 'cyan'}
+                  size="sm"
+                >
+                  {learn.outcome} ({learn.pnl_usd >= 0 ? `+$${learn.pnl_usd}` : `-$${Math.abs(learn.pnl_usd)}`})
+                </Badge>
+              </div>
+
+              <div className="space-y-1.5 text-[11px]">
+                <div>
+                  <span className="font-bold text-slate-500">Root Cause: </span>
+                  <span className="text-slate-700 dark:text-slate-300">{learn.root_cause_analysis}</span>
+                </div>
+                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200">
+                  <span className="font-bold uppercase text-purple-700 dark:text-purple-300">Active Rule: </span>
+                  {learn.actionable_lesson}
+                </div>
+              </div>
+
+              <div className="text-[9px] text-slate-500 flex items-center justify-between pt-1 border-t border-purple-500/10">
+                <span>Exit: {learn.exit_reason}</span>
+                <span>{new Date((learn.timestamp || Date.now() / 1000) * 1000).toLocaleDateString()}</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </GlassCard>
 
       {/* Live Stream Table */}
       <GlassCard className="p-3 sm:p-4 border border-white/80 dark:border-white/10 shadow-glass-md overflow-hidden">

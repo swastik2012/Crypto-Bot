@@ -48,3 +48,11 @@ async def reset_account():
     Resets paper trading account back to $100,000 baseline.
     """
     return paper_engine.initialize(initial_balance=100000.0)
+
+@router.get("/learnings")
+async def get_trade_learnings():
+    """
+    Returns persistent self-learning post-mortem memory and failure/success rules.
+    """
+    from backend.services.learning_memory import learning_memory_service
+    return {"status": "success", "count": len(learning_memory_service.learnings), "learnings": [l.dict() for l in learning_memory_service.learnings[::-1]]}
