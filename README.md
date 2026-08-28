@@ -28,7 +28,7 @@
 - Background 5-second tick loop continuously audits open positions against live Binance prices, automatically executing Take-Profit 1, Take-Profit 2, or Stop-Loss exits.
 
 ### 4. 💵 Virtual Paper Trading Engine
-- $100,000 starting virtual capital with 1-click portfolio reset in the navbar.
+- $10,000 starting virtual capital with 1-click portfolio reset in the navbar.
 - Real-time PnL tracking, isolated margin calculations, and closed trade history records.
 
 ### 5. 📡 Dedicated Real-Time Agent Telemetry & Diagnostics Console
@@ -158,7 +158,7 @@ The repository is pre-configured with [`vercel.json`](vercel.json), [`api/index.
 | `POST` | `/api/analyze-and-trade` | Triggers the 5-Stage Multi-Agent Consensus pipeline |
 | `GET` | `/api/paper-trading/state` | Retrieves virtual cash balance, open positions & PnL |
 | `POST` | `/api/paper-trading/order` | Executes a virtual paper trading market order |
-| `POST` | `/api/paper-trading/reset` | Resets paper portfolio to $100,000 and clears positions |
+| `POST` | `/api/paper-trading/reset` | Resets paper portfolio to $10,000 and clears positions |
 | `GET` | `/api/auto-trader/status` | Current countdown and execution log for 30m loop |
 | `POST` | `/api/auto-trader/toggle` | Pauses / Resumes the 30-minute auto-trading scheduler |
 | `POST` | `/api/auto-trader/reset-timer` | Resets the 30-minute countdown back to 30:00 |

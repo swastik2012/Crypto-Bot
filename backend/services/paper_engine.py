@@ -35,7 +35,7 @@ class VirtualPaperEngine:
     def __init__(
         self,
         account_id: str = "default_paper_account",
-        initial_balance: float = 100000.0,
+        initial_balance: float = 10000.0,
         quote_currency: str = "USDT",
         default_allocation_pct: float = 5.0,
         max_leverage: int = 20,
@@ -99,7 +99,7 @@ class VirtualPaperEngine:
 
     def initialize(
         self,
-        initial_balance: float = 100000.0,
+        initial_balance: float = 10000.0,
         quote_currency: str = "USDT",
         default_allocation_pct: float = 5.0,
         max_leverage: int = 20,

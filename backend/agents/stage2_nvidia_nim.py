@@ -6,7 +6,7 @@ from backend.config import settings
 
 def _format_portfolio_exposure(account_state: Dict[str, Any]) -> str:
     open_positions: List[Dict] = account_state.get("open_positions", [])
-    cash = account_state.get("cash_balance", 100000.0)
+    cash = account_state.get("cash_balance", 10000.0)
     total_margin = sum(p.get("margin_used", 0) for p in open_positions)
     total_unrealized = sum(p.get("unrealized_pnl", 0) for p in open_positions)
     
@@ -51,12 +51,12 @@ async def run_stage2_nvidia_nim(
 
     # Check cash sizing considering currently open positions
     open_positions = account_state.get("open_positions", [])
-    cash = account_state.get("cash_balance", 100000.0)
+    cash = account_state.get("cash_balance", 10000.0)
     margin_used = sum(p.get("margin_used", 0) for p in open_positions)
-    available_margin = max(1000.0, cash - margin_used)
+    available_margin = max(200.0, cash - margin_used)
     
     # Sizing dynamic based on portfolio headroom
-    recommended_position_usd = round(min(available_margin * 0.5, 5000.0), 2)
+    recommended_position_usd = round(min(available_margin * 0.5, 2000.0), 2)
     
     latency = 310
     portfolio_str = _format_portfolio_exposure(account_state)

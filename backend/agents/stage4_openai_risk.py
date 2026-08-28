@@ -14,7 +14,7 @@ from backend.services.learning_memory import learning_memory_service
 
 def _format_portfolio_summary(account_state: Dict[str, Any]) -> str:
     open_positions: List[Dict] = account_state.get("open_positions", [])
-    cash = account_state.get("cash_balance", 100000.0)
+    cash = account_state.get("cash_balance", 10000.0)
     equity = account_state.get("total_equity", cash)
     lines = [f"- Total Portfolio Equity: ${equity:,.2f} | Available Cash: ${cash:,.2f}", f"- Open Trades: {len(open_positions)}"]
     for p in open_positions[-3:]:

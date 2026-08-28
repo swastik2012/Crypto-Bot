@@ -47,7 +47,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onSelectAsset,
   onOpenConfig,
   isAnalyzing,
-  paperBalance = 100000,
+  paperBalance = 10000,
   paperPnL = 4.8,
   autoTraderStatus,
   onToggleAutoTrader,
@@ -387,7 +387,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onResetPaperAccount}
                 className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
-                title="Reset Paper Account to $100,000 & Clear All Open Positions"
+                title="Reset Paper Account to $10,000 & Clear All Open Positions"
               >
                 <RotateCcw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" />
               </button>

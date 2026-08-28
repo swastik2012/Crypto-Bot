@@ -26,7 +26,7 @@ async def run_tests():
 
     # 2. Test Paper Trading Engine
     print("\n[2/3] Testing Virtual Paper Trading Engine...")
-    state = paper_engine.initialize(initial_balance=100000.0, quote_currency="USDT")
+    state = paper_engine.initialize(initial_balance=10000.0, quote_currency="USDT")
     print(f"  ✓ Account Initialized: Cash = ${state.cash_balance:,.2f}, Total Equity = ${state.total_equity:,.2f}")
 
     # Place a 5x Long Order on SOL

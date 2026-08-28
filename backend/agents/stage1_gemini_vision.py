@@ -7,7 +7,7 @@ from backend.config import settings
 def _format_portfolio_context(account_state: Dict[str, Any]) -> str:
     open_positions: List[Dict] = account_state.get("open_positions", [])
     trade_history: List[Dict] = account_state.get("trade_history", [])
-    cash = account_state.get("cash_balance", 100000.0)
+    cash = account_state.get("cash_balance", 10000.0)
     equity = account_state.get("total_equity", cash)
     
     context_lines = [

@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
     
     # Paper Trading Defaults
-    DEFAULT_STARTING_BALANCE: float = 100000.0
+    DEFAULT_STARTING_BALANCE: float = 10000.0
     DEFAULT_QUOTE_CURRENCY: str = "USDT"
     DEFAULT_RISK_PER_TRADE_PERCENT: float = 5.0
     DEFAULT_MAX_LEVERAGE: int = 20

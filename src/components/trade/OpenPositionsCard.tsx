@@ -119,7 +119,7 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
             <button
               onClick={onResetAccount}
               className="p-2 rounded-xl bg-slate-200/60 dark:bg-dark-800 text-slate-500 hover:text-rose-500 transition-all text-xs cursor-pointer"
-              title="Reset Virtual Portfolio to $100,000"
+              title="Reset Virtual Portfolio to $10,000"
             >
               <RotateCcw className="w-3.5 h-3.5" />
             </button>

@@ -105,7 +105,7 @@ class PaperAccountState(BaseModel):
     trade_history: List[PaperTradeRecord] = []
 
 class InitializePaperAccountRequest(BaseModel):
-    initial_balance: float = 100000.0
+    initial_balance: float = 10000.0
     quote_currency: str = "USDT"
     default_allocation_pct: float = 5.0
     max_leverage: int = 20

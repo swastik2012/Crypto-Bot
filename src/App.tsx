@@ -69,7 +69,7 @@ export const App: React.FC = () => {
   // Persistent Paper Trading State
   const [cashBalance, setCashBalance] = useState<number>(() => {
     const saved = localStorage.getItem(STORAGE_KEYS.CASH_BALANCE);
-    return saved ? parseFloat(saved) : 100000;
+    return saved ? parseFloat(saved) : 10000;
   });
 
   const [openPositions, setOpenPositions] = useState<OpenPositionItem[]>(() => {
@@ -287,7 +287,7 @@ export const App: React.FC = () => {
     const totalMarginUsed = openPositions.reduce((acc, pos) => acc + pos.margin_used, 0);
     const totalUnrealizedPnl = openPositions.reduce((acc, pos) => acc + pos.unrealized_pnl, 0);
     const equity = cashBalance + totalMarginUsed + totalUnrealizedPnl;
-    const pnlPct = ((equity - 100000) / 100000) * 100;
+    const pnlPct = ((equity - 10000) / 10000) * 100;
     return {
       totalEquity: Math.round(equity * 100) / 100,
       overallPnlPct: Math.round(pnlPct * 10) / 10,
@@ -364,9 +364,9 @@ export const App: React.FC = () => {
 
   // Reset Account Handler
   const handleResetAccount = useCallback(() => {
-    if (window.confirm('Reset virtual paper trading account back to $100,000 capital?')) {
+    if (window.confirm('Reset virtual paper trading account back to $10,000 capital?')) {
       fetch('http://127.0.0.1:8000/api/paper-trading/reset', { method: 'POST' }).catch(() => {});
-      setCashBalance(100000);
+      setCashBalance(10000);
       setOpenPositions([]);
       setTradeHistory([]);
       localStorage.removeItem(STORAGE_KEYS.CASH_BALANCE);

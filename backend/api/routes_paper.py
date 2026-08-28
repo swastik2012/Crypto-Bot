@@ -45,9 +45,9 @@ async def place_order(order: PlacePaperOrderRequest):
 @router.post("/reset", response_model=PaperAccountState)
 async def reset_account():
     """
-    Resets paper trading account back to $100,000 baseline.
+    Resets paper trading account back to $10,000 baseline.
     """
-    return paper_engine.initialize(initial_balance=100000.0)
+    return paper_engine.initialize(initial_balance=10000.0)
 
 @router.get("/learnings")
 async def get_trade_learnings():
