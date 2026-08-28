@@ -121,6 +121,8 @@ export const App: React.FC = () => {
                 stop_loss: p.stop_loss,
                 unrealized_pnl: p.unrealized_pnl,
                 unrealized_pnl_pct: p.unrealized_pnl_pct,
+                entry_fee_paid: p.entry_fee_paid || 0,
+                exchange_model: p.exchange_model || 'Binance (USD: 0.10%)',
                 opened_at: typeof p.opened_at === 'number' ? p.opened_at : Math.floor(Date.now() / 1000),
               }));
               setOpenPositions(mappedPositions);
@@ -136,6 +138,11 @@ export const App: React.FC = () => {
                 leverage: t.leverage,
                 realized_pnl: t.realized_pnl,
                 realized_pnl_pct: t.realized_pnl_pct,
+                entry_fee: t.entry_fee || 0,
+                exit_fee: t.exit_fee || 0,
+                tds_deducted: t.tds_deducted || 0,
+                net_realized_pnl: t.net_realized_pnl !== undefined ? t.net_realized_pnl : t.realized_pnl,
+                exchange_name: t.exchange_name || 'Binance (USD)',
                 exit_reason: t.exit_reason || 'TAKE_PROFIT_HIT',
                 opened_at: typeof t.opened_at === 'number' ? t.opened_at : Math.floor(Date.now() / 1000) - 3600,
                 closed_at: typeof t.closed_at === 'number' ? t.closed_at : Math.floor(Date.now() / 1000),

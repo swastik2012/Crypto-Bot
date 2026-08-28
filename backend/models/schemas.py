@@ -72,6 +72,8 @@ class PaperPosition(BaseModel):
     stop_loss: Optional[float] = None
     unrealized_pnl: float = 0.0
     unrealized_pnl_pct: float = 0.0
+    entry_fee_paid: float = 0.0
+    exchange_model: str = "Binance (USD: 0.10%)"
     opened_at: float
     status: OrderStatus = OrderStatus.OPEN
 
@@ -85,6 +87,11 @@ class PaperTradeRecord(BaseModel):
     leverage: int
     realized_pnl: float
     realized_pnl_pct: float
+    entry_fee: float = 0.0
+    exit_fee: float = 0.0
+    tds_deducted: float = 0.0
+    net_realized_pnl: float = 0.0
+    exchange_name: str = "Binance (USD)"
     exit_reason: str
     opened_at: float
     closed_at: float
@@ -99,6 +106,8 @@ class PaperAccountState(BaseModel):
     realized_pnl: float
     margin_used: float
     margin_available: float
+    total_fees_paid: float = 0.0
+    total_tds_deducted: float = 0.0
     win_rate_pct: float
     total_trades_count: int
     open_positions: List[PaperPosition] = []

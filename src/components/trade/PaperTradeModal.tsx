@@ -236,6 +236,60 @@ export const PaperTradeModal: React.FC<PaperTradeModalProps> = ({
                   </div>
                 </div>
 
+                {/* Real Transaction Charges & Tax Breakdown */}
+                <div className="p-3 rounded-xl bg-gradient-to-r from-blue-500/10 via-purple-500/5 to-cyan-500/10 border border-blue-500/20 space-y-1.5 text-[11px] font-mono">
+                  <div className="flex items-center justify-between font-bold text-slate-700 dark:text-slate-200">
+                    <span>Real Exchange Fees & Tax (TDS)</span>
+                    <span className="text-[10px] text-cyan-600 dark:text-cyan-400">
+                      {currency === 'INR' ? 'CoinDCX (INR) Tier' : 'Binance (USD) Tier'}
+                    </span>
+                  </div>
+                  
+                  {currency === 'INR' ? (
+                    <div className="space-y-1 text-slate-600 dark:text-slate-300">
+                      <div className="flex justify-between">
+                        <span>• CoinDCX Brokerage (0.20% + 18% GST):</span>
+                        <span className="font-bold text-rose-500">
+                          {formatPrice(positionSizeUsd * 0.00236)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>• Indian 1% TDS (Sec 194S on Sell):</span>
+                        <span className="font-bold text-amber-500">
+                          {formatPrice(positionSizeUsd * 0.0100)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold">
+                        <span>Est. Round-Trip Costs:</span>
+                        <span className="text-rose-500">
+                          {formatPrice(positionSizeUsd * 0.00236 * 2 + positionSizeUsd * 0.0100)}
+                        </span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-1 text-slate-600 dark:text-slate-300">
+                      <div className="flex justify-between">
+                        <span>• Binance Taker Entry Fee (0.10%):</span>
+                        <span className="font-bold text-rose-500">
+                          {formatPrice(positionSizeUsd * 0.0010)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>• Binance Taker Exit Fee (0.10%):</span>
+                        <span className="font-bold text-rose-500">
+                          {formatPrice(positionSizeUsd * 0.0010)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between pt-1 border-t border-slate-200 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold">
+                        <span>Est. Round-Trip Costs:</span>
+                        <span className="text-rose-500">
+                          {formatPrice(positionSizeUsd * 0.0020)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
               </div>
 
               {/* Execute Order CTA */}

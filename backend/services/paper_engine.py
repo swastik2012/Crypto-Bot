@@ -14,6 +14,8 @@ from backend.models.schemas import (
     OrderType,
 )
 
+from backend.services.fee_service import fee_service, ExchangeFeePreset
+
 is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 if is_serverless:
     DATA_DIR = Path("/tmp/data")
@@ -52,6 +54,8 @@ class VirtualPaperEngine:
         
         self.winning_trades: int = 0
         self.losing_trades: int = 0
+        self.total_fees_paid: float = 0.0
+        self.total_tds_deducted: float = 0.0
         
         # Load persisted trades from disk
         self._load_from_disk()
@@ -65,6 +69,8 @@ class VirtualPaperEngine:
                 "cash_balance": self.cash_balance,
                 "winning_trades": self.winning_trades,
                 "losing_trades": self.losing_trades,
+                "total_fees_paid": self.total_fees_paid,
+                "total_tds_deducted": self.total_tds_deducted,
                 "open_positions": [p.dict() for p in self.open_positions.values()],
                 "trade_history": [t.dict() for t in self.trade_history],
             }
@@ -81,6 +87,8 @@ class VirtualPaperEngine:
                     self.cash_balance = data.get("cash_balance", self.starting_capital)
                     self.winning_trades = data.get("winning_trades", 0)
                     self.losing_trades = data.get("losing_trades", 0)
+                    self.total_fees_paid = data.get("total_fees_paid", 0.0)
+                    self.total_tds_deducted = data.get("total_tds_deducted", 0.0)
                     
                     self.open_positions = {}
                     for p in data.get("open_positions", []):
@@ -113,6 +121,8 @@ class VirtualPaperEngine:
         self.trade_history.clear()
         self.winning_trades = 0
         self.losing_trades = 0
+        self.total_fees_paid = 0.0
+        self.total_tds_deducted = 0.0
         self._save_to_disk()
         return self.get_state()
 
@@ -148,6 +158,8 @@ class VirtualPaperEngine:
             realized_pnl=round(realized_pnl, 2),
             margin_used=round(margin_used, 2),
             margin_available=round(margin_available, 2),
+            total_fees_paid=round(self.total_fees_paid, 2),
+            total_tds_deducted=round(self.total_tds_deducted, 2),
             win_rate_pct=round(win_rate, 1),
             total_trades_count=total_closed,
             open_positions=list(self.open_positions.values()),
@@ -177,11 +189,20 @@ class VirtualPaperEngine:
         size_usd = order.size_usd
         margin_required = size_usd / leverage
         
-        if margin_required > self.cash_balance:
-            margin_required = max(10.0, self.cash_balance * 0.95)
-            size_usd = margin_required * leverage
+        # Determine exchange fee preset based on quote currency
+        fee_preset = fee_service.determine_preset(self.quote_currency)
+        entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset)
+        entry_fee = entry_fee_info["total_entry_fee_usd"]
 
-        self.cash_balance -= margin_required
+        total_cash_needed = margin_required + entry_fee
+        if total_cash_needed > self.cash_balance:
+            margin_required = max(10.0, (self.cash_balance - entry_fee) * 0.95)
+            size_usd = margin_required * leverage
+            entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset)
+            entry_fee = entry_fee_info["total_entry_fee_usd"]
+
+        self.cash_balance -= (margin_required + entry_fee)
+        self.total_fees_paid += entry_fee
         quantity = size_usd / entry_price
         
         if order.side == PositionSide.LONG:
@@ -206,6 +227,8 @@ class VirtualPaperEngine:
             stop_loss=order.stop_loss,
             unrealized_pnl=0.0,
             unrealized_pnl_pct=0.0,
+            entry_fee_paid=round(entry_fee, 4),
+            exchange_model=entry_fee_info["exchange"],
             opened_at=time.time(),
             status=OrderStatus.OPEN,
         )
@@ -250,16 +273,34 @@ class VirtualPaperEngine:
                 tp1_hit = (pos.side == PositionSide.LONG and current_price >= pos.take_profit_1) or \
                           (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_1)
                 if tp1_hit:
-                    # 1. Realize 50% profits
+                    # 1. Realize 50% profits with real exit fees and TDS
                     half_margin = pos.margin_used * 0.5
+                    half_notional = pos.size_usd * 0.5
                     if pos.side == PositionSide.LONG:
                         half_pnl_pct = (pos.take_profit_1 - pos.entry_price) / pos.entry_price * pos.leverage
                     else:
                         half_pnl_pct = (pos.entry_price - pos.take_profit_1) / pos.entry_price * pos.leverage
                     
-                    realized_pnl = round(half_margin * half_pnl_pct, 2)
-                    self.cash_balance += (half_margin + realized_pnl)
-                    self.winning_trades += 1
+                    gross_pnl = half_margin * half_pnl_pct
+                    
+                    # Fee Calculation for 50% exit
+                    fee_preset = fee_service.determine_preset(self.quote_currency)
+                    exit_fee_info = fee_service.calculate_exit_fee_and_tax(half_notional, fee_preset, is_closing_trade=True)
+                    exit_fee = exit_fee_info["trading_fee_usd"]
+                    tds_fee = exit_fee_info["tds_usd"]
+                    total_exit_deduction = exit_fee_info["total_exit_deduction_usd"]
+
+                    self.total_fees_paid += exit_fee
+                    self.total_tds_deducted += tds_fee
+
+                    half_entry_fee = pos.entry_fee_paid * 0.5
+                    net_pnl = gross_pnl - half_entry_fee - total_exit_deduction
+                    
+                    self.cash_balance += max(0.0, half_margin + gross_pnl - total_exit_deduction)
+                    if net_pnl > 0:
+                        self.winning_trades += 1
+                    else:
+                        self.losing_trades += 1
 
                     scale_record = PaperTradeRecord(
                         trade_id=f"tr_tp1_{uuid.uuid4().hex[:6]}",
@@ -267,22 +308,28 @@ class VirtualPaperEngine:
                         side=pos.side,
                         entry_price=pos.entry_price,
                         exit_price=pos.take_profit_1,
-                        size_usd=round(pos.size_usd * 0.5, 2),
+                        size_usd=round(half_notional, 2),
                         leverage=pos.leverage,
-                        realized_pnl=realized_pnl,
+                        realized_pnl=round(gross_pnl, 2),
                         realized_pnl_pct=round(half_pnl_pct * 100.0, 2),
+                        entry_fee=round(half_entry_fee, 4),
+                        exit_fee=round(exit_fee, 4),
+                        tds_deducted=round(tds_fee, 4),
+                        net_realized_pnl=round(net_pnl, 2),
+                        exchange_name=exit_fee_info["exchange"],
                         exit_reason="TP1_SCALE_OUT_50%",
                         opened_at=pos.opened_at,
                         closed_at=time.time(),
-                        agent_rationale=f"50% scaled out at TP1 ({pos.take_profit_1}). Remaining 50% converted to $0 risk runner aiming for TP2."
+                        agent_rationale=f"50% scaled out at TP1 ({pos.take_profit_1}). Fee: ${exit_fee:,.2f}, TDS: ${tds_fee:,.2f}. Remaining 50% runner aiming for TP2."
                     )
                     self.trade_history.append(scale_record)
                     closed_trades.append(scale_record)
 
                     # 2. Adjust remaining runner position
-                    pos.size_usd = round(pos.size_usd * 0.5, 2)
+                    pos.size_usd = round(half_notional, 2)
                     pos.quantity = round(pos.quantity * 0.5, 6)
                     pos.margin_used = round(half_margin, 2)
+                    pos.entry_fee_paid = round(pos.entry_fee_paid * 0.5, 4)
                     pos.take_profit_1 = None  # TP1 cleared, runner now tracks TP2
 
                     # 3. Lock Stop Loss at Break-Even + 0.1% buffer ($0 Risk Runner)
@@ -363,11 +410,23 @@ class VirtualPaperEngine:
         else:
             pnl_pct = (pos.entry_price - exit_price) / pos.entry_price * pos.leverage
 
-        realized_pnl = pos.margin_used * pnl_pct
-        returned_cash = max(0.0, pos.margin_used + realized_pnl)
+        gross_realized_pnl = pos.margin_used * pnl_pct
+        
+        # Real fee & TDS calculation
+        fee_preset = fee_service.determine_preset(self.quote_currency)
+        exit_fee_info = fee_service.calculate_exit_fee_and_tax(pos.size_usd, fee_preset, is_closing_trade=True)
+        exit_fee = exit_fee_info["trading_fee_usd"]
+        tds_fee = exit_fee_info["tds_usd"]
+        total_exit_deduction = exit_fee_info["total_exit_deduction_usd"]
+
+        self.total_fees_paid += exit_fee
+        self.total_tds_deducted += tds_fee
+
+        net_realized_pnl = gross_realized_pnl - pos.entry_fee_paid - total_exit_deduction
+        returned_cash = max(0.0, pos.margin_used + gross_realized_pnl - total_exit_deduction)
         self.cash_balance += returned_cash
 
-        if realized_pnl > 0:
+        if net_realized_pnl > 0:
             self.winning_trades += 1
         else:
             self.losing_trades += 1
@@ -380,8 +439,13 @@ class VirtualPaperEngine:
             exit_price=round(exit_price, 4 if exit_price < 1 else 2),
             size_usd=pos.size_usd,
             leverage=pos.leverage,
-            realized_pnl=round(realized_pnl, 2),
+            realized_pnl=round(gross_realized_pnl, 2),
             realized_pnl_pct=round(pnl_pct * 100.0, 2),
+            entry_fee=round(pos.entry_fee_paid, 4),
+            exit_fee=round(exit_fee, 4),
+            tds_deducted=round(tds_fee, 4),
+            net_realized_pnl=round(net_realized_pnl, 2),
+            exchange_name=exit_fee_info["exchange"],
             exit_reason=reason,
             opened_at=pos.opened_at,
             closed_at=time.time(),
@@ -397,10 +461,10 @@ class VirtualPaperEngine:
                 side=pos.side.value,
                 entry_price=pos.entry_price,
                 exit_price=exit_price,
-                pnl_usd=realized_pnl,
+                pnl_usd=net_realized_pnl,
                 pnl_pct=pnl_pct * 100.0,
                 exit_reason=reason,
-                agent_rationale=f"Position opened at ${pos.entry_price:,.2f} exited via {reason}."
+                agent_rationale=f"Position opened at ${pos.entry_price:,.2f} exited via {reason}. Net PnL (after fees & TDS): ${net_realized_pnl:,.2f}."
             )
         except Exception as e:
             print(f"[PaperEngine] Learning memory record notice: {e}")

@@ -30,6 +30,8 @@ export interface OpenPositionItem {
   stop_loss?: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
+  entry_fee_paid?: number;
+  exchange_model?: string;
   opened_at: number;
 }
 
@@ -43,6 +45,11 @@ export interface TradeHistoryItem {
   leverage: number;
   realized_pnl: number;
   realized_pnl_pct: number;
+  entry_fee?: number;
+  exit_fee?: number;
+  tds_deducted?: number;
+  net_realized_pnl?: number;
+  exchange_name?: string;
   exit_reason: string;
   opened_at: number;
   closed_at: number;
@@ -201,8 +208,8 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                     </div>
 
                     {/* Bottom Action: Take Profit / Stop Loss & 1-Click Close */}
-                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
-                      <div className="flex items-center gap-3 text-[10px] text-slate-600 dark:text-slate-400 font-medium">
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1 border-t border-slate-200/50 dark:border-white/5">
+                      <div className="flex flex-wrap items-center gap-3 text-[10px] text-slate-600 dark:text-slate-400 font-medium">
                         {pos.take_profit_1 && (
                           <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold">
                             <Target className="w-3 h-3" /> TP1: {formatPrice(pos.take_profit_1)}
@@ -213,6 +220,9 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                             <ShieldAlert className="w-3 h-3" /> SL: {formatPrice(pos.stop_loss)}
                           </span>
                         )}
+                        <span className="text-slate-500">
+                          Entry Fee: <span className="font-bold text-rose-500">{formatPrice(pos.entry_fee_paid || pos.size_usd * 0.001)}</span> ({pos.exchange_model || 'Binance 0.10%'})
+                        </span>
                       </div>
 
                       {/* 1-Click Market Close Position */}
@@ -250,14 +260,19 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                     <th className="py-2 px-3">Side / Lev</th>
                     <th className="py-2 px-3">Entry</th>
                     <th className="py-2 px-3">Exit</th>
-                    <th className="py-2 px-3">Realized PnL</th>
+                    <th className="py-2 px-3">Gross PnL</th>
+                    <th className="py-2 px-3">Fees & TDS</th>
+                    <th className="py-2 px-3">Net PnL</th>
                     <th className="py-2 px-3">Exit Reason</th>
                     <th className="py-2 px-3 text-right">Closed At</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-white/5">
                   {history.map((item) => {
-                    const isWin = item.realized_pnl >= 0;
+                    const grossPnl = item.realized_pnl;
+                    const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
+                    const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);
+                    const isWin = netPnl >= 0;
                     return (
                       <tr key={item.trade_id} className="hover:bg-slate-100/50 dark:hover:bg-dark-800/40 transition-colors">
                         <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-100">
@@ -274,8 +289,19 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                         <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
                           {formatPrice(item.exit_price)}
                         </td>
-                        <td className={`py-2.5 px-3 font-bold ${isWin ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
-                          {isWin ? '+' : '-'}{formatPrice(Math.abs(item.realized_pnl))} ({isWin ? '+' : ''}{item.realized_pnl_pct.toFixed(2)}%)
+                        <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
+                          {grossPnl >= 0 ? '+' : '-'}{formatPrice(Math.abs(grossPnl))}
+                        </td>
+                        <td className="py-2.5 px-3 text-rose-500 text-[11px]">
+                          -{formatPrice(totalFees)}
+                          {item.tds_deducted ? (
+                            <span className="text-[9px] text-amber-500 block font-bold">Incl 1% TDS</span>
+                          ) : (
+                            <span className="text-[9px] text-slate-400 block">{item.exchange_name || 'Binance'}</span>
+                          )}
+                        </td>
+                        <td className={`py-2.5 px-3 font-black ${isWin ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                          {isWin ? '+' : '-'}{formatPrice(Math.abs(netPnl))}
                         </td>
                         <td className="py-2.5 px-3">
                           <span className="text-[10px] text-slate-500 bg-slate-200/50 dark:bg-dark-800 px-2 py-0.5 rounded-full">
