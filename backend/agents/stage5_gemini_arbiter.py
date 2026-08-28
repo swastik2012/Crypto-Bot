@@ -36,7 +36,9 @@ async def run_stage5_gemini_arbiter(
     direction = str(thesis.get("direction", "LONG")).upper()
     fakeout_risk = getattr(stage4, "false_breakout_probability", 15.0)
 
-    # Multi-directional signal arbitration
+    pat_name = stage1.patterns[0].name if stage1.patterns else "Technical Structure"
+    entry = thesis.get("suggested_entry", current_price)
+
     if direction in ["SHORT", "BEARISH"]:
         gemini_score = 92.0
         news_score = stage2.sentiment_score
@@ -44,7 +46,7 @@ async def run_stage5_gemini_arbiter(
         openai_score = stage4.safety_score
         consensus_confidence = round(
             (gemini_score * 0.25) +
-            ((100 - news_score) * 0.20) +
+            ((100.0 - news_score) * 0.20) +
             (nvidia_score * 0.30) +
             (openai_score * 0.25),
             1
@@ -56,15 +58,14 @@ async def run_stage5_gemini_arbiter(
         else:
             signal = SignalAction.HOLD
 
-        entry = thesis.get("suggested_entry", current_price)
         tp1 = thesis.get("take_profit_1", round(current_price * 0.958, 2))
         tp2 = thesis.get("take_profit_2", round(current_price * 0.922, 2))
         sl = thesis.get("stop_loss", round(current_price * 1.022, 2))
-        invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates the bearish breakdown structure and triggers immediate stop-loss."
+        invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
         summary = (
-            f"Full 5-Stage Bearish Consensus Reconciled with {consensus_confidence}% conviction for {symbol}. "
-            f"Stage 1 Vision breakdown confirmed by Stage 2 news macro selling pressure ({stage2.sentiment_score}%), "
-            f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo short win rate, and cleared by Stage 4 OpenAI Risk Guard."
+            f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
+            f"Stage 1 '{pat_name}' breakdown is corroborated by Stage 2 macro news ({stage2.sentiment_score}%), "
+            f"proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and approved by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
         )
 
     elif direction in ["NEUTRAL", "HOLD"]:
@@ -80,16 +81,14 @@ async def run_stage5_gemini_arbiter(
             1
         )
         signal = SignalAction.HOLD
-
-        entry = thesis.get("suggested_entry", current_price)
         tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
         tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
         sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
         invalidation_cond = f"Asset trading inside equilibrium chop zone (${sl:,.2f} - ${tp1:,.2f}). Stand aside until confirmed directional breakout."
         summary = (
-            f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction). "
-            f"Stage 1 detected range compression, Stage 3 quantified coin-flip expectancy ({stage3.monte_carlo_win_rate}%), "
-            f"and Stage 4 OpenAI flagged {fakeout_risk}% fakeout risk. Capital preservation advised."
+            f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction) for {symbol}. "
+            f"Stage 1 identified '{pat_name}', Stage 3 Monte Carlo flagged coin-flip expectancy ({stage3.monte_carlo_win_rate}%), "
+            f"and Stage 4 Risk Guard detected {fakeout_risk}% fakeout probability. Capital preservation active."
         )
 
     else: # LONG / BULLISH
@@ -111,15 +110,14 @@ async def run_stage5_gemini_arbiter(
         else:
             signal = SignalAction.HOLD
 
-        entry = thesis.get("suggested_entry", current_price)
         tp1 = thesis.get("take_profit_1", round(current_price * 1.042, 2))
         tp2 = thesis.get("take_profit_2", round(current_price * 1.078, 2))
         sl = thesis.get("stop_loss", round(current_price * 0.978, 2))
-        invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates the technical structure and triggers immediate stop-loss."
+        invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
         summary = (
-            f"Full 5-Stage Consensus Reconciled with {consensus_confidence}% conviction for {symbol}. "
-            f"Stage 1 Vision setup is validated by Stage 2's {stage2.sentiment_score}% macro news sentiment across CoinDesk/Cointelegraph, "
-            f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo win rate, and cleared by Stage 4 OpenAI Risk Guard."
+            f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
+            f"Stage 1 '{pat_name}' breakout is reinforced by Stage 2 news macro sentiment ({stage2.sentiment_score}%), "
+            f"mathematically proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
         )
 
     system_prompt = (
@@ -154,7 +152,7 @@ async def run_stage5_gemini_arbiter(
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             target_engine = "gemini-2.5-flash"
-            llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1)
+            llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
             resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
             raw_text = resp.content
             if "```json" in raw_text:
