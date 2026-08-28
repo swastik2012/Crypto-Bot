@@ -242,36 +242,84 @@ class VirtualPaperEngine:
             pos.unrealized_pnl_pct = round(price_delta_pct * pos.leverage * 100.0, 2)
             pos.unrealized_pnl = round(pos.margin_used * (pos.unrealized_pnl_pct / 100.0), 2)
 
-            # ==========================================
-            # 🚀 DYNAMIC BREAKEVEN LOCK & TRAILING STOP
-            # ==========================================
-            if pos.side == PositionSide.LONG:
-                # 1. Breakeven Lock at +1.8% profit: Lock stop-loss at entry + 0.1% buffer
-                if price_delta_pct >= 0.018 and pos.stop_loss and pos.stop_loss < pos.entry_price:
-                    breakeven_sl = round(pos.entry_price * 1.001, 2)
-                    pos.stop_loss = max(pos.stop_loss, breakeven_sl)
-
-                # 2. Dynamic Trailing Stop above +2.5% profit: Trail by 1.2% behind current peak
-                if price_delta_pct >= 0.025:
-                    trailing_sl = round(current_price * 0.988, 2)
-                    if pos.stop_loss:
-                        pos.stop_loss = max(pos.stop_loss, trailing_sl)
+            # ==============================================================
+            # 🚀 INSTITUTIONAL 50% TP1 SCALE-OUT & ZERO-RISK RUNNER ENGINE
+            # ==============================================================
+            # Check Take-Profit 1 Partial Scale-Out (50% scale-out + Breakeven Lock)
+            if pos.take_profit_1:
+                tp1_hit = (pos.side == PositionSide.LONG and current_price >= pos.take_profit_1) or \
+                          (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_1)
+                if tp1_hit:
+                    # 1. Realize 50% profits
+                    half_margin = pos.margin_used * 0.5
+                    if pos.side == PositionSide.LONG:
+                        half_pnl_pct = (pos.take_profit_1 - pos.entry_price) / pos.entry_price * pos.leverage
                     else:
-                        pos.stop_loss = trailing_sl
+                        half_pnl_pct = (pos.entry_price - pos.take_profit_1) / pos.entry_price * pos.leverage
+                    
+                    realized_pnl = round(half_margin * half_pnl_pct, 2)
+                    self.cash_balance += (half_margin + realized_pnl)
+                    self.winning_trades += 1
+
+                    scale_record = PaperTradeRecord(
+                        trade_id=f"tr_tp1_{uuid.uuid4().hex[:6]}",
+                        symbol=pos.symbol,
+                        side=pos.side,
+                        entry_price=pos.entry_price,
+                        exit_price=pos.take_profit_1,
+                        size_usd=round(pos.size_usd * 0.5, 2),
+                        leverage=pos.leverage,
+                        realized_pnl=realized_pnl,
+                        realized_pnl_pct=round(half_pnl_pct * 100.0, 2),
+                        exit_reason="TP1_SCALE_OUT_50%",
+                        opened_at=pos.opened_at,
+                        closed_at=time.time(),
+                        agent_rationale=f"50% scaled out at TP1 ({pos.take_profit_1}). Remaining 50% converted to $0 risk runner aiming for TP2."
+                    )
+                    self.trade_history.append(scale_record)
+                    closed_trades.append(scale_record)
+
+                    # 2. Adjust remaining runner position
+                    pos.size_usd = round(pos.size_usd * 0.5, 2)
+                    pos.quantity = round(pos.quantity * 0.5, 6)
+                    pos.margin_used = round(half_margin, 2)
+                    pos.take_profit_1 = None  # TP1 cleared, runner now tracks TP2
+
+                    # 3. Lock Stop Loss at Break-Even + 0.1% buffer ($0 Risk Runner)
+                    if pos.side == PositionSide.LONG:
+                        pos.stop_loss = round(pos.entry_price * 1.001, 2)
+                    else:
+                        pos.stop_loss = round(pos.entry_price * 0.999, 2)
+
+            # ==============================================================
+            # 🛡️ DYNAMIC ATR TRAILING STOP & BREAK-EVEN LOCK (RUNNERS)
+            # ==============================================================
+            atr_est = max(current_price * 0.015, abs(current_price - pos.entry_price) * 0.4)
+            if pos.side == PositionSide.LONG:
+                # Breakeven lock if profit >= +1.5%
+                if price_delta_pct >= 0.015 and pos.stop_loss and pos.stop_loss < pos.entry_price:
+                    pos.stop_loss = round(pos.entry_price * 1.001, 2)
+
+                # Dynamic Trailing Stop behind peak
+                if price_delta_pct >= 0.025:
+                    trailing_target = round(current_price - (atr_est * 1.2), 2)
+                    if pos.stop_loss:
+                        pos.stop_loss = max(pos.stop_loss, trailing_target)
+                    else:
+                        pos.stop_loss = trailing_target
 
             elif pos.side == PositionSide.SHORT:
-                # 1. Breakeven Lock for Short at +1.8% profit
-                if price_delta_pct >= 0.018 and pos.stop_loss and pos.stop_loss > pos.entry_price:
-                    breakeven_sl = round(pos.entry_price * 0.999, 2)
-                    pos.stop_loss = min(pos.stop_loss, breakeven_sl)
+                # Breakeven lock for short if profit >= +1.5%
+                if price_delta_pct >= 0.015 and pos.stop_loss and pos.stop_loss > pos.entry_price:
+                    pos.stop_loss = round(pos.entry_price * 0.999, 2)
 
-                # 2. Dynamic Trailing Stop for Short above +2.5% profit
+                # Dynamic Trailing Stop for short
                 if price_delta_pct >= 0.025:
-                    trailing_sl = round(current_price * 1.012, 2)
+                    trailing_target = round(current_price + (atr_est * 1.2), 2)
                     if pos.stop_loss:
-                        pos.stop_loss = min(pos.stop_loss, trailing_sl)
+                        pos.stop_loss = min(pos.stop_loss, trailing_target)
                     else:
-                        pos.stop_loss = trailing_sl
+                        pos.stop_loss = trailing_target
 
             # Check Liquidation
             if (pos.side == PositionSide.LONG and current_price <= pos.liquidation_price) or \
@@ -281,29 +329,21 @@ class VirtualPaperEngine:
                 positions_to_remove.append(pos_id)
                 continue
 
-            # Check Stop-Loss Trigger
+            # Check Stop-Loss / Trailing Stop Trigger
             if pos.stop_loss:
                 if (pos.side == PositionSide.LONG and current_price <= pos.stop_loss) or \
                    (pos.side == PositionSide.SHORT and current_price >= pos.stop_loss):
-                    trade_record = self._close_position(pos, pos.stop_loss, "STOP_LOSS_TRIGGERED")
+                    exit_reason = "BREAKEVEN_OR_TRAILING_STOP_HIT" if ((pos.side == PositionSide.LONG and pos.stop_loss >= pos.entry_price) or (pos.side == PositionSide.SHORT and pos.stop_loss <= pos.entry_price)) else "STOP_LOSS_TRIGGERED"
+                    trade_record = self._close_position(pos, pos.stop_loss, exit_reason)
                     closed_trades.append(trade_record)
                     positions_to_remove.append(pos_id)
                     continue
 
-            # Check Take-Profit 2 Trigger (Full Extension Target)
+            # Check Take-Profit 2 Trigger (Full Extension Macro Target)
             if pos.take_profit_2:
                 if (pos.side == PositionSide.LONG and current_price >= pos.take_profit_2) or \
                    (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_2):
-                    trade_record = self._close_position(pos, current_price, "TAKE_PROFIT_2_HIT")
-                    closed_trades.append(trade_record)
-                    positions_to_remove.append(pos_id)
-                    continue
-
-            # Check Take-Profit 1 Trigger (Primary Target)
-            if pos.take_profit_1:
-                if (pos.side == PositionSide.LONG and current_price >= pos.take_profit_1) or \
-                   (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_1):
-                    trade_record = self._close_position(pos, current_price, "TAKE_PROFIT_1_HIT")
+                    trade_record = self._close_position(pos, current_price, "TAKE_PROFIT_2_FULL_EXIT")
                     closed_trades.append(trade_record)
                     positions_to_remove.append(pos_id)
                     continue
