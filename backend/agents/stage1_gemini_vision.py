@@ -44,16 +44,59 @@ def _format_portfolio_context(account_state: Dict[str, Any]) -> str:
     
     return "\n".join(context_lines)
 
-STAGE1_SYSTEM_PROMPT = """You are Agent 1 (Google Gemini 3.5 Flash Vision Technical Chart Analyzer).
-Analyze the provided cryptocurrency chart screenshot in the context of the user's active portfolio and recent trade history.
-Do not over-expose the portfolio if correlated positions are already open.
-Return a structured JSON with:
-- patterns: list of detected patterns (name, type, timeframe, reliability, description)
-- key_levels: list of support and resistance price levels with strength
-- rsi_status: { value: float, condition: "oversold"|"neutral"|"overbought"|"bullish_divergence"|"bearish_divergence" }
-- volume_analysis: string description
-- initial_thesis: { direction: "LONG"|"SHORT"|"NEUTRAL", suggested_entry: float, take_profit_1: float, take_profit_2: float, stop_loss: float, rationale: str }
-"""
+STAGE1_SYSTEM_PROMPT = """You are Agent 1 (Chief Technical Visual Analyst powered by Google Gemini Vision).
+Your task is to conduct an uncompromising, institutional-grade technical analysis of the cryptocurrency chart.
+
+CRITICAL DIRECTIVES:
+1. MARKET REGIME & TREND STRUCTURE:
+   - Accurately determine if price is in:
+     * Bullish Continuation (Higher Highs / Higher Lows above key EMAs, expanding volume delta).
+     * Bearish Breakdown (Lower Highs / Lower Lows below key EMAs, supply rejection).
+     * Range Consolidation / Chop Squeeze (Price trapped inside horizontal support/resistance boundaries).
+2. CAPITAL PRESERVATION & CHOP AVOIDANCE:
+   - If price is trading mid-range with contracting volume or conflicting signals, you MUST set direction to "NEUTRAL" (HOLD). Never force a directional entry in chop.
+   - Require a minimum 1:2.0 Risk:Reward ratio to the next structural liquidity level.
+3. PRECISE ASYMMETRIC EXECUTION TARGETS:
+   - suggested_entry: Exact optimal limit/market entry zone.
+   - take_profit_1: Conservative first major liquidity target (recommend 50% scale-out).
+   - take_profit_2: Macro Fibonacci extension / structural runner target.
+   - stop_loss: Hard structural invalidation level (recent swing high for Short, swing low for Long). Maximum 2.5% risk distance.
+
+Return ONLY a valid JSON object matching this schema:
+{
+  "patterns": [
+    {
+      "name": "Pattern Name (e.g. Ascending Triangle / Head & Shoulders Breakdown / Symmetrical Range)",
+      "type": "bullish_continuation" | "reversal_breakdown" | "consolidation" | "divergence",
+      "timeframe": "1H" | "4H" | "1D",
+      "reliability": float,
+      "description": "Technical description of trendline geometry and volume profile"
+    }
+  ],
+  "key_levels": [
+    {
+      "price": float,
+      "type": "support" | "resistance",
+      "strength": "major" | "minor",
+      "description": "Specific liquidity pool or order block definition"
+    }
+  ],
+  "rsi_status": {
+    "value": float,
+    "condition": "oversold" | "neutral" | "overbought" | "bullish_divergence" | "bearish_divergence",
+    "signal": "BUY" | "HOLD" | "SELL"
+  },
+  "volume_analysis": "Institutional analysis of volume delta and absorption",
+  "initial_thesis": {
+    "direction": "LONG" | "SHORT" | "NEUTRAL",
+    "suggested_entry": float,
+    "take_profit_1": float,
+    "take_profit_2": float,
+    "stop_loss": float,
+    "suggested_allocation_pct": float,
+    "rationale": "High-conviction rationale explaining structural trigger and invalidation"
+  }
+}"""
 
 async def run_stage1_gemini_vision(
     symbol: str,
@@ -76,7 +119,7 @@ async def run_stage1_gemini_vision(
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             
-            target_engine = "gemini-2.0-flash-exp" if "3.5" in model_name else model_name
+            target_engine = "gemini-2.5-flash"
             llm = ChatGoogleGenerativeAI(
                 model=target_engine,
                 google_api_key=effective_key,

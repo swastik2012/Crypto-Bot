@@ -122,6 +122,62 @@ async def run_stage5_gemini_arbiter(
             f"proven by Stage 3 NVIDIA NIM's {stage3.monte_carlo_win_rate}% Monte Carlo win rate, and cleared by Stage 4 OpenAI Risk Guard."
         )
 
+    system_prompt = (
+        "You are Agent 5 (Chief Consensus Arbiter & Trade Synthesizer powered by Google Gemini). "
+        "Your duty is to impartially reconcile the multi-agent debate across: "
+        "Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (Quant Monte Carlo Proof), and Stage 4 (Devil's Advocate Risk Guard).\n\n"
+        "ARBITRATION MANDATES:\n"
+        "1. VETO COMPLIANCE: If Stage 4 OpenAI flags false_breakout_probability >= 40.0% OR Stage 3 NVIDIA NIM flags R:R < 1.8, you MUST issue 'HOLD' (Neutral Stand Aside) to prevent capital destruction.\n"
+        "2. HIGH CONVICTION CRITERIA: Issue 'STRONG BUY' or 'STRONG SELL' only when consensus agreement >= 88.0% with zero critical trap alerts.\n"
+        "3. EXECUTION DISCIPLINE: Provide concise institutional synthesis, exact TP1 (50% scale-out), TP2 (trailing runner), and precise price invalidation condition.\n\n"
+        "Return ONLY a valid JSON object matching this schema:\n"
+        "{\n"
+        '  "consensus_signal": "STRONG BUY" | "BUY" | "HOLD" | "SELL" | "STRONG SELL",\n'
+        '  "consensus_confidence": float (0.0 to 100.0),\n'
+        '  "executive_summary": "Crisp 2-3 sentence institutional trade synthesis",\n'
+        '  "key_invalidation_condition": "Exact price event that invalidates the setup"\n'
+        "}"
+    )
+
+    user_prompt = (
+        f"ASSET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
+        f"1. STAGE 1 VISION: Direction={direction}, Patterns={[p.name for p in stage1.patterns]}\n"
+        f"2. STAGE 2 NEWS GIST: Sentiment={stage2.sentiment_label} ({stage2.sentiment_score}%), Gist={stage2.news_gist}\n"
+        f"3. STAGE 3 QUANT PROOF: Win Rate={stage3.monte_carlo_win_rate}%, R:R=1:{stage3.risk_reward_ratio}, Stress Score={stage3.stress_test_score}\n"
+        f"4. STAGE 4 RISK GUARD: Safety Score={stage4.safety_score}%, Fakeout Prob={fakeout_risk}%, Alert={stage4.macro_trap_alert}\n\n"
+        f"Arbitrate final consensus verdict and synthesize execution plan."
+    )
+
+    # If Gemini API Key is present, invoke Gemini LLM for dynamic synthesis
+    if gemini_key and not gemini_key.startswith("AIzaSy***"):
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+            target_engine = "gemini-2.5-flash"
+            llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1)
+            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            raw_text = resp.content
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                parsed = json.loads(json_str)
+            elif "{" in raw_text:
+                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                parsed = json.loads(json_str)
+            else:
+                parsed = {}
+
+            if "consensus_signal" in parsed:
+                sig_str = parsed.get("consensus_signal", signal.value).upper()
+                for sa in SignalAction:
+                    if sa.value == sig_str:
+                        signal = sa
+                        break
+                consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
+                summary = parsed.get("executive_summary", summary)
+                invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+        except Exception as e:
+            print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
+
     open_positions: List[Dict] = account_state.get("open_positions", [])
 
     suggested_pos = 5000.0 if signal != SignalAction.HOLD else 0.0

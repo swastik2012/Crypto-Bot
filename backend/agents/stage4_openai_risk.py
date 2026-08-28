@@ -11,6 +11,15 @@ from backend.models.schemas import (
 )
 from backend.config import settings
 
+def _format_portfolio_summary(account_state: Dict[str, Any]) -> str:
+    open_positions: List[Dict] = account_state.get("open_positions", [])
+    cash = account_state.get("cash_balance", 100000.0)
+    equity = account_state.get("total_equity", cash)
+    lines = [f"- Total Portfolio Equity: ${equity:,.2f} | Available Cash: ${cash:,.2f}", f"- Open Trades: {len(open_positions)}"]
+    for p in open_positions[-3:]:
+        lines.append(f"  • {p.get('symbol')} {p.get('side')} Entry: ${p.get('entry_price', 0):,.2f}")
+    return "\n".join(lines)
+
 async def run_stage4_openai_risk(
     symbol: str,
     stage1: Stage1GeminiVisionResult,
@@ -78,28 +87,35 @@ async def run_stage4_openai_risk(
     if openai_key and not openai_key.startswith("your-"):
         try:
             system_prompt = (
-                "You are the Chief Risk Officer for an autonomous AI trading hedge fund. "
-                "Audit the proposed trade by critiquing Stage 1 Vision, Stage 2 News Gist, and Stage 3 Quant proofs. "
-                "Ensure there are no liquidity sweeps, news traps, or overexposure hazards. "
+                "You are the Chief Risk Officer and Devil's Advocate for an institutional AI crypto hedge fund. "
+                "Your sole duty is to protect fund equity by ruthlessly searching for reasons NOT to take the trade.\n\n"
+                "MANDATORY RISK AUDIT CHECKLIST:\n"
+                "1. LIQUIDITY TRAP & FAKEOUT AUDIT: Is price sweeping previous swing highs/lows just to trap retail breakout traders? Calculate false_breakout_probability (0.0 to 100.0).\n"
+                "2. NEWS EXHAUSTION: Is the Stage 2 narrative already priced in ('buy the rumor, sell the news')?\n"
+                "3. PORTFOLIO CORRELATION: Check existing open positions to ensure the portfolio is not over-concentrated in one direction.\n"
+                "4. VETO POWER: If false_breakout_probability >= 40.0% or the R:R is substandard, you MUST downgrade safety_score (< 65) and provide a macro_trap_alert warning.\n\n"
                 "Return ONLY a valid JSON object matching this schema:\n"
                 "{\n"
                 '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
-                '  "false_breakout_probability": float (e.g. 14.8),\n'
-                '  "order_block_status": "string",\n'
-                '  "macro_trap_alert": null | "warning string",\n'
-                '  "critique_of_gemini": "string",\n'
-                '  "critique_of_nvidia": "string",\n'
-                '  "safety_score": float (e.g. 92.4)\n'
+                '  "false_breakout_probability": float (0.0 to 100.0),\n'
+                '  "order_block_status": "Description of nearest institutional order block / supply-demand imbalance",\n'
+                '  "macro_trap_alert": null | "Explicit warning if fakeout or trap is detected",\n'
+                '  "critique_of_gemini": "Critical peer-review of Stage 1 Gemini Vision technical setup",\n'
+                '  "critique_of_nvidia": "Critical peer-review of Stage 3 NVIDIA Quant Monte Carlo assumptions",\n'
+                '  "safety_score": float (0.0 to 100.0)\n'
                 "}"
             )
             user_prompt = (
-                f"Symbol: {symbol} | Current Price: ${current_price:,.2f}\n\n"
-                f"STAGE 1 VISION:\n- Patterns: {[p.name for p in stage1.patterns]}\n"
-                f"- Thesis: {stage1.volume_analysis}\n\n"
-                f"STAGE 2 NEWS GIST (CoinDesk/Cointelegraph/CryptoSlate):\n- Gist: {stage2.news_gist}\n"
-                f"- Sentiment Score: {stage2.sentiment_score}%\n\n"
-                f"STAGE 3 QUANT PROOF:\n- MC Win Rate: {stage3.monte_carlo_win_rate}%\n"
-                f"- R:R: 1:{stage3.risk_reward_ratio}\n"
+                f"AUDIT TARGET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
+                f"STAGE 1 VISION PROPOSAL:\n- Patterns: {[p.name for p in stage1.patterns]}\n"
+                f"- Proposed Direction: {stage1.initial_thesis.get('direction', 'NEUTRAL') if stage1.initial_thesis else 'NEUTRAL'}\n"
+                f"- Targets: TP1=${stage1.initial_thesis.get('take_profit_1', 0):,.2f}, SL=${stage1.initial_thesis.get('stop_loss', 0):,.2f}\n\n"
+                f"STAGE 2 NEWS MACRO GIST:\n- Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}/100)\n"
+                f"- Gist: {stage2.news_gist}\n\n"
+                f"STAGE 3 QUANT CALCULATIONS:\n- Monte Carlo Win Rate: {stage3.monte_carlo_win_rate}%\n"
+                f"- R:R Ratio: 1:{stage3.risk_reward_ratio} | Stress Score: {stage3.stress_test_score}\n\n"
+                f"PORTFOLIO STATE:\n{_format_portfolio_summary(account_state)}\n\n"
+                f"Conduct devil's advocate risk audit, quantify false breakout probability, and issue safety score."
             )
             headers = {
                 "Authorization": f"Bearer {openai_key}",

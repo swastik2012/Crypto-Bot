@@ -34,17 +34,20 @@ async def run_stage2_news_sentiment(
     ])
 
     system_prompt = (
-        "You are the Senior Crypto News & Macro Sentiment Intelligence Node for an autonomous trading hedge fund. "
-        "Your role is to ingest real-time news headlines from CoinDesk, Cointelegraph, and CryptoSlate, "
-        "synthesize a crisp 'Gist of the News', identify the key narrative catalysts (e.g. ETF inflows, regulatory shifts, "
-        "whales/on-chain activity, protocol upgrades), and assign an institutional sentiment score from 0.0 to 100.0. "
+        "You are the Senior Crypto Macro & News Intelligence Node for an institutional AI trading hedge fund. "
+        "Your task is to ingest real-time news headlines from CoinDesk, Cointelegraph, and CryptoSlate, "
+        "and rigorously dissect genuine structural catalysts vs retail hype or 'sell-the-news' exhaustion traps.\n\n"
+        "EVALUATION CRITERIA:\n"
+        "1. STRUCTURAL CATALYSTS (Score > 75): Substantial net spot ETF inflows, sovereign/institutional accumulation, major protocol mainnet launches, favorable regulatory court precedents.\n"
+        "2. BEARISH / DISTRIBUTION DRIVERS (Score < 45): Spot exchange inflows (whale dumping), government token sales, macro monetary tightening, legal enforcement actions, derivatives de-leveraging.\n"
+        "3. EQUILIBRIUM / CHOP (Score 45 - 60): Mixed or low-impact news; market waiting for upcoming CPI/FOMC or key unlock events.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "sentiment_label": "BULLISH" | "NEUTRAL" | "BEARISH",\n'
-        '  "sentiment_score": float (e.g. 84.5),\n'
-        '  "news_gist": "2-3 sentence institutional executive summary of current market news",\n'
+        '  "sentiment_score": float (0.0 to 100.0),\n'
+        '  "news_gist": "2-3 sentence institutional executive summary explaining how current macro news impacts price direction",\n'
         '  "key_catalysts": ["catalyst 1", "catalyst 2", "catalyst 3"],\n'
-        '  "macro_narrative": "Dominant macro crypto narrative",\n'
+        '  "macro_narrative": "Dominant overarching narrative (e.g. Institutional Spot Inflows vs Regulatory Headwinds)",\n'
         '  "source_sentiment_breakdown": {\n'
         '    "CoinDesk": "Bullish" | "Neutral" | "Bearish",\n'
         '    "Cointelegraph": "Bullish" | "Neutral" | "Bearish",\n'
@@ -54,11 +57,11 @@ async def run_stage2_news_sentiment(
     )
 
     user_prompt = (
-        f"Cryptocurrency Pair: {symbol} (Current Price: ${current_price:,.2f})\n"
-        f"Stage 1 Gemini Vision Setup: {stage1_res.patterns[0].name if stage1_res.patterns else 'Consolidation'}\n\n"
+        f"Cryptocurrency Pair: {symbol} | Current Price: ${current_price:,.2f}\n"
+        f"Stage 1 Gemini Vision Setup: {stage1_res.patterns[0].name if stage1_res.patterns else 'Consolidation'} (Proposed Direction: {stage1_res.initial_thesis.get('direction', 'NEUTRAL') if stage1_res.initial_thesis else 'NEUTRAL'})\n\n"
         f"Real-Time News Stream from CoinDesk, Cointelegraph & CryptoSlate:\n"
         f"{news_text_block}\n\n"
-        f"Distill the news gist, identify key catalysts, and calculate the institutional sentiment score."
+        f"Evaluate genuine institutional liquidity catalysts vs retail noise, synthesize the news gist, and calculate the institutional sentiment score."
     )
 
     direction = str(stage1_res.initial_thesis.get("direction", "LONG")).upper() if stage1_res.initial_thesis else "LONG"

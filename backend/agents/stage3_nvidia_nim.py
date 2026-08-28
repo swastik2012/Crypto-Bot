@@ -102,18 +102,39 @@ async def run_stage3_nvidia_nim(
     portfolio_ctx = _format_portfolio_summary(account_state)
 
     system_prompt = (
-        "You are the Principal Quantitative Risk & Mathematical Engine for an autonomous AI crypto fund. "
-        "You ingest Stage 1 Visual Chart Patterns and Stage 2 News/Macro Sentiment to stress-test the setup. "
-        "Return ONLY a valid JSON object with: stress_test_score (float), risk_reward_ratio (float), "
-        "monte_carlo_win_rate (float), liquidity_depth_rating (string), verdict (string), "
-        "adjustments_proposed (object), and mathematical_proof (string)."
+        "You are the Principal Quantitative Risk & Mathematical Engine for an autonomous AI crypto hedge fund. "
+        "Your task is to mathematically stress-test the proposed technical setup from Stage 1 and macro sentiment from Stage 2 "
+        "using Monte Carlo path simulations (10,000 iterations), Expected Value calculations, and liquidity depth modeling.\n\n"
+        "QUANTITATIVE MANDATES:\n"
+        "1. ASYMMETRIC HURDLE RATE: Calculate exact Risk:Reward ratio. The setup MUST achieve at least 1:2.0 R:R. If R:R < 1.8, verdict MUST be 'REJECT' or 'ADJUST_SIZE'.\n"
+        "2. EXPECTED VALUE (EV) PROOF: Compute EV = (Win_Rate * Potential_Gain) - (Loss_Rate * Potential_Loss). EV must be strictly positive.\n"
+        "3. CAPITAL ALLOCATION: Adjust position sizing according to account margin availability and market volatility (standard 5% margin, max 3x leverage).\n\n"
+        "Return ONLY a valid JSON object matching this schema:\n"
+        "{\n"
+        '  "stress_test_score": float (0.0 to 100.0),\n'
+        '  "risk_reward_ratio": float (e.g. 2.45),\n'
+        '  "monte_carlo_win_rate": float (0.0 to 100.0),\n'
+        '  "liquidity_depth_rating": "High" | "Medium" | "Low",\n'
+        '  "verdict": "VERIFIED_PASS" | "ADJUST_SIZE" | "REJECT",\n'
+        '  "adjustments_proposed": {\n'
+        '    "suggested_position_usd": float,\n'
+        '    "recommended_stop_loss": float\n'
+        '  },\n'
+        '  "mathematical_proof": "Step-by-step institutional quantitative proof reconciling Vision + News + Monte Carlo expectancy"\n'
+        "}"
     )
 
     user_prompt = (
-        f"Symbol: {symbol} | Current Price: ${current_price:,.2f} | Direction: {direction}\n"
-        f"Target 1: ${target1:,.2f} | Stop Loss: ${stop_loss:,.2f} | Initial RR: 1:{calculated_rr}\n"
-        f"Stage 2 News Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}/100) - {stage2.news_gist}\n\n"
-        f"Portfolio Exposure:\n{portfolio_ctx}"
+        f"ASSET: {symbol} | Current Price: ${current_price:,.2f} | Directional Proposal: {direction}\n\n"
+        f"STAGE 1 VISION SETUP:\n"
+        f"- Target 1: ${target1:,.2f} | Target 2: ${target2:,.2f} | Stop Loss: ${stop_loss:,.2f}\n"
+        f"- Initial R:R: 1:{calculated_rr}\n\n"
+        f"STAGE 2 MACRO NEWS CATALYSTS:\n"
+        f"- Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}/100)\n"
+        f"- Gist: {stage2.news_gist}\n\n"
+        f"PORTFOLIO MARGIN CONTEXT:\n"
+        f"{portfolio_ctx}\n\n"
+        f"Execute 10,000-iteration Monte Carlo stress-testing, calculate Expected Value, and output mathematical validation proof."
     )
 
     start_time = time.time()
