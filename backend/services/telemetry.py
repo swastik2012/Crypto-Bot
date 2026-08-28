@@ -42,6 +42,8 @@ class AgentTelemetryService:
         endpoint: str = "",
         request_summary: Optional[Dict[str, Any]] = None,
         response_summary: Optional[Dict[str, Any]] = None,
+        prompt_text: Optional[str] = None,
+        response_text: Optional[str] = None,
         error_message: Optional[str] = None,
     ) -> Dict[str, Any]:
         entry_id = f"tel_{uuid.uuid4().hex[:8]}"
@@ -62,6 +64,8 @@ class AgentTelemetryService:
             "status_code": status_code,
             "latency_ms": latency_ms,
             "endpoint": endpoint or "https://api.aethertrade.ai",
+            "prompt_text": prompt_text or "",
+            "response_text": response_text or "",
             "request_summary": request_summary or {},
             "response_summary": response_summary or {},
             "error_message": error_message,

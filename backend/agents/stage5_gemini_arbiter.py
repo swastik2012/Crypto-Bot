@@ -198,7 +198,7 @@ async def run_stage5_gemini_arbiter(
     latency = 310
 
     result = Stage5GeminiArbiterResult(
-        agent_name="Agent 5: Gemini 3.5 Flash Consensus Arbiter",
+        agent_name="Agent 5: Gemini 3.6 Flash Consensus Arbiter",
         model=model_name,
         latency_ms=latency,
         consensus_signal=signal,
@@ -219,7 +219,7 @@ async def run_stage5_gemini_arbiter(
         id="msg_st5_01",
         stage_number=5,
         agent_id="agent_gemini_arbiter",
-        agent_name="Gemini 3.5 Flash Arbiter",
+        agent_name="Gemini 3.6 Flash Arbiter",
         agent_badge="Final 5-Stage Consensus Arbiter",
         avatar_color="from-cyan-400 to-teal-400",
         model=model_name,
@@ -236,16 +236,18 @@ async def run_stage5_gemini_arbiter(
         ],
     )
 
-    # Record Telemetry Call
+    # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
     telemetry_service.record_call(
         provider="Google Gemini (Arbiter)",
         model=model_name,
-        stage="Stage 5: Consensus Arbiter",
+        stage="Stage 5: Gemini 3.6 Flash Consensus Arbiter",
         status="SUCCESS" if (gemini_key and not gemini_key.startswith("AIzaSy***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency,
         endpoint="https://generativelanguage.googleapis.com/v1beta/models",
+        prompt_text=f"{system_prompt}\n\n=== MULTI-AGENT SYNTHESIS INPUT ===\n{user_prompt}",
+        response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "current_price": current_price,

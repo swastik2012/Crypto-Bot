@@ -363,7 +363,7 @@ async def run_stage1_gemini_vision(
         highlight_pills = ["Gemini 3.5 Flash Vision", "Ascending Triangle 92.8%", "LONG Setup", "RSI Divergence 62.4"]
 
     result = Stage1GeminiVisionResult(
-        agent_name="Agent 1: Gemini 3.5 Flash Vision Analyzer",
+        agent_name="Agent 1: Gemini 3.6 Flash Vision Analyzer",
         model=model_name,
         latency_ms=latency,
         patterns=patterns,
@@ -377,7 +377,7 @@ async def run_stage1_gemini_vision(
         id="msg_st1_01",
         stage_number=1,
         agent_id="agent_gemini_vision",
-        agent_name="Gemini 3.5 Flash Vision",
+        agent_name="Gemini 3.6 Flash Vision",
         agent_badge="Visual Technical Analyzer",
         avatar_color="from-blue-500 to-cyan-400",
         model=model_name,
@@ -386,16 +386,18 @@ async def run_stage1_gemini_vision(
         highlight_pills=highlight_pills,
     )
 
-    # Record Telemetry Call
+    # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
     telemetry_service.record_call(
-        provider="Google Gemini",
+        provider="Google Gemini (Vision)",
         model=model_name,
-        stage="Stage 1: Gemini Vision",
+        stage="Stage 1: Gemini 3.6 Flash Vision",
         status="SUCCESS" if (effective_key and not effective_key.startswith("AIzaSy***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency,
         endpoint="https://generativelanguage.googleapis.com/v1beta/models",
+        prompt_text=f"{STAGE1_SYSTEM_PROMPT}\n\n=== INPUT PAYLOAD ===\nSymbol: {symbol}\nTimeframe: {timeframe}\nCurrent Price: ${p:,.2f}\nPortfolio Context:\n{portfolio_ctx}",
+        response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "timeframe": timeframe,
@@ -403,10 +405,10 @@ async def run_stage1_gemini_vision(
             "has_chart_image": bool(chart_image_base64),
         },
         response_summary={
+            "direction": initial_thesis.get("direction"),
             "patterns_detected": [pat.name for pat in patterns],
-            "initial_signal": "BUY",
-            "take_profit_1": round(p * 1.042, 2),
-            "stop_loss": round(p * 0.978, 2),
+            "take_profit_1": initial_thesis.get("take_profit_1"),
+            "stop_loss": initial_thesis.get("stop_loss"),
         },
     )
 

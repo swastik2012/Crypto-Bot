@@ -203,16 +203,18 @@ async def run_stage2_news_sentiment(
         ],
     )
 
-    # Record Telemetry Call
+    # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
     telemetry_service.record_call(
         provider="NVIDIA NIM (News)",
         model=model_name,
-        stage="Stage 2: News Sentiment",
+        stage="Stage 2: News & Macro Sentiment",
         status="SUCCESS" if (nvidia_key and not nvidia_key.startswith("nvapi-***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency_ms,
         endpoint=f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+        prompt_text=f"{system_prompt}\n\n=== USER INPUT & NEWS ARTICLES ===\n{user_prompt}",
+        response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "publications": ["CoinDesk", "Cointelegraph", "CryptoSlate"],

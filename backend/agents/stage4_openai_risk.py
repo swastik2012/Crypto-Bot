@@ -186,7 +186,7 @@ async def run_stage4_openai_risk(
         ],
     )
 
-    # Record Telemetry Call
+    # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
     telemetry_service.record_call(
         provider="OpenAI",
@@ -196,6 +196,8 @@ async def run_stage4_openai_risk(
         status_code=200,
         latency_ms=latency_ms,
         endpoint="https://api.openai.com/v1/chat/completions",
+        prompt_text=f"{system_prompt}\n\n=== USER AUDIT TARGET ===\n{user_prompt}",
+        response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "current_price": current_price,

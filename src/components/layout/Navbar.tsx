@@ -297,25 +297,25 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="flex items-center gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-dark-900 border border-slate-300/60 dark:border-white/10 shrink-0 font-mono text-xs font-bold">
               <button
                 onClick={() => onViewChange('terminal')}
-                className={`px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
                   activeView === 'terminal'
                     ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
                 title="View Trading Terminal & Chart Analytics"
               >
-                Terminal
+                <span>Live Terminal</span>
               </button>
               <button
                 onClick={() => onViewChange('telemetry')}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all cursor-pointer ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
                   activeView === 'telemetry'
                     ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
-                title="View Real-Time Agent Telemetry & API Call Diagnostics"
+                title="View AI Prompts, Raw Model Responses & API Call Diagnostics"
               >
-                <span>API Logs</span>
+                <span>AI Prompts & Telemetry</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </button>
             </div>

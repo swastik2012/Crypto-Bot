@@ -64,21 +64,26 @@ export interface Stage1GeminiVisionOutput {
   keyLevels: KeyLevel[];
   rsiStatus: {
     value: number;
-    condition: 'Oversold' | 'Overbought' | 'Neutral' | 'Bullish Divergence' | 'Bearish Divergence';
+    condition: string;
+    signal?: string;
   };
   volumeAnalysis: string;
   initialThesis: {
-    signal: SignalType;
-    entryRange: [number, number];
-    target1: number;
-    target2: number;
+    signal?: SignalType;
+    direction?: string;
+    suggestedEntry?: number;
+    entryRange?: [number, number];
+    takeProfit1?: number;
+    takeProfit2?: number;
+    target1?: number;
+    target2?: number;
     stopLoss: number;
     confidence: number;
     rationale: string;
   };
 }
 
-// Stage 2 (NEW): NVIDIA NIM News & Sentiment Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
+// Stage 2: NVIDIA NIM News & Sentiment Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
 export interface Stage2NewsSentimentOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;
@@ -110,6 +115,7 @@ export interface Stage3NvidiaNimOutput {
   verdict: 'VERIFIED_PASS' | 'ADJUST_SIZE' | 'REJECT';
   adjustmentsProposed?: {
     suggestedPositionUsd?: number;
+    suggestedPositionUSD?: number;
     recommendedStopLoss?: number;
   };
   mathematicalProof: string;
@@ -130,7 +136,7 @@ export interface Stage4OpenAIOutput {
   safetyScore: number;
 }
 
-// Stage 5: Gemini 3.5 Flash Arbiter Final Synthesis
+// Stage 5: Gemini 3.6 Flash Arbiter Final Synthesis
 export interface Stage5GeminiArbiterOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;
@@ -143,18 +149,22 @@ export interface Stage5GeminiArbiterOutput {
     takeProfit1: number;
     takeProfit2: number;
     stopLoss: number;
-    invalidationPrice: number;
+    invalidationPrice?: number;
     effectiveRR: number;
-    timeHorizon: string;
-    suggestedLeverage: string;
+    timeHorizon?: string;
+    suggestedLeverage?: string;
+    recommendedPositionUSD?: number;
+    recommendedPositionUsd?: number;
   };
   executiveSummary: string;
   keyInvalidationCondition: string;
   agentConsensusMatrix: {
     geminiScore: number;
+    newsScore?: number;
     nvidiaScore: number;
     openaiScore: number;
-    agreementLevel: 'High' | 'Moderate' | 'Divergent';
+    agreementLevel?: string;
+    overall_agreement?: string;
   };
 }
 

@@ -215,7 +215,7 @@ async def run_stage3_nvidia_nim(
         ],
     )
 
-    # Record Telemetry Call
+    # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
     telemetry_service.record_call(
         provider="NVIDIA NIM (Quant)",
@@ -225,6 +225,8 @@ async def run_stage3_nvidia_nim(
         status_code=200,
         latency_ms=latency_ms,
         endpoint=f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+        prompt_text=f"{system_prompt}\n\n=== USER INPUT & EQUATIONS ===\n{user_prompt}",
+        response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "current_price": current_price,
