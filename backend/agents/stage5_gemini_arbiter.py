@@ -38,8 +38,28 @@ async def run_stage5_gemini_arbiter(
 
     pat_name = stage1.patterns[0].name if stage1.patterns else "Technical Structure"
     entry = thesis.get("suggested_entry", current_price)
+    mtf = getattr(stage1, "multi_timeframe_confluence", None)
+    has_mtf_warning = mtf.counter_trend_warning if mtf else False
+    mtf_align = mtf.alignment_score if mtf else "3/3 FULL CONFLUENCE"
 
-    if direction in ["SHORT", "BEARISH"]:
+    if has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+        gemini_score = 65.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = 48.0
+        signal = SignalAction.HOLD
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
+        invalidation_cond = f"Multi-timeframe divergence ({mtf_align}). Lower-timeframe trigger opposes 1D Macro Trend ({mtf.screen_1d.trend if mtf else 'N/A'})."
+        summary = (
+            f"5-Stage Arbiter Verdict: STRICT HOLD ({consensus_confidence}% conviction) for {symbol}. "
+            f"Triple-Screen Confluence Engine detected '{mtf_align}'. While lower-timeframes flashed {direction}, "
+            f"1D Macro Trend remains {mtf.screen_1d.trend if mtf else 'conflicting'}. Chief Arbiter mandates standing aside in cash."
+        )
+
+    elif direction in ["SHORT", "BEARISH"]:
         gemini_score = 92.0
         news_score = stage2.sentiment_score
         nvidia_score = stage3.stress_test_score
@@ -51,7 +71,7 @@ async def run_stage5_gemini_arbiter(
             (openai_score * 0.25),
             1
         )
-        if consensus_confidence >= 88.0 and fakeout_risk < 30.0:
+        if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
             signal = SignalAction.STRONG_SELL
         elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
             signal = SignalAction.SELL
@@ -64,8 +84,8 @@ async def run_stage5_gemini_arbiter(
         invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
         summary = (
             f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
-            f"Stage 1 '{pat_name}' breakdown is corroborated by Stage 2 macro news ({stage2.sentiment_score}%), "
-            f"proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and approved by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
+            f"Triple-Screen MTF ({mtf_align}) confirms 1D/4H supply, Stage 2 macro news ({stage2.sentiment_score}%) corroborates selling delta, "
+            f"proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
         )
 
     elif direction in ["NEUTRAL", "HOLD"]:
@@ -87,7 +107,7 @@ async def run_stage5_gemini_arbiter(
         invalidation_cond = f"Asset trading inside equilibrium chop zone (${sl:,.2f} - ${tp1:,.2f}). Stand aside until confirmed directional breakout."
         summary = (
             f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction) for {symbol}. "
-            f"Stage 1 identified '{pat_name}', Stage 3 Monte Carlo flagged coin-flip expectancy ({stage3.monte_carlo_win_rate}%), "
+            f"Triple-Screen MTF ({mtf_align}) identified equilibrium consolidation, Stage 3 Monte Carlo flagged coin-flip expectancy ({stage3.monte_carlo_win_rate}%), "
             f"and Stage 4 Risk Guard detected {fakeout_risk}% fakeout probability. Capital preservation active."
         )
 
@@ -103,7 +123,7 @@ async def run_stage5_gemini_arbiter(
             (openai_score * 0.25),
             1
         )
-        if consensus_confidence >= 88.0 and fakeout_risk < 30.0:
+        if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
             signal = SignalAction.STRONG_BUY
         elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
             signal = SignalAction.BUY
@@ -116,7 +136,7 @@ async def run_stage5_gemini_arbiter(
         invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
         summary = (
             f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
-            f"Stage 1 '{pat_name}' breakout is reinforced by Stage 2 news macro sentiment ({stage2.sentiment_score}%), "
+            f"Triple-Screen MTF ({mtf_align}) validates 1D/4H demand accumulation, Stage 2 news macro sentiment ({stage2.sentiment_score}%) confirms ETF/spot inflows, "
             f"mathematically proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
         )
 

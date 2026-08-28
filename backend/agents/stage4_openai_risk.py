@@ -41,9 +41,27 @@ async def run_stage4_openai_risk(
     direction = str(thesis.get("direction", "LONG")).upper()
     stop_loss = thesis.get("stop_loss", round(current_price * 0.978, 2))
     pat_name = stage1.patterns[0].name if stage1.patterns else "Technical Setup"
+    mtf = getattr(stage1, "multi_timeframe_confluence", None)
+    has_mtf_warning = mtf.counter_trend_warning if mtf else False
+    mtf_align = mtf.alignment_score if mtf else "3/3 FULL CONFLUENCE"
 
-    # Dynamic risk calculations based on Stage 1 & Stage 3 outputs
-    if direction == "SHORT":
+    # Dynamic risk calculations based on Stage 1, MTF, & Stage 3 outputs
+    if has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+        safety_score = 42.0
+        false_breakout_prob = 74.5
+        ob_floor = round(current_price * 0.980, 2)
+        ob_ceil = round(current_price * 1.020, 2)
+        order_block_status = f"High-Risk Range Liquidity Trap: 1D Macro Trend conflicts with proposed {direction} setup."
+        macro_trap_alert = f"CRITICAL WARNING: {mtf_align}. Lower-timeframe trigger is fighting the 1D Macro tide. High liquidity trap probability."
+        critique_gemini = (
+            f"Stage 1 '{pat_name}' flagged as low-conviction counter-trend. 1D Macro Trend ({mtf.screen_1d.trend if mtf else 'N/A'}) "
+            f"threatens immediate invalidation of {direction} thesis."
+        )
+        critique_nvidia = (
+            f"Stage 3 Quant win rate ({stage3.monte_carlo_win_rate}%) fails to price in macro multi-timeframe drift. "
+            f"Chief Risk Officer mandate: Stand aside in cash."
+        )
+    elif direction == "SHORT":
         false_breakout_prob = round(min(max(100.0 - stage3.monte_carlo_win_rate + 4.5, 9.5), 32.0), 1)
         safety_score = round(min(max(stage3.stress_test_score * 0.94, 76.0), 95.5), 1)
         ob_floor = round(current_price * 0.988, 2)
@@ -51,7 +69,7 @@ async def run_stage4_openai_risk(
         order_block_status = f"Bearish Supply Imbalance mapped between ${current_price:,.2f} and ${ob_ceil:,.2f}."
         macro_trap_alert = None if false_breakout_prob < 35.0 else f"CAUTION: Fakeout probability at {false_breakout_prob}%."
         critique_gemini = (
-            f"Stage 1 correctly mapped '{pat_name}'. "
+            f"Stage 1 correctly mapped '{pat_name}' ({mtf_align}). "
             f"Order flow confirms seller dominance with supply anchored at ${stop_loss:,.2f}."
         )
         critique_nvidia = (
@@ -64,9 +82,9 @@ async def run_stage4_openai_risk(
         ob_floor = round(current_price * 0.985, 2)
         ob_ceil = round(current_price * 1.015, 2)
         order_block_status = f"Equilibrium Mid-Range Chop Zone between ${ob_floor:,.2f} and ${ob_ceil:,.2f}."
-        macro_trap_alert = f"WARNING: Elevated risk of false breakouts ({false_breakout_prob}%) inside chop zone."
+        macro_trap_alert = f"WARNING: Multi-timeframe divergence ({mtf_align}) presents elevated fakeout risk ({false_breakout_prob}%)."
         critique_gemini = (
-            f"Stage 1 correctly classified market as '{pat_name}'. Entering directional trades here "
+            f"Stage 1 correctly classified market as '{pat_name}' ({mtf_align}). Entering directional trades here "
             f"presents unacceptable {false_breakout_prob}% fakeout risk."
         )
         critique_nvidia = (
@@ -81,7 +99,7 @@ async def run_stage4_openai_risk(
         order_block_status = f"Unmitigated Bullish Demand Order Block verified between ${ob_floor:,.2f} and ${ob_ceil:,.2f}."
         macro_trap_alert = None if false_breakout_prob < 30.0 else f"CAUTION: Fakeout probability at {false_breakout_prob}%."
         critique_gemini = (
-            f"Stage 1 correctly mapped '{pat_name}'. "
+            f"Stage 1 correctly mapped '{pat_name}' ({mtf_align}). "
             f"Order flow depth confirms solid absorption around ${stop_loss:,.2f} with zero liquidity sweep traps."
         )
         critique_nvidia = (

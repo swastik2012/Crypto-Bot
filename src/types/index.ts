@@ -54,6 +54,37 @@ export interface NewsArticle {
   published_at: string;
 }
 
+export interface TimeframeScreen {
+  timeframe: string;
+  trend: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | string;
+  trendDescription: string;
+  rsi14: number;
+  rsiCondition: string;
+  ema20: number;
+  ema50: number;
+  ema200?: number | null;
+  emaAlignment: string;
+  keyDemandZone: [number, number] | number[];
+  keySupplyZone: [number, number] | number[];
+  structureSignal: string;
+  volatilityAtr: number;
+  summary: string;
+}
+
+export interface MultiTimeframeConfluence {
+  symbol: string;
+  currentPrice: number;
+  screen1d: TimeframeScreen;
+  screen4h: TimeframeScreen;
+  screen15m: TimeframeScreen;
+  alignmentScore: string;
+  confluenceDirection: string;
+  confluenceConfidence: number;
+  counterTrendWarning: boolean;
+  recommendedAction: string;
+  timestamp: number;
+}
+
 // Stage 1: Gemini Vision Output
 export interface Stage1GeminiVisionOutput {
   status: 'idle' | 'running' | 'completed';
@@ -81,6 +112,7 @@ export interface Stage1GeminiVisionOutput {
     confidence: number;
     rationale: string;
   };
+  multiTimeframeConfluence?: MultiTimeframeConfluence;
 }
 
 // Stage 2: NVIDIA NIM News & Sentiment Ingestion (CoinDesk, Cointelegraph, CryptoSlate)

@@ -133,6 +133,110 @@ export const StageCard: React.FC<StageCardProps> = ({
               </div>
             </div>
           </div>
+
+          {/* TRIPLE-SCREEN MULTI-TIMEFRAME (MTF) CONFLUENCE MATRIX */}
+          {stage1Data.multiTimeframeConfluence && (
+            <div className="mt-4 p-4 rounded-xl bg-gradient-to-br from-blue-500/10 via-indigo-500/5 to-cyan-500/10 border border-blue-500/30 space-y-3 font-mono shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b border-blue-500/20 pb-2.5">
+                <div className="flex items-center gap-2 text-xs font-bold text-blue-700 dark:text-blue-300">
+                  <Sparkles className="w-4 h-4 text-cyan-400" />
+                  <span>TRIPLE-SCREEN MULTI-TIMEFRAME CONFLUENCE (1D + 4H + 15M)</span>
+                </div>
+                <Badge
+                  variant={
+                    stage1Data.multiTimeframeConfluence.alignmentScore.includes('3/3')
+                      ? 'emerald'
+                      : stage1Data.multiTimeframeConfluence.alignmentScore.includes('2/3')
+                      ? 'cyan'
+                      : 'rose'
+                  }
+                  size="sm"
+                >
+                  {stage1Data.multiTimeframeConfluence.alignmentScore}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {/* 1D Screen */}
+                <div className="p-3 rounded-lg bg-white/80 dark:bg-dark-900/70 border border-blue-500/20 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-500">1D MACRO TIDE</span>
+                    <span
+                      className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        stage1Data.multiTimeframeConfluence.screen1d.trend === 'BULLISH'
+                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : stage1Data.multiTimeframeConfluence.screen1d.trend === 'BEARISH'
+                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                          : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {stage1Data.multiTimeframeConfluence.screen1d.trend}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                    RSI: <span className="text-cyan-600 dark:text-cyan-400 font-bold">{stage1Data.multiTimeframeConfluence.screen1d.rsi14}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
+                    {stage1Data.multiTimeframeConfluence.screen1d.structureSignal}
+                  </div>
+                </div>
+
+                {/* 4H Screen */}
+                <div className="p-3 rounded-lg bg-white/80 dark:bg-dark-900/70 border border-blue-500/20 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-500">4H STRUCTURAL WAVE</span>
+                    <span
+                      className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        stage1Data.multiTimeframeConfluence.screen4h.trend === 'BULLISH'
+                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : stage1Data.multiTimeframeConfluence.screen4h.trend === 'BEARISH'
+                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                          : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {stage1Data.multiTimeframeConfluence.screen4h.trend}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                    Demand: <span className="text-emerald-600 dark:text-emerald-400 font-bold">{formatPrice(stage1Data.multiTimeframeConfluence.screen4h.keyDemandZone[0])}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
+                    Supply: {formatPrice(stage1Data.multiTimeframeConfluence.screen4h.keySupplyZone[1])}
+                  </div>
+                </div>
+
+                {/* 15M Screen */}
+                <div className="p-3 rounded-lg bg-white/80 dark:bg-dark-900/70 border border-blue-500/20 space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px]">
+                    <span className="font-bold text-slate-500">15M PRECISION TRIGGER</span>
+                    <span
+                      className={`font-bold px-1.5 py-0.5 rounded text-[10px] ${
+                        stage1Data.multiTimeframeConfluence.screen15m.trend === 'BULLISH'
+                          ? 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+                          : stage1Data.multiTimeframeConfluence.screen15m.trend === 'BEARISH'
+                          ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400'
+                          : 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                      }`}
+                    >
+                      {stage1Data.multiTimeframeConfluence.screen15m.trend}
+                    </span>
+                  </div>
+                  <div className="text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                    RSI: <span className="text-cyan-600 dark:text-cyan-400 font-bold">{stage1Data.multiTimeframeConfluence.screen15m.rsi14}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-600 dark:text-slate-400 leading-tight">
+                    {stage1Data.multiTimeframeConfluence.screen15m.structureSignal}
+                  </div>
+                </div>
+              </div>
+
+              {/* Recommended Action */}
+              <div className="p-2.5 rounded-lg bg-blue-500/10 border border-blue-500/20 text-[11px] text-blue-900 dark:text-blue-200 leading-relaxed">
+                <span className="font-bold uppercase text-cyan-700 dark:text-cyan-300">Directive: </span>
+                {stage1Data.multiTimeframeConfluence.recommendedAction}
+              </div>
+            </div>
+          )}
         </GlassCard>
       )}
 

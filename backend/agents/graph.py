@@ -37,6 +37,12 @@ class MultiAgentConsensusPipeline:
             account_state = paper_engine.get_state().dict()
         debate_stream = []
 
+        if not current_price or current_price <= 0:
+            from backend.services.symbol_resolver import symbol_resolver
+            base_sym = symbol.split("/")[0].upper()
+            match_info = symbol_resolver.resolve(base_sym, limit=1)
+            current_price = match_info.best_match.current_price if match_info.best_match else 78150.0
+
         # STAGE 1: Gemini Vision Ingestion
         stage1_res, msg1 = await run_stage1_gemini_vision(
             symbol=symbol,

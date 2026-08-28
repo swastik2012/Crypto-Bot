@@ -98,6 +98,41 @@ Return ONLY a valid JSON object matching this schema:
   }
 }"""
 
+from backend.services.market_data import market_data_service
+from backend.models.schemas import TimeframeScreenSchema, MultiTimeframeConfluenceSchema
+
+def _to_mtf_schema(mtf) -> MultiTimeframeConfluenceSchema:
+    def _to_screen_schema(s) -> TimeframeScreenSchema:
+        return TimeframeScreenSchema(
+            timeframe=s.timeframe,
+            trend=s.trend,
+            trend_description=s.trend_description,
+            rsi_14=s.rsi_14,
+            rsi_condition=s.rsi_condition,
+            ema_20=s.ema_20,
+            ema_50=s.ema_50,
+            ema_200=s.ema_200,
+            ema_alignment=s.ema_alignment,
+            key_demand_zone=list(s.key_demand_zone),
+            key_supply_zone=list(s.key_supply_zone),
+            structure_signal=s.structure_signal,
+            volatility_atr=s.volatility_atr,
+            summary=s.summary,
+        )
+    return MultiTimeframeConfluenceSchema(
+        symbol=mtf.symbol,
+        current_price=mtf.current_price,
+        screen_1d=_to_screen_schema(mtf.screen_1d),
+        screen_4h=_to_screen_schema(mtf.screen_4h),
+        screen_15m=_to_screen_schema(mtf.screen_15m),
+        alignment_score=mtf.alignment_score,
+        confluence_direction=mtf.confluence_direction,
+        confluence_confidence=mtf.confluence_confidence,
+        counter_trend_warning=mtf.counter_trend_warning,
+        recommended_action=mtf.recommended_action,
+        timestamp=mtf.timestamp,
+    )
+
 async def run_stage1_gemini_vision(
     symbol: str,
     timeframe: str,
@@ -113,13 +148,18 @@ async def run_stage1_gemini_vision(
     portfolio_ctx = _format_portfolio_context(account_state)
     open_count = len(account_state.get("open_positions", []))
 
+    # Fetch Triple-Screen MTF data in parallel from Binance
+    mtf_raw = await market_data_service.get_multi_timeframe_confluence(symbol, current_price)
+    mtf_schema = _to_mtf_schema(mtf_raw)
+
     # Determine asset metrics from Binance
     base_sym = symbol.split("/")[0].upper()
     from backend.services.symbol_resolver import symbol_resolver
     match_info = symbol_resolver.resolve(base_sym, limit=1)
+    effective_price = current_price or (mtf_raw.current_price if mtf_raw else (match_info.best_match.current_price if match_info.best_match else 78150.0))
     change_24h = match_info.best_match.change_24h if match_info.best_match else 0.0
-    high_24h = round(current_price * 1.035, 2)
-    low_24h = round(current_price * 0.965, 2)
+    high_24h = round(effective_price * 1.035, 2)
+    low_24h = round(effective_price * 0.965, 2)
 
     # If API key is present, invoke Google Gemini 3.6 Flash model dynamically
     if effective_key:
@@ -136,10 +176,16 @@ async def run_stage1_gemini_vision(
             )
             
             prompt_text = (
-                f"Analyze {symbol} on timeframe {timeframe}.\n"
+                f"Analyze {symbol} on primary timeframe {timeframe}.\n"
                 f"- Current Live Price: ${current_price:,.2f}\n"
                 f"- 24h Price Change: {change_24h:+.2f}%\n"
                 f"- 24h High: ${high_24h:,.2f} | 24h Low: ${low_24h:,.2f}\n\n"
+                f"TRIPLE-SCREEN MULTI-TIMEFRAME CONFLUENCE (Binance Live):\n"
+                f"• Screen 1 (1D Macro Tide): {mtf_raw.screen_1d.trend} (RSI: {mtf_raw.screen_1d.rsi_14}, {mtf_raw.screen_1d.structure_signal})\n"
+                f"• Screen 2 (4H Structural Wave): {mtf_raw.screen_4h.trend} (Demand: ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, Supply: ${mtf_raw.screen_4h.key_supply_zone[1]:,.2f})\n"
+                f"• Screen 3 (15M Precision Trigger): {mtf_raw.screen_15m.trend} (RSI: {mtf_raw.screen_15m.rsi_14}, {mtf_raw.screen_15m.structure_signal})\n"
+                f"• MTF Alignment Score: {mtf_raw.alignment_score} ({mtf_raw.confluence_direction})\n"
+                f"• MTF Institutional Directive: {mtf_raw.recommended_action}\n\n"
                 f"Portfolio & Past Trade Context:\n{portfolio_ctx}\n"
             )
 
@@ -180,6 +226,7 @@ async def run_stage1_gemini_vision(
                     rsi_status=data.get("rsi_status", {"value": 54.0, "condition": "neutral", "signal": "HOLD"}),
                     volume_analysis=data.get("volume_analysis", f"Live 24h volume on {symbol} reflecting {change_24h:+.2f}% momentum."),
                     initial_thesis=thesis,
+                    multi_timeframe_confluence=mtf_schema,
                 )
                 debate_msg = DebateMessageSchema(
                     id="msg_st1_01",
@@ -190,8 +237,8 @@ async def run_stage1_gemini_vision(
                     avatar_color="from-blue-500 to-cyan-400",
                     model=model_name,
                     timestamp="Stage 1 • Visual Ingestion",
-                    content=f"Gemini 3.6 Flash completed live technical ingestion for {symbol} [{timeframe}]. Detected {patterns[0].name if patterns else 'structural channel'} with {change_24h:+.2f}% 24h momentum. Proposing {dir_val} setup.",
-                    highlightPills=[f"Gemini 3.6 Flash ({dir_val})", f"{patterns[0].name if patterns else 'Price Action'}", f"24h: {change_24h:+.2f}%", f"Trades: {open_count}"],
+                    content=f"Gemini 3.6 Flash verified {mtf_raw.alignment_score} for {symbol} [{timeframe}]. 1D Macro Tide is {mtf_raw.screen_1d.trend}, 4H Structure at ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, 15M Trigger: {mtf_raw.screen_15m.structure_signal}. Proposing {dir_val} setup.",
+                    highlightPills=[f"Gemini 3.6 Flash ({dir_val})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
                 )
 
                 # Record Telemetry Call with complete Prompt & Return payload
@@ -211,12 +258,14 @@ async def run_stage1_gemini_vision(
                         "timeframe": timeframe,
                         "current_price": current_price,
                         "has_chart_image": bool(chart_image_base64),
+                        "mtf_alignment": mtf_raw.alignment_score,
                     },
                     response_summary={
                         "direction": dir_val,
                         "patterns_detected": [pat.name for pat in patterns],
                         "take_profit_1": thesis.get("take_profit_1"),
                         "stop_loss": thesis.get("stop_loss"),
+                        "mtf_confluence": mtf_raw.alignment_score,
                     },
                 )
                 return result, debate_msg
@@ -340,6 +389,7 @@ async def run_stage1_gemini_vision(
         rsi_status=rsi_status,
         volume_analysis=volume_analysis,
         initial_thesis=initial_thesis,
+        multi_timeframe_confluence=mtf_schema,
     )
     debate_msg = DebateMessageSchema(
         id="msg_st1_01",
@@ -350,8 +400,8 @@ async def run_stage1_gemini_vision(
         avatar_color="from-blue-500 to-cyan-400",
         model=model_name,
         timestamp="Stage 1 • Visual Ingestion",
-        content=debate_content,
-        highlight_pills=pills,
+        content=f"{debate_content} (Triple-Screen Alignment: {mtf_raw.alignment_score})",
+        highlight_pills=[f"Gemini 3.6 Flash ({direction})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
     )
 
     # Record Telemetry Call with complete Prompt & Return payload
@@ -364,19 +414,21 @@ async def run_stage1_gemini_vision(
         status_code=200,
         latency_ms=latency,
         endpoint="https://generativelanguage.googleapis.com/v1beta/models",
-        prompt_text=f"{STAGE1_SYSTEM_PROMPT}\n\n=== INPUT PAYLOAD ===\nSymbol: {symbol}\nTimeframe: {timeframe}\nCurrent Price: ${p:,.2f}\nPortfolio Context:\n{portfolio_ctx}",
+        prompt_text=f"{STAGE1_SYSTEM_PROMPT}\n\n=== INPUT PAYLOAD ===\nSymbol: {symbol}\nTimeframe: {timeframe}\nCurrent Price: ${p:,.2f}\nMTF Confluence:\n{mtf_raw.json()}\nPortfolio Context:\n{portfolio_ctx}",
         response_text=json.dumps(result.dict(), indent=2),
         request_summary={
             "symbol": symbol,
             "timeframe": timeframe,
             "current_price": p,
             "has_chart_image": bool(chart_image_base64),
+            "mtf_alignment": mtf_raw.alignment_score,
         },
         response_summary={
             "direction": initial_thesis.get("direction"),
             "patterns_detected": [pat.name for pat in patterns],
             "take_profit_1": initial_thesis.get("take_profit_1"),
             "stop_loss": initial_thesis.get("stop_loss"),
+            "mtf_confluence": mtf_raw.alignment_score,
         },
     )
 

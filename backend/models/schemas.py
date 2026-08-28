@@ -131,7 +131,36 @@ class NewsArticleSchema(BaseModel):
     description: str
     published_at: str
 
-# Stage 1: Google Gemini 3.5 Flash Vision
+class TimeframeScreenSchema(BaseModel):
+    timeframe: str
+    trend: str
+    trend_description: str
+    rsi_14: float
+    rsi_condition: str
+    ema_20: float
+    ema_50: float
+    ema_200: Optional[float] = None
+    ema_alignment: str
+    key_demand_zone: List[float]
+    key_supply_zone: List[float]
+    structure_signal: str
+    volatility_atr: float
+    summary: str
+
+class MultiTimeframeConfluenceSchema(BaseModel):
+    symbol: str
+    current_price: float
+    screen_1d: TimeframeScreenSchema
+    screen_4h: TimeframeScreenSchema
+    screen_15m: TimeframeScreenSchema
+    alignment_score: str
+    confluence_direction: str
+    confluence_confidence: float
+    counter_trend_warning: bool
+    recommended_action: str
+    timestamp: float
+
+# Stage 1: Google Gemini 3.6 Flash Vision & Multi-Timeframe Analyzer
 class Stage1GeminiVisionResult(BaseModel):
     status: str = "completed"
     agent_name: str
@@ -142,6 +171,7 @@ class Stage1GeminiVisionResult(BaseModel):
     rsi_status: Dict[str, Any]
     volume_analysis: str
     initial_thesis: Dict[str, Any]
+    multi_timeframe_confluence: Optional[MultiTimeframeConfluenceSchema] = None
 
 # Stage 2 (NEW): NVIDIA NIM Live News & Sentiment Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
 class Stage2NewsSentimentResult(BaseModel):
