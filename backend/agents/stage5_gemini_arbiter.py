@@ -197,8 +197,10 @@ async def run_stage5_gemini_arbiter(
             print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
 
     open_positions: List[Dict] = account_state.get("open_positions", [])
+    equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
+    default_pos_size = max(100.0, round(equity * 0.08, 2))
 
-    suggested_pos = 5000.0 if signal != SignalAction.HOLD else 0.0
+    suggested_pos = default_pos_size if signal != SignalAction.HOLD else 0.0
     if stage3.adjustments_proposed and isinstance(stage3.adjustments_proposed, dict):
         suggested_pos = stage3.adjustments_proposed.get("suggested_position_usd", suggested_pos)
 

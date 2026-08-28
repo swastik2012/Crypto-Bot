@@ -48,7 +48,7 @@ class SymbolSearchResponse(BaseModel):
 class PlacePaperOrderRequest(BaseModel):
     symbol: str
     side: PositionSide = PositionSide.LONG
-    size_usd: float = 5000.0
+    size_usd: float = 800.0
     leverage: int = 3
     entry_price: Optional[float] = None
     take_profit_1: Optional[float] = None

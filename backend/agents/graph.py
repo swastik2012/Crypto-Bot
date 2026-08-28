@@ -107,7 +107,9 @@ class MultiAgentConsensusPipeline:
 
         if auto_execute and stage5_res.consensus_confidence >= 80.0:
             plan = stage5_res.execution_plan
-            pos_size = plan.get("recommended_position_usd", 5000.0) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", 5000.0)
+            account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
+            default_fallback_size = max(100.0, round(account_eq * 0.08, 2))
+            pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
             entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
             tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
             tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
@@ -116,7 +118,7 @@ class MultiAgentConsensusPipeline:
             order_req = PlacePaperOrderRequest(
                 symbol=symbol,
                 side=PositionSide.LONG if "BUY" in stage5_res.consensus_signal.value else PositionSide.SHORT,
-                size_usd=pos_size or 5000.0,
+                size_usd=pos_size or default_fallback_size,
                 leverage=3,
                 entry_price=entry_p,
                 take_profit_1=tp1,

@@ -48,6 +48,10 @@ async def run_stage3_nvidia_nim(
     news_factor = (stage2.sentiment_score - 50.0) / 100.0
     vol = max(0.018, min(0.055, abs(current_price - stop_loss) / (current_price or 1.0)))
 
+    # Dynamic Risk Allocation based on actual portfolio equity (8% standard size)
+    equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
+    base_pos_size = max(100.0, round(equity * 0.08, 2))
+
     if direction == "SHORT":
         reward = current_price - target1 if current_price > target1 else current_price * 0.042
         risk = stop_loss - current_price if stop_loss > current_price else current_price * 0.022
@@ -61,12 +65,13 @@ async def run_stage3_nvidia_nim(
         ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
         stress_score = round(min(75.0 + (calculated_rr * 7.5), 96.5), 1)
         verdict = "VERIFIED_PASS" if calculated_rr >= 1.8 else "ADJUST_SIZE"
-        adjustments = {"suggested_position_usd": 5000.0 if verdict == "VERIFIED_PASS" else 2500.0, "recommended_stop_loss": stop_loss}
+        adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
         math_proof = (
             f"NVIDIA DeepSeek V4 Pro Quantitative Synthesis ({symbol} SHORT):\n"
             f"1. Asymmetric Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% short win expectancy with positive EV = +${ev:,.2f} per unit contract.\n"
-            f"3. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) macro news weighting confirming institutional distribution."
+            f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity risk budget).\n"
+            f"4. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) macro news weighting confirming institutional distribution."
         )
 
     elif direction == "NEUTRAL":
@@ -103,12 +108,13 @@ async def run_stage3_nvidia_nim(
         ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
         stress_score = round(min(76.0 + (calculated_rr * 7.8), 98.0), 1)
         verdict = "VERIFIED_PASS" if calculated_rr >= 1.8 else "ADJUST_SIZE"
-        adjustments = {"suggested_position_usd": 5000.0 if verdict == "VERIFIED_PASS" else 2500.0, "recommended_stop_loss": stop_loss}
+        adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
         math_proof = (
             f"NVIDIA DeepSeek V4 Pro Quantitative Synthesis ({symbol} LONG):\n"
             f"1. Asymmetric Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% positive expectancy with asymmetric EV = +${ev:,.2f} per unit contract.\n"
-            f"3. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) spot accumulation catalyst validating margin deployment."
+            f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity risk budget).\n"
+            f"4. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) spot accumulation catalyst validating margin deployment."
         )
 
     portfolio_ctx = _format_portfolio_summary(account_state)

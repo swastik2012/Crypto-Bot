@@ -195,7 +195,9 @@ class AutoTradingScheduler:
 
                 if can_execute:
                     plan = response.stage5.execution_plan
-                    pos_size = plan.get("recommended_position_usd", 5000.0) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", 5000.0)
+                    eq = float(paper_engine.cash_balance or 10000.0)
+                    default_auto_size = max(100.0, round(eq * 0.08, 2))
+                    pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
                     tp1 = plan.get("take_profit_1", round(current_price * 1.04, 2)) if isinstance(plan, dict) else getattr(plan, "take_profit_1", round(current_price * 1.04, 2))
                     tp2 = plan.get("take_profit_2", round(current_price * 1.07, 2)) if isinstance(plan, dict) else getattr(plan, "take_profit_2", round(current_price * 1.07, 2))
@@ -207,7 +209,7 @@ class AutoTradingScheduler:
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
                         side=order_side,
-                        size_usd=pos_size or 5000.0,
+                        size_usd=pos_size or default_auto_size,
                         leverage=3,
                         entry_price=entry_p,
                         take_profit_1=tp1,

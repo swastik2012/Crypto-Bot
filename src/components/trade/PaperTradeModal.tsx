@@ -39,7 +39,9 @@ export const PaperTradeModal: React.FC<PaperTradeModalProps> = ({
   const { currency, formatPrice } = useCurrency();
   const { executionPlan, consensusSignal } = consensusData;
 
-  const [positionSizeUsd, setPositionSizeUsd] = useState<number>(5000);
+  const [positionSizeUsd, setPositionSizeUsd] = useState<number>(
+    executionPlan.recommendedPositionUSD || 800
+  );
   const [leverage, setLeverage] = useState<number>(3);
   const [orderType, setOrderType] = useState<'LIMIT' | 'MARKET'>('LIMIT');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -49,8 +51,11 @@ export const PaperTradeModal: React.FC<PaperTradeModalProps> = ({
     if (isOpen) {
       setOrderFilled(false);
       setIsSubmitting(false);
+      if (executionPlan.recommendedPositionUSD) {
+        setPositionSizeUsd(executionPlan.recommendedPositionUSD);
+      }
     }
-  }, [isOpen]);
+  }, [isOpen, executionPlan.recommendedPositionUSD]);
 
   const isShort = consensusSignal === 'STRONG SELL' || consensusSignal === 'SELL';
   const side: 'LONG' | 'SHORT' = isShort ? 'SHORT' : 'LONG';
