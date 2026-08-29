@@ -341,28 +341,30 @@ class VirtualPaperEngine:
             # ==============================================================
             # 🛡️ DYNAMIC ATR TRAILING STOP & BREAK-EVEN LOCK (RUNNERS)
             # ==============================================================
-            atr_est = max(current_price * 0.015, abs(current_price - pos.entry_price) * 0.4)
-            if pos.side == PositionSide.LONG:
-                # Breakeven lock if profit >= +1.5%
-                if price_delta_pct >= 0.015 and pos.stop_loss and pos.stop_loss < pos.entry_price:
-                    pos.stop_loss = round(pos.entry_price * 1.001, 2)
+            atr_est = max(current_price * 0.018, abs(current_price - pos.entry_price) * 0.35)
+            is_runner = pos.take_profit_1 is None # TP1 already scaled out
 
-                # Dynamic Trailing Stop behind peak
-                if price_delta_pct >= 0.025:
-                    trailing_target = round(current_price - (atr_est * 1.2), 2)
+            if pos.side == PositionSide.LONG:
+                # Breakeven lock for Long if runner or profit is deeply in green (>= +3.5%)
+                if (is_runner or price_delta_pct >= 0.035) and pos.stop_loss and pos.stop_loss < pos.entry_price:
+                    pos.stop_loss = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
+
+                # Dynamic Trailing Stop for runners behind peak
+                if is_runner and price_delta_pct >= 0.025:
+                    trailing_target = round(current_price - (atr_est * 1.5), 4 if current_price < 1 else 2)
                     if pos.stop_loss:
                         pos.stop_loss = max(pos.stop_loss, trailing_target)
                     else:
                         pos.stop_loss = trailing_target
 
             elif pos.side == PositionSide.SHORT:
-                # Breakeven lock for short if profit >= +1.5%
-                if price_delta_pct >= 0.015 and pos.stop_loss and pos.stop_loss > pos.entry_price:
-                    pos.stop_loss = round(pos.entry_price * 0.999, 2)
+                # Breakeven lock for Short if runner or profit is deeply in green (>= +3.5%)
+                if (is_runner or price_delta_pct >= 0.035) and pos.stop_loss and pos.stop_loss > pos.entry_price:
+                    pos.stop_loss = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
 
-                # Dynamic Trailing Stop for short
-                if price_delta_pct >= 0.025:
-                    trailing_target = round(current_price + (atr_est * 1.2), 2)
+                # Dynamic Trailing Stop for Short runners behind trough
+                if is_runner and price_delta_pct >= 0.025:
+                    trailing_target = round(current_price + (atr_est * 1.5), 4 if current_price < 1 else 2)
                     if pos.stop_loss:
                         pos.stop_loss = min(pos.stop_loss, trailing_target)
                     else:

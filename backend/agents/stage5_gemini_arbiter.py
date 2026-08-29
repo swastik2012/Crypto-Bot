@@ -171,7 +171,7 @@ async def run_stage5_gemini_arbiter(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            target_engine = "gemini-2.5-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-3.6-flash"
             llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
             resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
             raw_text = resp.content

@@ -16,7 +16,7 @@ class AutoTradingScheduler:
     - If conviction >= 80% and not already exposed, auto-executes virtual paper trade and persists to disk.
     """
 
-    def __init__(self, interval_seconds: int = 1800):
+    def __init__(self, interval_seconds: int = 600):
         self.interval_seconds = interval_seconds
         self.is_running = False
         self.last_run_timestamp: Optional[float] = None
@@ -24,7 +24,16 @@ class AutoTradingScheduler:
         self.cycle_count: int = 0
         self.execution_logs: List[Dict[str, Any]] = []
         self._task: Optional[asyncio.Task] = None
-        self.monitored_pairs = ["BTC/USDT", "ETH/USDT", "SOL/USDT"]
+        self.monitored_pairs = [
+            "BTC/USDT",
+            "ETH/USDT",
+            "SOL/USDT",
+            "BNB/USDT",
+            "XRP/USDT",
+            "DOGE/USDT",
+            "ADA/USDT",
+            "AVAX/USDT",
+        ]
         self.asset_cooldowns: Dict[str, float] = {}
 
     def start(self):
@@ -32,7 +41,7 @@ class AutoTradingScheduler:
             self.is_running = True
             self.next_run_timestamp = time.time() + self.interval_seconds
             self._task = asyncio.create_task(self._run_loop())
-            print(f"[AutoTrader] 30-Minute Autonomous Trading Loop started (Interval: {self.interval_seconds}s)")
+            print(f"[AutoTrader] 10-Minute Autonomous Trading Loop started across {len(self.monitored_pairs)} liquid pairs (Interval: {self.interval_seconds}s)")
 
     def stop(self):
         self.is_running = False
@@ -62,12 +71,12 @@ class AutoTradingScheduler:
             "next_run_timestamp": self.next_run_timestamp,
             "cycle_count": self.cycle_count,
             "active_positions_count": len(paper_engine.open_positions),
-            "recent_logs": self.execution_logs[-10:],
+            "recent_logs": self.execution_logs[-15:],
         }
 
     def reset_timer(self) -> Dict[str, Any]:
         self.next_run_timestamp = time.time() + self.interval_seconds
-        print(f"[AutoTrader] Timer reset back to {self.interval_seconds}s (30m)")
+        print(f"[AutoTrader] Timer reset back to {self.interval_seconds}s (10m)")
         return self.get_status()
 
     async def trigger_cycle_now(self) -> Dict[str, Any]:
@@ -120,11 +129,11 @@ class AutoTradingScheduler:
                 "results": [{"error": "CIRCUIT_BREAKER_ACTIVE_24H_DRAWDOWN"}],
             }
 
-        # Update dynamic stop-loss cooldowns from recent trade history (2h cooldown per stopped asset)
+        # Update dynamic stop-loss cooldowns from recent trade history (1h cooldown per stopped asset)
         for t in paper_engine.trade_history[-10:]:
             if t.exit_reason == "STOP_LOSS_TRIGGERED" and t.closed_at:
-                if (time.time() - t.closed_at) < 7200: # 2 hours
-                    self.asset_cooldowns[t.symbol] = max(self.asset_cooldowns.get(t.symbol, 0), t.closed_at + 7200)
+                if (time.time() - t.closed_at) < 3600: # 1 hour
+                    self.asset_cooldowns[t.symbol] = max(self.asset_cooldowns.get(t.symbol, 0), t.closed_at + 3600)
 
         for pair in self.monitored_pairs:
             try:
@@ -182,15 +191,15 @@ class AutoTradingScheduler:
                 # 🛑 RISK GUARD 4: Trend Alignment & Safe Execution
                 # ========================================================
                 can_execute = (
-                    confidence >= 80.0 and
+                    confidence >= 75.0 and
                     signal.value in ["STRONG BUY", "BUY", "STRONG SELL", "SELL"] and
                     not already_open and
                     not portfolio_full
                 )
 
-                # Prevent buying a falling knife if 24h change is heavily negative
-                if can_execute and signal.value in ["STRONG BUY", "BUY"] and change_24h < -1.0:
-                    print(f"[AutoTrader Trend Guard] Suppressing LONG on {pair} (24h change is {change_24h:+.2f}% in downtrend).")
+                # Prevent buying severe crash knives (> -6% 24h dump)
+                if can_execute and signal.value in ["STRONG BUY", "BUY"] and change_24h < -6.0:
+                    print(f"[AutoTrader Trend Guard] Suppressing LONG on {pair} (24h dump is {change_24h:+.2f}% severe crash).")
                     can_execute = False
 
                 if can_execute:
@@ -199,12 +208,29 @@ class AutoTradingScheduler:
                     default_auto_size = max(100.0, round(eq * 0.08, 2))
                     pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
-                    tp1 = plan.get("take_profit_1", round(current_price * 1.04, 2)) if isinstance(plan, dict) else getattr(plan, "take_profit_1", round(current_price * 1.04, 2))
-                    tp2 = plan.get("take_profit_2", round(current_price * 1.07, 2)) if isinstance(plan, dict) else getattr(plan, "take_profit_2", round(current_price * 1.07, 2))
-                    sl = plan.get("stop_loss", round(current_price * 0.97, 2)) if isinstance(plan, dict) else getattr(plan, "stop_loss", round(current_price * 0.97, 2))
-
+                    
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG
+
+                    # Compute accurate directional fallbacks
+                    if is_short:
+                        default_tp1 = round(current_price * 0.955, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 0.920, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 1.028, 4 if current_price < 1 else 2)
+                    else:
+                        default_tp1 = round(current_price * 1.045, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 1.080, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 0.972, 4 if current_price < 1 else 2)
+
+                    tp1 = plan.get("take_profit_1") or default_tp1 if isinstance(plan, dict) else (getattr(plan, "take_profit_1", None) or default_tp1)
+                    tp2 = plan.get("take_profit_2") or default_tp2 if isinstance(plan, dict) else (getattr(plan, "take_profit_2", None) or default_tp2)
+                    sl = plan.get("stop_loss") or default_sl if isinstance(plan, dict) else (getattr(plan, "stop_loss", None) or default_sl)
+
+                    # Sanity check: Ensure SL is directionally sound
+                    if is_short and sl <= entry_p:
+                        sl = default_sl
+                    elif not is_short and sl >= entry_p:
+                        sl = default_sl
 
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
@@ -220,7 +246,7 @@ class AutoTradingScheduler:
                     pos = paper_engine.execute_order(order_req, current_price)
                     executed = True
                     pos_info = pos.dict()
-                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} ({confidence}% conviction)")
+                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
 
                 report_entry = {
                     "cycle": self.cycle_count,
@@ -244,4 +270,4 @@ class AutoTradingScheduler:
             "results": cycle_results,
         }
 
-auto_scheduler = AutoTradingScheduler(interval_seconds=1800)
+auto_scheduler = AutoTradingScheduler(interval_seconds=600)

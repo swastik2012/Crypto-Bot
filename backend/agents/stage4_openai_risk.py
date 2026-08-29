@@ -183,7 +183,8 @@ async def run_stage4_openai_risk(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash", google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
+            gemini_model = settings.GEMINI_MODEL or "gemini-3.6-flash"
+            llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
             resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
             raw_text = resp.content
             if "```json" in raw_text:

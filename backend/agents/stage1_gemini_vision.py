@@ -168,7 +168,7 @@ async def run_stage1_gemini_vision(
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             
-            target_engine = "gemini-2.5-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-3.6-flash"
             llm = ChatGoogleGenerativeAI(
                 model=target_engine,
                 google_api_key=effective_key,
