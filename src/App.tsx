@@ -272,10 +272,15 @@ export const App: React.FC = () => {
   useEffect(() => {
     setOpenPositions((prevPositions) =>
       prevPositions.map((pos) => {
-        const currentPrice = pos.symbol.includes(selectedAsset.symbol)
+        const cleanSymbol = pos.symbol.split('/')[0].toUpperCase();
+        const currentPrice = (selectedAsset.symbol.toUpperCase() === cleanSymbol || pos.symbol.includes(selectedAsset.symbol))
           ? selectedAsset.price
           : pos.current_price;
-        const deltaPct = (currentPrice - pos.entry_price) / pos.entry_price;
+        
+        const deltaPct = pos.side === 'SHORT'
+          ? (pos.entry_price - currentPrice) / pos.entry_price
+          : (currentPrice - pos.entry_price) / pos.entry_price;
+
         const pnlPct = deltaPct * pos.leverage * 100;
         const pnlUsd = pos.margin_used * (pnlPct / 100);
 
@@ -287,7 +292,7 @@ export const App: React.FC = () => {
         };
       })
     );
-  }, [selectedAsset.price]);
+  }, [selectedAsset.price, selectedAsset.symbol]);
 
   // Compute Total Equity & Overall PnL %
   const { totalEquity, overallPnlPct } = useMemo(() => {
