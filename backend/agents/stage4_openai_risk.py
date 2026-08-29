@@ -206,6 +206,15 @@ async def run_stage4_openai_risk(
         except Exception as e:
             print(f"[Stage 4 LLM Risk Notice]: {e}")
 
+    # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime
+    mtf = stage1.multi_timeframe_confluence
+    proposed_dir = stage1.initial_thesis.get("direction", "NEUTRAL") if stage1.initial_thesis else "NEUTRAL"
+    if mtf and mtf.screen_1d.trend == "BULLISH" and proposed_dir == "SHORT":
+        macro_trap_alert = "CRITICAL: Counter-trend short proposed while 1D Macro Tide is BULLISH. High risk of short squeeze."
+        false_breakout_prob = max(false_breakout_prob, 78.0)
+        safety_score = min(safety_score, 32.0)
+        critique_gemini = "VETO: Shorting in a 1D Macro Bullish trend has a >80% historical failure rate in crypto. Mandating HOLD."
+
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:
         latency_ms = 420

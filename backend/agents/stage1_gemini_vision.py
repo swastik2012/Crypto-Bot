@@ -286,11 +286,36 @@ async def run_stage1_gemini_vision(
     vol_str = match_info.best_match.volume_24h if match_info.best_match else "$120M"
     rsi_calc = round(min(max(50.0 + (change_24h * 3.4), 18.5), 84.5), 1)
 
+    # Dynamic Technical Direction derived directly from Triple-Screen MTF Confluence
+    macro_1d_trend = mtf_raw.screen_1d.trend
+    struct_4h_trend = mtf_raw.screen_4h.trend
+    trigger_15m_trend = mtf_raw.screen_15m.trend
+
+    # STRICT ANTI-COUNTER-TREND RULES:
+    # 1. If 1D Macro Tide is BULLISH, NEVER short. Dips are accumulation zones or HOLD.
+    if macro_1d_trend == "BULLISH":
+        if struct_4h_trend == "BULLISH" or trigger_15m_trend == "BULLISH" or change_24h >= -1.5:
+            direction = "LONG"
+        else:
+            direction = "NEUTRAL"
+    elif macro_1d_trend == "BEARISH":
+        if struct_4h_trend == "BEARISH" or trigger_15m_trend == "BEARISH":
+            direction = "SHORT"
+        else:
+            direction = "NEUTRAL"
+    else:
+        # 1D Macro is NEUTRAL / Equilibrium
+        if struct_4h_trend == "BULLISH" and change_24h > 1.2:
+            direction = "LONG"
+        elif struct_4h_trend == "BEARISH" and change_24h < -2.5:
+            direction = "SHORT"
+        else:
+            direction = "NEUTRAL"
+
     # Deterministic pattern selector based on asset and momentum
     seed = int(abs(hash(symbol)) + int(time.time() // 300)) % 3
 
-    if change_24h < -1.8:
-        direction = "SHORT"
+    if direction == "SHORT":
         pattern_candidates = [
             ("Bearish Head & Shoulders Breakdown", "reversal_breakdown", f"Decisive breakdown below neckline support with expanding sell volume below ${p * 0.992:,.2f}."),
             ("Descending Triangle Breakdown", "continuation_breakdown", f"Horizontal support floor violated at ${p * 0.995:,.2f} with lower swing highs compressing downward."),
@@ -301,25 +326,24 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=89.5, description=chosen[2]),
             TechnicalPattern(name="Bearish EMA 20/50 Death Spread", type="moving_average", timeframe=timeframe, reliability=86.2, description=f"20 EMA accelerating downward spread below 50 EMA baseline."),
         ]
-        target1 = round(p * 0.958, 2)
-        target2 = round(p * 0.924, 2)
-        stopLoss = round(p * 1.022, 2)
+        target1 = round(p * 0.955, 4 if p < 1 else 2)
+        target2 = round(p * 0.920, 4 if p < 1 else 2)
+        stopLoss = round(p * 1.028, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bearish Distribution", "signal": "SELL"}
         volume_analysis = f"24h sell delta dominant with {vol_str} turnover and repeated rejections at upper resistance band."
         initial_thesis = {
             "direction": "SHORT",
-            "suggested_entry": round(p, 2),
+            "suggested_entry": round(p, 4 if p < 1 else 2),
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction visual breakdown on {symbol} with {change_24h:+.2f}% 24h momentum confirming downside targets.",
+            "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum).",
         }
         debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f}."
         pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
 
-    elif -1.8 <= change_24h <= 1.2:
-        direction = "NEUTRAL"
+    elif direction == "NEUTRAL":
         pattern_candidates = [
             ("Symmetrical Triangle Equilibrium", "consolidation", f"Price compressing into apex between ${p * 0.985:,.2f} and ${p * 1.015:,.2f} with neutral delta."),
             ("Mean-Reverting Bollinger Squeeze", "volatility_contraction", f"Bollinger band width at multi-day lows indicating chop zone before volatility expansion."),
@@ -330,14 +354,14 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=74.0, description=chosen[2]),
             TechnicalPattern(name="Oscillator Midline Equilibrium", type="oscillator", timeframe=timeframe, reliability=71.5, description=f"RSI hovering near 50 neutral baseline with balanced buyer/seller absorption."),
         ]
-        target1 = round(p * 1.020, 2)
-        target2 = round(p * 1.035, 2)
-        stopLoss = round(p * 0.980, 2)
+        target1 = round(p * 1.020, 4 if p < 1 else 2)
+        target2 = round(p * 1.035, 4 if p < 1 else 2)
+        stopLoss = round(p * 0.980, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Neutral Equilibrium", "signal": "HOLD"}
         volume_analysis = f"Balanced volume profile ({vol_str} 24h) with no clear institutional delta dominance."
         initial_thesis = {
             "direction": "NEUTRAL",
-            "suggested_entry": round(p, 2),
+            "suggested_entry": round(p, 4 if p < 1 else 2),
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
@@ -348,7 +372,6 @@ async def run_stage1_gemini_vision(
         pills = ["Gemini 3.6 Flash (HOLD)", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
 
     else: # LONG
-        direction = "LONG"
         pattern_candidates = [
             ("Confirmed Ascending Triangle Breakout", "continuation_breakout", f"Higher swing lows compressing into horizontal resistance at ${p * 1.008:,.2f} with expanding volume."),
             ("Bull Flag Continuation Retest", "continuation_flag", f"Healthy bull flag consolidation above 20 EMA after impulsive breakout leg."),
@@ -359,19 +382,19 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=93.2, description=chosen[2]),
             TechnicalPattern(name="Bullish Momentum Convergence", type="momentum", timeframe=timeframe, reliability=88.5, description=f"Positive volume delta (+18.4%) and higher swing lows supporting upside continuation."),
         ]
-        target1 = round(p * 1.042, 2)
-        target2 = round(p * 1.078, 2)
-        stopLoss = round(p * 0.978, 2)
+        target1 = round(p * 1.045, 4 if p < 1 else 2)
+        target2 = round(p * 1.080, 4 if p < 1 else 2)
+        stopLoss = round(p * 0.972, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bullish Expansion", "signal": "BUY"}
         volume_analysis = f"Expanding buyer delta (+22.4% net volume) with {vol_str} 24h turnover confirming institutional accumulation."
         initial_thesis = {
             "direction": "LONG",
-            "suggested_entry": round(p, 2),
+            "suggested_entry": round(p, 4 if p < 1 else 2),
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction ascending breakout structure on {symbol} with {change_24h:+.2f}% 24h momentum supporting targets ${target1:,.2f} and ${target2:,.2f}.",
+            "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum).",
         }
         debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f}."
         pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]

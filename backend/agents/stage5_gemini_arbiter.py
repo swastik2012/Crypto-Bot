@@ -60,33 +60,47 @@ async def run_stage5_gemini_arbiter(
         )
 
     elif direction in ["SHORT", "BEARISH"]:
-        gemini_score = 92.0
-        news_score = stage2.sentiment_score
-        nvidia_score = stage3.stress_test_score
-        openai_score = stage4.safety_score
-        consensus_confidence = round(
-            (gemini_score * 0.25) +
-            ((100.0 - news_score) * 0.20) +
-            (nvidia_score * 0.30) +
-            (openai_score * 0.25),
-            1
-        )
-        if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
-            signal = SignalAction.STRONG_SELL
-        elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
-            signal = SignalAction.SELL
-        else:
+        # STRICT ANTI-COUNTER-TREND GUARD: NEVER SHORT in a 1D BULLISH Trend
+        if mtf and mtf.screen_1d.trend == "BULLISH":
             signal = SignalAction.HOLD
+            consensus_confidence = 48.0
+            tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
+            tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
+            sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
+            invalidation_cond = "SHORT vetoed by Arbiter: 1D Macro Trend is BULLISH. Counter-trend shorting is strictly prohibited."
+            summary = (
+                f"5-Stage Arbiter Override: HOLD (Capital Preservation) for {symbol}. "
+                f"While low-timeframe noise showed temporary selling delta, 1D Macro Tide is BULLISH. "
+                f"Anti-Counter-Trend Risk Rule suppresses shorting in a macro bull trend. Waiting for dip accumulation."
+            )
+        else:
+            gemini_score = 92.0
+            news_score = stage2.sentiment_score
+            nvidia_score = stage3.stress_test_score
+            openai_score = stage4.safety_score
+            consensus_confidence = round(
+                (gemini_score * 0.25) +
+                ((100.0 - news_score) * 0.20) +
+                (nvidia_score * 0.30) +
+                (openai_score * 0.25),
+                1
+            )
+            if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+                signal = SignalAction.STRONG_SELL
+            elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+                signal = SignalAction.SELL
+            else:
+                signal = SignalAction.HOLD
 
-        tp1 = thesis.get("take_profit_1", round(current_price * 0.958, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 0.922, 2))
-        sl = thesis.get("stop_loss", round(current_price * 1.022, 2))
-        invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
-        summary = (
-            f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
-            f"Triple-Screen MTF ({mtf_align}) confirms 1D/4H supply, Stage 2 macro news ({stage2.sentiment_score}%) corroborates selling delta, "
-            f"proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
-        )
+            tp1 = thesis.get("take_profit_1", round(current_price * 0.955, 2))
+            tp2 = thesis.get("take_profit_2", round(current_price * 0.920, 2))
+            sl = thesis.get("stop_loss", round(current_price * 1.028, 2))
+            invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
+            summary = (
+                f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
+                f"Triple-Screen MTF ({mtf_align}) confirms 1D/4H supply, Stage 2 macro news ({stage2.sentiment_score}%) corroborates selling delta, "
+                f"proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
+            )
 
     elif direction in ["NEUTRAL", "HOLD"]:
         gemini_score = 68.0
