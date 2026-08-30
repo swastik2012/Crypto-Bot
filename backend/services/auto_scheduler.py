@@ -166,9 +166,9 @@ class AutoTradingScheduler:
                     continue
 
                 # ========================================================
-                # 🛑 RISK GUARD 3: Strict Single-Position & Max Limit
+                # 🛑 RISK GUARD 3: Strict Single-Position & Trend Inversion
                 # ========================================================
-                already_open = any(p.symbol.upper() == pair.upper() for p in paper_engine.open_positions.values())
+                existing_pos = next((p for p in paper_engine.open_positions.values() if p.symbol.upper() == pair.upper()), None)
                 portfolio_full = len(paper_engine.open_positions) >= 3
 
                 # Run the 5-Stage LangGraph multi-agent debate
@@ -187,18 +187,35 @@ class AutoTradingScheduler:
                 executed = False
                 pos_info = None
 
+                is_short = signal.value in ["STRONG SELL", "SELL"]
+                is_buy = signal.value in ["STRONG BUY", "BUY"]
+
+                # 🔄 AUTOMATIC TREND FLIP / INVERSION:
+                # If we hold a legacy SHORT but new consensus is a strong BUY (>= 80%), auto-close the short to catch the long!
+                if existing_pos:
+                    if existing_pos.side == PositionSide.SHORT and is_buy and confidence >= 80.0:
+                        print(f"[AutoTrader Trend Flip] Auto-closing legacy SHORT {pair} to flip into high-conviction BUY ({confidence}%).")
+                        paper_engine.close_position_manually(existing_pos.position_id, current_price)
+                        existing_pos = None
+                    elif existing_pos.side == PositionSide.LONG and is_short and confidence >= 80.0:
+                        print(f"[AutoTrader Trend Flip] Auto-closing legacy LONG {pair} to flip into high-conviction SELL ({confidence}%).")
+                        paper_engine.close_position_manually(existing_pos.position_id, current_price)
+                        existing_pos = None
+
+                already_open = existing_pos is not None
+
                 # ========================================================
                 # 🛑 RISK GUARD 4: Trend Alignment & Safe Execution
                 # ========================================================
                 can_execute = (
                     confidence >= 75.0 and
-                    signal.value in ["STRONG BUY", "BUY", "STRONG SELL", "SELL"] and
+                    (is_buy or is_short) and
                     not already_open and
                     not portfolio_full
                 )
 
                 # Prevent buying severe crash knives (> -6% 24h dump)
-                if can_execute and signal.value in ["STRONG BUY", "BUY"] and change_24h < -6.0:
+                if can_execute and is_buy and change_24h < -6.0:
                     print(f"[AutoTrader Trend Guard] Suppressing LONG on {pair} (24h dump is {change_24h:+.2f}% severe crash).")
                     can_execute = False
 
