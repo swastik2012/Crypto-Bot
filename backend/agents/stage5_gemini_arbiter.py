@@ -92,9 +92,9 @@ async def run_stage5_gemini_arbiter(
             else:
                 signal = SignalAction.HOLD
 
-            tp1 = thesis.get("take_profit_1", round(current_price * 0.955, 2))
-            tp2 = thesis.get("take_profit_2", round(current_price * 0.920, 2))
-            sl = thesis.get("stop_loss", round(current_price * 1.028, 2))
+            tp1 = thesis.get("take_profit_1", round(current_price * 0.935, 2))
+            tp2 = thesis.get("take_profit_2", round(current_price * 0.880, 2))
+            sl = thesis.get("stop_loss", round(current_price * 1.042, 2))
             invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
             summary = (
                 f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
@@ -115,9 +115,9 @@ async def run_stage5_gemini_arbiter(
             1
         )
         signal = SignalAction.HOLD
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.025, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.045, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.975, 2))
         invalidation_cond = f"Asset trading inside equilibrium chop zone (${sl:,.2f} - ${tp1:,.2f}). Stand aside until confirmed directional breakout."
         summary = (
             f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction) for {symbol}. "
@@ -144,9 +144,9 @@ async def run_stage5_gemini_arbiter(
         else:
             signal = SignalAction.HOLD
 
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.042, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.078, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.978, 2))
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.065, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.120, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.958, 2))
         invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
         summary = (
             f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "

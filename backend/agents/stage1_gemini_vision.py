@@ -56,17 +56,17 @@ CRITICAL DIRECTIVES:
 2. CAPITAL PRESERVATION & CHOP AVOIDANCE:
    - If price is trading mid-range with contracting volume or conflicting signals, you MUST set direction to "NEUTRAL" (HOLD). Never force a directional entry in chop.
    - Require a minimum 1:2.0 Risk:Reward ratio to the next structural liquidity level.
-3. PRECISE ASYMMETRIC EXECUTION TARGETS:
+3. PRECISE ASYMMETRIC EXECUTION TARGETS (SWING CALIBRATION):
    - suggested_entry: Exact optimal limit/market entry zone.
-   - take_profit_1: Conservative first major liquidity target (recommend 50% scale-out).
-   - take_profit_2: Macro Fibonacci extension / structural runner target.
-   - stop_loss: Hard structural invalidation level (recent swing high for Short, swing low for Long). Maximum 2.5% risk distance.
+   - take_profit_1: First major structural resistance / liquidity target (+6.0% to +8.0% for Longs). Recommend 50% scale-out.
+   - take_profit_2: Macro Fibonacci extension runner (+12.0% to +16.0% for Longs).
+   - stop_loss: Hard structural invalidation placed safely beyond key swing levels (-3.8% to -5.0% distance to prevent noise wicks).
 
 Return ONLY a valid JSON object matching this schema:
 {
   "patterns": [
     {
-      "name": "Pattern Name (e.g. Ascending Triangle / Head & Shoulders Breakdown / Symmetrical Range)",
+      "name": "Pattern Name (e.g. Ascending Triangle / Bull Flag / Order Block Retest)",
       "type": "bullish_continuation" | "reversal_breakdown" | "consolidation" | "divergence",
       "timeframe": "1H" | "4H" | "1D",
       "reliability": float,
@@ -83,7 +83,7 @@ Return ONLY a valid JSON object matching this schema:
   ],
   "rsi_status": {
     "value": float,
-    "condition": "oversold" | "neutral" | "overbought" | "bullish_divergence" | "bearish_divergence",
+    "condition": "oversold" | "neutral" | "overbought" | "bullish_expansion" | "bearish_distribution",
     "signal": "BUY" | "HOLD" | "SELL"
   },
   "volume_analysis": "Institutional analysis of volume delta and absorption",
@@ -326,9 +326,9 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=89.5, description=chosen[2]),
             TechnicalPattern(name="Bearish EMA 20/50 Death Spread", type="moving_average", timeframe=timeframe, reliability=86.2, description=f"20 EMA accelerating downward spread below 50 EMA baseline."),
         ]
-        target1 = round(p * 0.955, 4 if p < 1 else 2)
-        target2 = round(p * 0.920, 4 if p < 1 else 2)
-        stopLoss = round(p * 1.028, 4 if p < 1 else 2)
+        target1 = round(p * 0.935, 4 if p < 1 else 2)
+        target2 = round(p * 0.880, 4 if p < 1 else 2)
+        stopLoss = round(p * 1.042, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bearish Distribution", "signal": "SELL"}
         volume_analysis = f"24h sell delta dominant with {vol_str} turnover and repeated rejections at upper resistance band."
         initial_thesis = {
@@ -354,9 +354,9 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=74.0, description=chosen[2]),
             TechnicalPattern(name="Oscillator Midline Equilibrium", type="oscillator", timeframe=timeframe, reliability=71.5, description=f"RSI hovering near 50 neutral baseline with balanced buyer/seller absorption."),
         ]
-        target1 = round(p * 1.020, 4 if p < 1 else 2)
-        target2 = round(p * 1.035, 4 if p < 1 else 2)
-        stopLoss = round(p * 0.980, 4 if p < 1 else 2)
+        target1 = round(p * 1.025, 4 if p < 1 else 2)
+        target2 = round(p * 1.045, 4 if p < 1 else 2)
+        stopLoss = round(p * 0.975, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Neutral Equilibrium", "signal": "HOLD"}
         volume_analysis = f"Balanced volume profile ({vol_str} 24h) with no clear institutional delta dominance."
         initial_thesis = {
@@ -382,9 +382,9 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=93.2, description=chosen[2]),
             TechnicalPattern(name="Bullish Momentum Convergence", type="momentum", timeframe=timeframe, reliability=88.5, description=f"Positive volume delta (+18.4%) and higher swing lows supporting upside continuation."),
         ]
-        target1 = round(p * 1.045, 4 if p < 1 else 2)
-        target2 = round(p * 1.080, 4 if p < 1 else 2)
-        stopLoss = round(p * 0.972, 4 if p < 1 else 2)
+        target1 = round(p * 1.065, 4 if p < 1 else 2)
+        target2 = round(p * 1.120, 4 if p < 1 else 2)
+        stopLoss = round(p * 0.958, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bullish Expansion", "signal": "BUY"}
         volume_analysis = f"Expanding buyer delta (+22.4% net volume) with {vol_str} 24h turnover confirming institutional accumulation."
         initial_thesis = {

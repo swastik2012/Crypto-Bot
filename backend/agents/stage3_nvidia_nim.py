@@ -53,9 +53,9 @@ async def run_stage3_nvidia_nim(
     base_pos_size = max(100.0, round(equity * 0.08, 2))
 
     if direction == "SHORT":
-        reward = current_price - target1 if current_price > target1 else current_price * 0.042
-        risk = stop_loss - current_price if stop_loss > current_price else current_price * 0.022
-        calculated_rr = round(reward / risk, 2) if risk > 0 else 1.95
+        reward = current_price - target1 if current_price > target1 else current_price * 0.065
+        risk = stop_loss - current_price if stop_loss > current_price else current_price * 0.042
+        calculated_rr = round(reward / risk, 2) if risk > 0 else 2.15
         
         # 10,000 Monte Carlo short paths
         drift = -0.008 + (news_factor * 0.01)
@@ -64,10 +64,10 @@ async def run_stage3_nvidia_nim(
         
         ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
         stress_score = round(min(75.0 + (calculated_rr * 7.5), 96.5), 1)
-        verdict = "VERIFIED_PASS" if calculated_rr >= 1.8 else "ADJUST_SIZE"
+        verdict = "VERIFIED_PASS" if calculated_rr >= 1.5 else "ADJUST_SIZE"
         adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
         math_proof = (
-            f"NVIDIA DeepSeek V4 Pro Quantitative Synthesis ({symbol} SHORT):\n"
+            f"NVIDIA Quantitative Synthesis ({symbol} SHORT):\n"
             f"1. Asymmetric Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% short win expectancy with positive EV = +${ev:,.2f} per unit contract.\n"
             f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity risk budget).\n"
@@ -75,8 +75,8 @@ async def run_stage3_nvidia_nim(
         )
 
     elif direction == "NEUTRAL":
-        reward = target1 - current_price if target1 > current_price else current_price * 0.02
-        risk = current_price - stop_loss if current_price > stop_loss else current_price * 0.02
+        reward = target1 - current_price if target1 > current_price else current_price * 0.025
+        risk = current_price - stop_loss if current_price > stop_loss else current_price * 0.025
         calculated_rr = round(reward / risk, 2) if risk > 0 else 1.15
         
         # 10,000 Monte Carlo range paths
@@ -89,16 +89,16 @@ async def run_stage3_nvidia_nim(
         verdict = "REJECT"
         adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
         math_proof = (
-            f"NVIDIA DeepSeek V4 Pro Quantitative Synthesis ({symbol} NEUTRAL / RANGE):\n"
+            f"NVIDIA Quantitative Synthesis ({symbol} NEUTRAL / RANGE):\n"
             f"1. Equilibrium Profile: Asset compressed inside range ${stop_loss:,.2f} - ${target1:,.2f} with 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths): {mc_win_rate}% win probability fails institutional hurdle rate (min 65%).\n"
             f"3. Expected Value: Sub-par EV = ${ev:,.2f}. Mathematical verdict: REJECT / Capital Preservation."
         )
 
     else: # LONG
-        reward = target1 - current_price if target1 > current_price else current_price * 0.042
-        risk = current_price - stop_loss if current_price > stop_loss else current_price * 0.022
-        calculated_rr = round(reward / risk, 2) if risk > 0 else 1.95
+        reward = target1 - current_price if target1 > current_price else current_price * 0.065
+        risk = current_price - stop_loss if current_price > stop_loss else current_price * 0.042
+        calculated_rr = round(reward / risk, 2) if risk > 0 else 2.15
         
         # 10,000 Monte Carlo long paths
         drift = 0.012 + (news_factor * 0.01)
@@ -107,10 +107,10 @@ async def run_stage3_nvidia_nim(
         
         ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
         stress_score = round(min(76.0 + (calculated_rr * 7.8), 98.0), 1)
-        verdict = "VERIFIED_PASS" if calculated_rr >= 1.8 else "ADJUST_SIZE"
+        verdict = "VERIFIED_PASS" if calculated_rr >= 1.5 else "ADJUST_SIZE"
         adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
         math_proof = (
-            f"NVIDIA DeepSeek V4 Pro Quantitative Synthesis ({symbol} LONG):\n"
+            f"NVIDIA Quantitative Synthesis ({symbol} LONG):\n"
             f"1. Asymmetric Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% positive expectancy with asymmetric EV = +${ev:,.2f} per unit contract.\n"
             f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity risk budget).\n"

@@ -231,13 +231,13 @@ class AutoTradingScheduler:
 
                     # Compute accurate directional fallbacks
                     if is_short:
-                        default_tp1 = round(current_price * 0.955, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 0.920, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 1.028, 4 if current_price < 1 else 2)
+                        default_tp1 = round(current_price * 0.935, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 0.880, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 1.042, 4 if current_price < 1 else 2)
                     else:
-                        default_tp1 = round(current_price * 1.045, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 1.080, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 0.972, 4 if current_price < 1 else 2)
+                        default_tp1 = round(current_price * 1.065, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 1.120, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 0.958, 4 if current_price < 1 else 2)
 
                     tp1 = plan.get("take_profit_1") or default_tp1 if isinstance(plan, dict) else (getattr(plan, "take_profit_1", None) or default_tp1)
                     tp2 = plan.get("take_profit_2") or default_tp2 if isinstance(plan, dict) else (getattr(plan, "take_profit_2", None) or default_tp2)
