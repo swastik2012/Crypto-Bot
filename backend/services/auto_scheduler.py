@@ -16,7 +16,7 @@ class AutoTradingScheduler:
     - If conviction >= 80% and not already exposed, auto-executes virtual paper trade and persists to disk.
     """
 
-    def __init__(self, interval_seconds: int = 600):
+    def __init__(self, interval_seconds: int = 1800):
         self.interval_seconds = interval_seconds
         self.is_running = False
         self.last_run_timestamp: Optional[float] = None
@@ -41,7 +41,7 @@ class AutoTradingScheduler:
             self.is_running = True
             self.next_run_timestamp = time.time() + self.interval_seconds
             self._task = asyncio.create_task(self._run_loop())
-            print(f"[AutoTrader] 10-Minute Autonomous Trading Loop started across {len(self.monitored_pairs)} liquid pairs (Interval: {self.interval_seconds}s)")
+            print(f"[AutoTrader] 30-Minute Autonomous Trading Loop started across {len(self.monitored_pairs)} liquid pairs (Interval: {self.interval_seconds}s)")
 
     def stop(self):
         self.is_running = False
@@ -284,4 +284,4 @@ class AutoTradingScheduler:
             "results": cycle_results,
         }
 
-auto_scheduler = AutoTradingScheduler(interval_seconds=600)
+auto_scheduler = AutoTradingScheduler(interval_seconds=1800)

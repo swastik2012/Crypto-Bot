@@ -176,8 +176,8 @@ export const App: React.FC = () => {
     } else {
       setAutoTraderStatus((prev) => prev ? {
         ...prev,
-        seconds_until_next_cycle: prev.interval_seconds || 600,
-        next_run_timestamp: Date.now() / 1000 + (prev.interval_seconds || 600),
+        seconds_until_next_cycle: prev.interval_seconds || 1800,
+        next_run_timestamp: Date.now() / 1000 + (prev.interval_seconds || 1800),
       } : null);
     }
   }, []);

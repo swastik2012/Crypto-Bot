@@ -62,7 +62,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [searchResults, setSearchResults] = useState(assets);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  const intervalSecs = autoTraderStatus?.interval_seconds ?? 600;
+  const intervalSecs = autoTraderStatus?.interval_seconds ?? 1800;
   const intervalMins = Math.round(intervalSecs / 60);
 
   // Smooth Second-by-Second Local Countdown Timer
