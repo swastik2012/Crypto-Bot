@@ -62,9 +62,12 @@ export const Navbar: React.FC<NavbarProps> = ({
   const [searchResults, setSearchResults] = useState(assets);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
+  const intervalSecs = autoTraderStatus?.interval_seconds ?? 600;
+  const intervalMins = Math.round(intervalSecs / 60);
+
   // Smooth Second-by-Second Local Countdown Timer
   const [localSecondsLeft, setLocalSecondsLeft] = useState<number>(() => {
-    return autoTraderStatus?.seconds_until_next_cycle ?? 1800;
+    return autoTraderStatus?.seconds_until_next_cycle ?? intervalSecs;
   });
 
   useEffect(() => {
@@ -78,11 +81,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (!isRunning) return;
 
     const timer = setInterval(() => {
-      setLocalSecondsLeft((prev) => (prev > 0 ? prev - 1 : 1800));
+      setLocalSecondsLeft((prev) => (prev > 0 ? prev - 1 : intervalSecs));
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [autoTraderStatus?.is_running]);
+  }, [autoTraderStatus?.is_running, intervalSecs]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -146,7 +149,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const handleResetTimerClick = (e: React.MouseEvent) => {
     e.stopPropagation();
-    setLocalSecondsLeft(1800);
+    setLocalSecondsLeft(intervalSecs);
     if (onResetAutoTraderTimer) {
       onResetAutoTraderTimer();
     }
@@ -336,10 +339,10 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={onToggleAutoTrader}
                 className="flex items-center gap-1.5 cursor-pointer"
-                title="Click to Pause / Resume 30-Minute Auto-Trader"
+                title={`Click to Pause / Resume ${intervalMins}-Minute Auto-Trader`}
               >
                 <Bot className="w-3.5 h-3.5 text-emerald-500" />
-                <span>30m Auto:</span>
+                <span>{intervalMins}m Auto:</span>
                 <span className="font-mono font-black text-cyan-700 dark:text-cyan-300">
                   {isAutoActive ? formatCountdown(localSecondsLeft) : 'PAUSED'}
                 </span>
@@ -350,7 +353,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 onClick={handleResetTimerClick}
                 className="ml-0.5 p-0.5 rounded hover:bg-emerald-500/25 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
-                title="Reset 30-Minute Auto-Trader Countdown Timer Back to 30:00"
+                title={`Reset ${intervalMins}-Minute Auto-Trader Countdown Timer Back to ${formatCountdown(intervalSecs)}`}
               >
                 <RotateCcw className="w-2.5 h-2.5 hover:rotate-180 transition-transform duration-300" />
               </button>

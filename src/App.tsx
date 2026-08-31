@@ -176,8 +176,8 @@ export const App: React.FC = () => {
     } else {
       setAutoTraderStatus((prev) => prev ? {
         ...prev,
-        seconds_until_next_cycle: 1800,
-        next_run_timestamp: Date.now() / 1000 + 1800,
+        seconds_until_next_cycle: prev.interval_seconds || 600,
+        next_run_timestamp: Date.now() / 1000 + (prev.interval_seconds || 600),
       } : null);
     }
   }, []);
@@ -375,12 +375,18 @@ export const App: React.FC = () => {
   }, []);
 
   // Reset Account Handler
-  const handleResetAccount = useCallback(() => {
-    if (window.confirm('Reset virtual paper trading account back to $10,000 capital?')) {
-      fetch('http://127.0.0.1:8000/api/paper-trading/reset', { method: 'POST' }).catch(() => {});
-      setCashBalance(10000);
-      setOpenPositions([]);
-      setTradeHistory([]);
+  const handleResetAccount = useCallback(async () => {
+    if (window.confirm('Reset virtual paper trading account back to $10,000 capital & clear all positions?')) {
+      const state = await api.resetPaperAccount();
+      if (state) {
+        setCashBalance(state.cash_balance ?? 10000);
+        setOpenPositions(state.open_positions ?? []);
+        setTradeHistory(state.trade_history ?? []);
+      } else {
+        setCashBalance(10000);
+        setOpenPositions([]);
+        setTradeHistory([]);
+      }
       localStorage.removeItem(STORAGE_KEYS.CASH_BALANCE);
       localStorage.removeItem(STORAGE_KEYS.OPEN_POSITIONS);
       localStorage.removeItem(STORAGE_KEYS.TRADE_HISTORY);

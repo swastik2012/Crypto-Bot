@@ -236,6 +236,16 @@ export const api = {
     return null;
   },
 
+  async resetPaperAccount(): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/paper-trading/reset`, { method: 'POST' });
+      if (res.ok) return await res.json();
+    } catch (e) {
+      console.warn('[API] Reset paper account error:', e);
+    }
+    return null;
+  },
+
   // 6. Agent Telemetry & Diagnostics
   async getTelemetryLogs(limit: number = 100, provider?: string) {
     try {

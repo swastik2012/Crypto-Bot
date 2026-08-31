@@ -76,7 +76,8 @@ class AutoTradingScheduler:
 
     def reset_timer(self) -> Dict[str, Any]:
         self.next_run_timestamp = time.time() + self.interval_seconds
-        print(f"[AutoTrader] Timer reset back to {self.interval_seconds}s (10m)")
+        self.asset_cooldowns.clear()
+        print(f"[AutoTrader] Timer reset back to {self.interval_seconds}s ({self.interval_seconds // 60}m) and cooldowns cleared")
         return self.get_status()
 
     async def trigger_cycle_now(self) -> Dict[str, Any]:
