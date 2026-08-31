@@ -144,14 +144,54 @@ async def run_stage4_openai_risk(
     )
 
     parsed_successfully = False
-    if openai_key and not openai_key.startswith("your-"):
+    
+    # 1. Primary AI Risk Officer: NVIDIA NIM Advanced Reasoning Model
+    if settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
+        try:
+            headers = {
+                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 450,
+            }
+            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
+                resp = await client.post(
+                    "https://integrate.api.nvidia.com/v1/chat/completions",
+                    headers=headers,
+                    json=payload,
+                )
+                if resp.status_code == 200:
+                    data = resp.json()
+                    raw_content = data["choices"][0]["message"]["content"]
+                    cleaned_content = raw_content.replace("```json", "").replace("```", "").strip()
+                    parsed = json.loads(cleaned_content)
+                    safety_score = float(parsed.get("safety_score", safety_score))
+                    false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                    order_block_status = parsed.get("order_block_status", order_block_status)
+                    macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                    critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                    critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                    model_name = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+                    parsed_successfully = True
+        except Exception as e:
+            print(f"[Stage 4 NVIDIA Risk Officer Notice]: {e}")
+
+    # 2. Secondary Failover: OpenAI Flagship Risk Guard
+    if not parsed_successfully and openai_key and not openai_key.startswith("your-"):
         try:
             headers = {
                 "Authorization": f"Bearer {openai_key}",
                 "Content-Type": "application/json",
             }
             payload = {
-                "model": model_name,
+                "model": "gpt-4o",
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -159,7 +199,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(1.0, connect=1.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -174,11 +214,12 @@ async def run_stage4_openai_risk(
                     macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
                     critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                     critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                    model_name = "gpt-4o"
                     parsed_successfully = True
         except Exception:
             pass
 
-    # If OpenAI is unavailable or 429 quota exceeded, invoke Google Gemini 3.6 Flash for Devil's Advocate risk audit
+    # 3. Tertiary Failover: Google Gemini 3.6 Flash
     if not parsed_successfully and settings.GEMINI_API_KEY:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
@@ -202,6 +243,7 @@ async def run_stage4_openai_risk(
                 macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
                 critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                 critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                model_name = gemini_model
                 parsed_successfully = True
         except Exception as e:
             print(f"[Stage 4 LLM Risk Notice]: {e}")

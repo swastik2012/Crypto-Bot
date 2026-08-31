@@ -205,7 +205,8 @@ class AutoTradingScheduler:
                 already_open = existing_pos is not None
 
                 # ========================================================
-                # 🛑 RISK GUARD 4: Trend Alignment & Safe Execution
+                # 🤖 AI CONSENSUS DECISION ENGINE:
+                # Pure AI Multi-Agent Decision (NVIDIA NIM Risk Officer + Gemini Arbiter)
                 # ========================================================
                 can_execute = (
                     confidence >= 75.0 and
@@ -213,11 +214,6 @@ class AutoTradingScheduler:
                     not already_open and
                     not portfolio_full
                 )
-
-                # Prevent buying severe crash knives (> -6% 24h dump)
-                if can_execute and is_buy and change_24h < -6.0:
-                    print(f"[AutoTrader Trend Guard] Suppressing LONG on {pair} (24h dump is {change_24h:+.2f}% severe crash).")
-                    can_execute = False
 
                 if can_execute:
                     plan = response.stage5.execution_plan

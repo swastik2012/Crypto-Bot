@@ -32,7 +32,7 @@ async def run_stage3_nvidia_nim(
     - Validates Mathematical Proof of Risk/Reward and liquidity depth.
     """
     nvidia_key = api_key or settings.NVIDIA_NIM_API_KEY
-    model_name = settings.NVIDIA_MODEL or "deepseek-ai/deepseek-v4-pro"
+    model_name = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning" or settings.NVIDIA_MODEL or "deepseek-ai/deepseek-v4-pro"
     
     thesis = stage1.initial_thesis or {}
     target1 = thesis.get("take_profit_1", round(current_price * 1.042, 2))
