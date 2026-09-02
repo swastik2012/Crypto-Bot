@@ -1,8 +1,9 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from backend.models.schemas import AnalyzeAndTradeRequest, AnalyzeAndTradeResponse
 from backend.agents.graph import consensus_pipeline
 from backend.services.symbol_resolver import symbol_resolver
 from backend.services.screenshot_processor import screenshot_processor
+from backend.services.analysis_cache import analysis_cache
 
 router = APIRouter(prefix="/api", tags=["Multi-Agent Consensus Analysis"])
 
@@ -35,4 +36,16 @@ async def analyze_and_trade(req: AnalyzeAndTradeRequest):
         nvidia_key=req.custom_nvidia_key or "",
         openai_key=req.custom_openai_key or "",
     )
+    analysis_cache.set(req.symbol, response)
     return response
+
+@router.get("/analysis/latest/{symbol}")
+async def get_latest_analysis(symbol: str):
+    """
+    Returns the latest multi-agent consensus analysis for a given cryptocurrency symbol.
+    """
+    data = analysis_cache.get(symbol)
+    if not data:
+        raise HTTPException(status_code=404, detail=f"No cached analysis found for {symbol}")
+    return {"status": "success", "symbol": symbol, "data": data}
+

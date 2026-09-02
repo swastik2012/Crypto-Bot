@@ -10,10 +10,38 @@ export function getMockPipelineData(
   timeframe: TimeInterval = '1H'
 ): FullDebatePipelineData {
   const p = asset.price;
+  const change = asset.change24h;
 
-  const target1 = Math.round(p * 1.042 * 100) / 100;
-  const target2 = Math.round(p * 1.078 * 100) / 100;
-  const stopLoss = Math.round(p * 0.978 * 100) / 100;
+  let consensusSignal: 'STRONG BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG SELL' = 'BUY';
+  let consensusConfidence = 82.5;
+  let isShort = false;
+
+  if (change >= 2.5) {
+    consensusSignal = 'STRONG BUY';
+    consensusConfidence = Math.min(96.0, Math.round((88.0 + change * 1.2) * 10) / 10);
+  } else if (change >= 0.2) {
+    consensusSignal = 'BUY';
+    consensusConfidence = Math.min(89.0, Math.round((78.0 + change * 2.0) * 10) / 10);
+  } else if (change > -2.5) {
+    consensusSignal = 'HOLD';
+    consensusConfidence = Math.round((54.0 + Math.abs(change) * 4.0) * 10) / 10;
+  } else if (change > -5.0) {
+    consensusSignal = 'SELL';
+    consensusConfidence = Math.min(88.0, Math.round((76.0 + Math.abs(change) * 2.0) * 10) / 10);
+    isShort = true;
+  } else {
+    consensusSignal = 'STRONG SELL';
+    consensusConfidence = Math.min(95.0, Math.round((84.0 + Math.abs(change) * 1.5) * 10) / 10);
+    isShort = true;
+  }
+
+  // Swing calibrated targets: TP1 6.5%, TP2 12.0%, SL 4.2% (R:R > 1:2.20)
+  const target1 = isShort ? Math.round(p * 0.935 * 100) / 100 : Math.round(p * 1.065 * 100) / 100;
+  const target2 = isShort ? Math.round(p * 0.880 * 100) / 100 : Math.round(p * 1.120 * 100) / 100;
+  const stopLoss = isShort ? Math.round(p * 1.042 * 100) / 100 : Math.round(p * 0.958 * 100) / 100;
+
+  const patternName = isShort ? 'Bearish Supply Breakdown' : change < 0.2 ? 'Consolidation Range' : 'Ascending Triangle Breakout';
+  const patternType = isShort ? 'bearish' : change < 0.2 ? 'neutral' : 'bullish';
 
   return {
     asset,
@@ -21,168 +49,129 @@ export function getMockPipelineData(
     analyzedAt: new Date().toISOString(),
     stage1: {
       status: 'completed',
-      agentName: 'Gemini 3.6 Flash Vision Analyzer',
-      model: 'gemini-3.6-flash',
-      latencyMs: 420,
+      agentName: 'Gemini 3.5 Flash Vision Analyzer',
+      model: 'gemini-2.5-flash',
+      latencyMs: 380,
       patterns: [
         {
-          name: 'Ascending Triangle Breakout',
-          type: 'bullish',
+          name: patternName,
+          type: patternType as any,
           timeframe,
-          reliability: 92.8,
-          description: `Clean multi-touch ascending trendline with horizontal ceiling compression above $${(p * 1.025).toLocaleString(undefined, { maximumFractionDigits: 2 })}.`,
-        },
-        {
-          name: 'Hidden Bullish RSI Divergence',
-          type: 'bullish',
-          timeframe,
-          reliability: 88.5,
-          description: 'Price printed higher lows while 14-period RSI printed lower oscillation troughs, indicating strong continuation momentum.',
-        },
-        {
-          name: 'EMA 20/50 Golden Cross',
-          type: 'bullish',
-          timeframe,
-          reliability: 86.0,
-          description: '20-period Exponential Moving Average crossed decisively above the 50-period baseline with expanding spread.',
+          reliability: consensusConfidence,
+          description: isShort
+            ? `Multi-touch lower high structure with heavy supply distribution at $${(p * 1.025).toLocaleString(undefined, { maximumFractionDigits: 2 })}.`
+            : `Clean multi-touch ascending trendline with institutional accumulation above $${(p * 0.985).toLocaleString(undefined, { maximumFractionDigits: 2 })}.`,
         },
       ],
       keyLevels: [
         {
           price: target1,
-          type: 'resistance',
+          type: isShort ? 'support' : 'resistance',
           strength: 'major',
-          description: `First Major Supply Block & Liquidity Pool ($${target1.toLocaleString()})`,
+          description: `First Major Swing Target ($${target1.toLocaleString()})`,
         },
         {
           price: target2,
-          type: 'resistance',
+          type: isShort ? 'support' : 'resistance',
           strength: 'minor',
-          description: `Fibonacci 1.618 Macro Extension Target ($${target2.toLocaleString()})`,
+          description: `Macro Fibonacci Extension ($${target2.toLocaleString()})`,
         },
         {
           price: stopLoss,
-          type: 'support',
+          type: isShort ? 'resistance' : 'support',
           strength: 'major',
-          description: `Structural Support Floor & Swing Low ($${stopLoss.toLocaleString()})`,
+          description: `Key Invalidation Boundary ($${stopLoss.toLocaleString()})`,
         },
       ],
       rsiStatus: {
-        value: 62.4,
-        condition: 'bullish_divergence',
+        value: isShort ? 38.2 : 59.4,
+        condition: isShort ? 'Bearish Momentum' : 'Bullish Expansion',
       },
-      volumeAnalysis: '24-hour volume expanded +44.8% on breakout confirmation with positive Delta absorption.',
+      volumeAnalysis: 'Dynamic order book depth and volume absorption verified.',
       initialThesis: {
-        direction: 'LONG',
+        direction: isShort ? 'SHORT' : 'LONG',
         suggestedEntry: p,
         takeProfit1: target1,
         takeProfit2: target2,
         stopLoss: stopLoss,
-        confidence: 94.2,
-        rationale: `Confirmed multi-timeframe Ascending Triangle with solid volume support and hidden bullish RSI divergence across ${timeframe}.`,
+        confidence: consensusConfidence,
+        rationale: `Confirmed multi-timeframe structural formation with volume support across ${timeframe}.`,
       },
     },
     stage2: {
       status: 'completed',
       agentName: 'NVIDIA NIM News Intelligence',
-      model: 'deepseek-ai/deepseek-v4-pro',
-      latencyMs: 380,
-      sentimentLabel: 'BULLISH',
-      sentimentScore: 86.5,
-      newsGist: `Aggregated 6 live articles from CoinDesk, Cointelegraph & CryptoSlate. Institutional spot ETF inflows reach $540M weekly net positive while exchange balances drop to 3-year lows.`,
-      keyCatalysts: [
-        'Institutional Spot ETF net inflows accelerate ($540M this week)',
-        'Exchange BTC reserves decline to lowest level since Nov 2020',
-        'Fed rate cut odds price in favorable macro liquidity environment'
-      ],
-      macroNarrative: 'Institutional Supply Shock & Monetary Easing',
-      articles: [
-        {
-          source: 'CoinDesk',
-          title: `${asset.symbol} Sees Surge in Institutional Inflows as Spot ETFs Accumulate`,
-          link: 'https://coindesk.com',
-          description: 'Net inflows across spot cryptocurrency products increased for the fourth consecutive trading session.',
-          published_at: '22 mins ago'
-        },
-        {
-          source: 'Cointelegraph',
-          title: `Exchange Reserves for ${asset.symbol} Drop to 3-Year Lows Amid Whale Outflows`,
-          link: 'https://cointelegraph.com',
-          description: 'On-chain glassnode metrics reveal persistent cold storage migration and declining OTC desk supplies.',
-          published_at: '45 mins ago'
-        },
-        {
-          source: 'CryptoSlate',
-          title: `Macro Sentiment Index Rises into High Greed as Liquidity Injections Loom`,
-          link: 'https://cryptoslate.com',
-          description: 'Global M2 money supply expansion continues to support risk asset valuations across crypto benchmarks.',
-          published_at: '1 hour ago'
-        }
-      ],
+      model: 'nvidia/llama-3.2-11b-vision-instruct',
+      latencyMs: 340,
+      sentimentLabel: isShort ? 'BEARISH' : change < 0.2 ? 'NEUTRAL' : 'BULLISH',
+      sentimentScore: isShort ? 35.0 : change < 0.2 ? 52.0 : 84.5,
+      newsGist: `Live financial news sentiment scan for ${asset.pair}: Market sentiment is currently ${isShort ? 'defensive / distribution' : 'accumulating / constructive'}.`,
+      keyCatalysts: ['Macro liquidity conditions', 'Institutional order flows'],
+      macroNarrative: isShort ? 'Supply Overhang' : 'Spot Accumulation',
+      articles: [],
       sourceSentimentBreakdown: {
-        'CoinDesk': 'Bullish',
-        'Cointelegraph': 'Bullish',
-        'CryptoSlate': 'Neutral'
-      }
+        'CoinDesk': isShort ? 'Bearish' : 'Bullish',
+        'Cointelegraph': isShort ? 'Bearish' : 'Bullish',
+      },
     },
     stage3: {
       status: 'completed',
       agentName: 'NVIDIA NIM Quantitative Reasoning Engine',
-      model: 'deepseek-ai/deepseek-v4-pro',
-      latencyMs: 460,
-      stressTestScore: 96.5,
-      riskRewardRatio: 1.91,
+      model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+      latencyMs: 440,
+      stressTestScore: consensusConfidence,
+      riskRewardRatio: 2.20,
       atrVolatility: {
-        value: Math.round(p * 0.016 * 100) / 100,
-        percentile: 72.4 as any,
+        value: Math.round(p * 0.022 * 100) / 100,
+        percentile: 65.0 as any,
       },
-      monteCarloWinRate: 82.5,
+      monteCarloWinRate: isShort ? 79.2 : 81.5,
       liquidityDepthRating: 'High',
       verdict: 'VERIFIED_PASS',
       adjustmentsProposed: {
         suggestedPositionUSD: 5000.0,
         recommendedStopLoss: stopLoss,
       },
-      mathematicalProof: `10,000 Monte Carlo path simulations completed under historical volatility profile (σ = 0.024). EV = (0.825 × $420.00) - (0.175 × $220.00) = +$308.00 per standard contract. Asymmetric hurdle rate satisfied with 1:1.91 Risk:Reward.`,
+      mathematicalProof: `Monte Carlo simulations completed. Risk:Reward calibrated to 1:2.20 with positive Expected Value.`,
     },
     stage4: {
       status: 'completed',
-      agentName: 'OpenAI Flagship Risk Guard',
-      model: 'gpt-4o',
-      latencyMs: 510,
+      agentName: 'NVIDIA NIM Reasoning Risk Officer',
+      model: 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
+      latencyMs: 460,
       liquiditySweepRisk: 'Low',
-      falseBreakoutProbability: 11.2,
-      orderBlockStatus: `Unmitigated demand order block verified between $${(p * 0.982).toLocaleString(undefined, { maximumFractionDigits: 2 })} and $${(p * 0.995).toLocaleString(undefined, { maximumFractionDigits: 2 })}.`,
+      falseBreakoutProbability: 16.5,
+      orderBlockStatus: `Key institutional liquidity block verified at entry zone.`,
       macroTrapAlert: null,
-      critiqueOfGemini: 'Stage 1 correctly mapped structural support and ascending base. Volume profile confirms genuine institutional accumulation without liquidity sweep traps.',
-      critiqueOfNvidia: 'Stage 3 Monte Carlo parameters are validated. Variance stress testing aligns with institutional liquidity parameters.',
-      safetyScore: 95.5,
+      critiqueOfGemini: 'Stage 1 structural levels validated against liquidity order blocks.',
+      critiqueOfNvidia: 'Mathematical risk boundaries and stop-out buffer verified.',
+      safetyScore: consensusConfidence > 80 ? 88.0 : 65.0,
     },
     stage5: {
       status: 'completed',
-      agentName: 'Gemini 3.6 Flash Consensus Arbiter',
-      model: 'gemini-3.6-flash',
-      latencyMs: 340,
-      consensusSignal: 'STRONG BUY',
-      consensusConfidence: 94.2,
+      agentName: 'Gemini 3.5 Flash Consensus Arbiter',
+      model: 'gemini-2.5-flash',
+      latencyMs: 310,
+      consensusSignal: consensusSignal,
+      consensusConfidence: consensusConfidence,
       executionPlan: {
         recommendedEntry: p,
         takeProfit1: target1,
         takeProfit2: target2,
         stopLoss: stopLoss,
-        effectiveRR: 1.91,
+        effectiveRR: 2.20,
         suggestedLeverage: '3x - 5x Cross',
         recommendedPositionUSD: 5000.0,
         timeHorizon: '12h - 48h (Swing)',
       },
-      executiveSummary: `Multi-agent consensus achieved with 94.2% institutional conviction. Gemini 3.6 Flash Vision Ascending Triangle verified by NVIDIA DeepSeek V4 Pro 82.5% Monte Carlo win rate and cleared of false breakouts by OpenAI Risk Guard. Proposing 5% allocation at $${p.toLocaleString()}.`,
-      keyInvalidationCondition: `Hourly candle close below $${stopLoss.toLocaleString()} invalidates ascending structure and triggers immediate stop-loss exit.`,
+      executiveSummary: `Multi-agent consensus achieved: ${consensusSignal} with ${consensusConfidence}% institutional conviction across ${asset.pair}. Proposing swing allocation at $${p.toLocaleString()}.`,
+      keyInvalidationCondition: `Price violation beyond $${stopLoss.toLocaleString()} invalidates trade thesis and triggers immediate protective exit.`,
       agentConsensusMatrix: {
-        geminiScore: 94.2,
-        newsScore: 86.5,
-        nvidiaScore: 96.5,
-        openaiScore: 95.5,
-        agreementLevel: 'High',
+        geminiScore: consensusConfidence,
+        newsScore: isShort ? 35.0 : 84.5,
+        nvidiaScore: consensusConfidence,
+        openaiScore: 88.0,
+        agreementLevel: consensusConfidence >= 75 ? 'High' : 'Moderate',
       },
     },
     debateStream: [

@@ -189,6 +189,20 @@ export const api = {
     }
   },
 
+  async fetchLatestAnalysis(symbol: string): Promise<any> {
+    try {
+      const clean = symbol.replace('/', '').toUpperCase();
+      const res = await fetch(`${API_BASE_URL}/api/analysis/latest/${clean}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.data;
+      }
+    } catch {
+      // Offline fallback
+    }
+    return null;
+  },
+
   // 5. Autonomous 30-Minute Trader Controls
   async getAutoTraderStatus(): Promise<AutoTraderStatus | null> {
     try {

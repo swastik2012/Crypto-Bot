@@ -5,6 +5,7 @@ from backend.services.symbol_resolver import symbol_resolver
 from backend.services.paper_engine import paper_engine
 from backend.agents.graph import consensus_pipeline
 from backend.models.schemas import PlacePaperOrderRequest, PositionSide
+from backend.services.analysis_cache import analysis_cache
 
 class AutoTradingScheduler:
     """
@@ -182,6 +183,7 @@ class AutoTradingScheduler:
                     strategy_preset="Swing Trading",
                     auto_execute=False,
                 )
+                analysis_cache.set(pair, response)
                 
                 signal = response.stage5.consensus_signal
                 confidence = response.stage5.consensus_confidence
