@@ -164,17 +164,17 @@ flowchart TD
    OPENAI_API_KEY=sk-proj-...
    ```
 
-5. **Start the Application**:
-
-   **Terminal 1 — FastAPI Backend**:
+5. **Start the Application in 1-Go (Single Terminal)**:
    ```bash
-   ./backend/venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
+   ./start.sh
+   # or
+   npm start
    ```
+   > 💡 *The script automatically verifies your environment, handles port conflicts, displays your local and mobile Wi-Fi URLs, and starts both the FastAPI backend and Vite frontend concurrently.*
 
-   **Terminal 2 — React Frontend**:
-   ```bash
-   npm run dev
-   ```
+   *(Optional) Manual 2-terminal launch:*
+   - **Terminal 1 (Backend)**: `./backend/venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload`
+   - **Terminal 2 (Frontend)**: `npm run dev -- --host 0.0.0.0 --port 5173`
 
 6. Open your browser and navigate to **[http://127.0.0.1:5173](http://127.0.0.1:5173)**!
 
