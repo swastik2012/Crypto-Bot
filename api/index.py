@@ -2,6 +2,9 @@ import sys
 import traceback
 from pathlib import Path
 
+import os
+os.environ["VERCEL"] = "1"
+
 # Ensure project root and backend dir are in sys.path
 root_dir = Path(__file__).resolve().parent.parent
 backend_dir = root_dir / "backend"
