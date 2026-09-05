@@ -1,0 +1,17 @@
+# robots.txt for AetherTrade AI Crypto Bot
+User-agent: *
+Allow: /
+Disallow: /api/telemetry/clear
+
+# Search Engine Crawlers
+User-agent: Googlebot
+Allow: /
+
+User-agent: Googlebot-Image
+Allow: /
+
+User-agent: Bingbot
+Allow: /
+
+# Sitemap Reference
+Sitemap: https://crypto-bot.ai/sitemap.xml
