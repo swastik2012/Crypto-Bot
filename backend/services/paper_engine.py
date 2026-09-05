@@ -134,11 +134,30 @@ class VirtualPaperEngine:
             price_map = {item["symbol"]: item["base_price"] for item in symbol_resolver.pairs_db}
             price_map.update({f"{item['symbol']}/USDT": item["base_price"] for item in symbol_resolver.pairs_db})
             if current_prices:
-                price_map.update(current_prices)
+                for k, v in current_prices.items():
+                    price_map[k] = v
+                    if "/" in k:
+                        clean = k.split("/")[0].upper()
+                        price_map[clean] = v
+                        price_map[f"{clean}USDT"] = v
+                    else:
+                        clean = k.upper()
+                        price_map[f"{clean}/USDT"] = v
+                        price_map[f"{clean}USDT"] = v
             self.evaluate_price_ticks(price_map)
         except Exception as e:
             if current_prices:
-                self.evaluate_price_ticks(current_prices)
+                fallback_map = dict(current_prices)
+                for k, v in current_prices.items():
+                    if "/" in k:
+                        clean = k.split("/")[0].upper()
+                        fallback_map[clean] = v
+                        fallback_map[f"{clean}USDT"] = v
+                    else:
+                        clean = k.upper()
+                        fallback_map[f"{clean}/USDT"] = v
+                        fallback_map[f"{clean}USDT"] = v
+                self.evaluate_price_ticks(fallback_map)
 
         unrealized_pnl = sum(p.unrealized_pnl for p in self.open_positions.values())
         margin_used = sum(p.margin_used for p in self.open_positions.values())
