@@ -9,10 +9,12 @@ import {
   EyeOff,
   Sparkles,
   TrendingUp,
+  TrendingDown,
+  Minus,
   Target,
   ShieldAlert,
 } from 'lucide-react';
-import type { CryptoAsset, CandleData, TimeInterval, SupportResistanceLevel } from '../../types';
+import type { CryptoAsset, CandleData, TimeInterval, SupportResistanceLevel, FullDebatePipelineData } from '../../types';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { ScanOverlay } from './ScanOverlay';
@@ -29,16 +31,20 @@ interface InteractiveChartProps {
   activeStageNumber: number;
   keyLevels: SupportResistanceLevel[];
   darkMode: boolean;
+  pipelineData?: FullDebatePipelineData;
 }
 
 export const InteractiveChart: React.FC<InteractiveChartProps> = ({
   asset,
+  candles,
   timeInterval,
   onTimeIntervalChange,
   onRunAnalysis,
   isAnalyzing,
   activeStageNumber,
+  keyLevels,
   darkMode,
+  pipelineData,
 }) => {
   const { formatPrice } = useCurrency();
   const [showAiOverlays, setShowAiOverlays] = useState<boolean>(true);
@@ -56,14 +62,62 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
   };
 
   const tvSymbol = `BINANCE:${asset.symbol}USDT`;
-
-  // Real-time Dynamic AI Targets calculated from actual live market price
   const p = asset.price;
-  const target1 = Math.round(p * 1.042 * 100) / 100;
-  const target2 = Math.round(p * 1.078 * 100) / 100;
-  const stopLoss = Math.round(p * 0.978 * 100) / 100;
-  const support1 = Math.round(p * 0.972 * 100) / 100;
-  const resistance1 = Math.round(p * 1.035 * 100) / 100;
+
+  // Derive Consensus Signal & Conviction from Live Multi-Agent Pipeline
+  const consensusSignal = pipelineData?.stage5?.consensusSignal || (asset.change24h >= 0 ? 'BUY' : 'SELL');
+  const isShort = consensusSignal === 'SELL' || consensusSignal === 'STRONG SELL';
+  const isHold = consensusSignal === 'HOLD';
+  const confidence = pipelineData?.stage5?.consensusConfidence 
+    ?? Math.min(96, Math.round(78 + Math.abs(asset.change24h) * 1.8));
+
+  // Risk:Reward Ratio
+  const effectiveRr = pipelineData?.stage5?.executionPlan?.effectiveRR 
+    || pipelineData?.stage3?.riskRewardRatio 
+    || 2.29;
+
+  // AI Technical Pattern & RSI
+  const detectedPattern = pipelineData?.stage1?.patterns?.[0];
+  const patternName = detectedPattern?.name 
+    || (isShort ? 'Bearish Supply Breakdown' : asset.change24h > 1.5 ? 'Ascending Triangle Continuation' : 'Consolidation Range');
+  const patternReliability = detectedPattern?.reliability 
+    ?? Math.min(95, Math.round(82 + Math.abs(asset.change24h) * 1.5));
+
+  const rsiVal = pipelineData?.stage1?.rsiStatus?.value 
+    ?? (candles.length > 0 && candles[candles.length - 1]?.rsi 
+      ? Math.round((candles[candles.length - 1].rsi || 58) * 10) / 10 
+      : isShort ? 38.2 : 62.4);
+  const rsiCondition = pipelineData?.stage1?.rsiStatus?.condition 
+    || (rsiVal > 70 ? 'Overbought Divergence' : rsiVal < 30 ? 'Oversold Confluence' : isShort ? 'Bearish Momentum' : 'Bullish Expansion');
+
+  // Real Execution Plan Targets (Asymmetric Swing: TP1 +7.8%, TP2 +15.0%, SL -3.4% or Short inverse)
+  const execPlan = pipelineData?.stage5?.executionPlan;
+  const entry = execPlan?.recommendedEntry || p;
+  const target1 = execPlan?.takeProfit1 
+    ?? (isShort ? Math.round(p * 0.922 * 100) / 100 : Math.round(p * 1.078 * 100) / 100);
+  const target2 = execPlan?.takeProfit2 
+    ?? (isShort ? Math.round(p * 0.850 * 100) / 100 : Math.round(p * 1.150 * 100) / 100);
+  const stopLoss = execPlan?.stopLoss 
+    ?? (isShort ? Math.round(p * 1.034 * 100) / 100 : Math.round(p * 0.966 * 100) / 100);
+
+  // Dynamic Percentage Deltas relative to Entry
+  const tp1DeltaPct = Math.abs(((target1 - entry) / (entry || 1)) * 100).toFixed(1);
+  const tp2DeltaPct = Math.abs(((target2 - entry) / (entry || 1)) * 100).toFixed(1);
+  const slDeltaPct = Math.abs(((stopLoss - entry) / (entry || 1)) * 100).toFixed(1);
+
+  // Dynamic Key Support & Resistance Levels from stage 1
+  const supportLevels = (keyLevels || []).filter((k) => k.type === 'support');
+  const resistanceLevels = (keyLevels || []).filter((k) => k.type === 'resistance');
+
+  const primarySupport = supportLevels[0] || {
+    price: isShort ? target1 : stopLoss,
+    description: isShort ? 'Take-Profit 1 Support Floor' : 'Structural Anchor & 50 EMA',
+  };
+
+  const primaryResistance = resistanceLevels[0] || {
+    price: isShort ? stopLoss : target1,
+    description: isShort ? 'Invalidation Ceiling & Supply Block' : 'Target 1 Breakout Resistance',
+  };
 
   return (
     <GlassCard className="p-4 sm:p-6 border border-white/80 dark:border-white/10 shadow-glass-lg relative overflow-hidden">
@@ -156,6 +210,8 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
             stage={activeStageNumber}
             timeframe={timeInterval}
             assetPair={asset.pair}
+            patternName={patternName}
+            isShort={isShort}
           />
         )}
 
@@ -183,65 +239,139 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {/* Left Telemetry Card */}
                 <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-cyan-400/30 text-cyan-300 font-mono text-[11px] backdrop-blur-md shadow-lg pointer-events-auto">
-                  <Sparkles className="w-3.5 h-3.5 text-cyan-400" />
-                  <span><b>AI Pattern:</b> Ascending Continuation (91.4%)</span>
+                  <Sparkles className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                  <span className="truncate"><b>AI Pattern:</b> {patternName} ({patternReliability}%)</span>
                   <span className="text-slate-500">•</span>
-                  <span className="text-emerald-400">RSI: 62.4 Divergence</span>
+                  <span className={`whitespace-nowrap font-semibold ${
+                    rsiVal > 70 ? 'text-amber-400' : rsiVal < 30 ? 'text-cyan-300' : isShort ? 'text-rose-400' : 'text-emerald-400'
+                  }`}>
+                    RSI: {rsiVal} {rsiCondition}
+                  </span>
                 </div>
 
                 {/* Right Consensus Target Card */}
-                <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-400/30 text-emerald-300 font-mono text-[11px] backdrop-blur-md shadow-lg pointer-events-auto">
-                  <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
-                  <span><b>Consensus:</b> STRONG BUY (94.6%)</span>
+                <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border font-mono text-[11px] backdrop-blur-md shadow-lg pointer-events-auto ${
+                  isShort
+                    ? 'border-rose-400/40 text-rose-300'
+                    : isHold
+                    ? 'border-amber-400/40 text-amber-300'
+                    : 'border-emerald-400/40 text-emerald-300'
+                }`}>
+                  {isShort ? (
+                    <TrendingDown className="w-3.5 h-3.5 text-rose-400 shrink-0" />
+                  ) : isHold ? (
+                    <Minus className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                  ) : (
+                    <TrendingUp className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                  )}
+                  <span><b>Consensus:</b> {consensusSignal} ({confidence}%)</span>
                   <span className="text-slate-500">•</span>
-                  <span className="text-cyan-300">RR 1:3.65</span>
+                  <span className="text-cyan-300">RR 1:{effectiveRr}</span>
                 </div>
               </div>
 
               {/* Floating Dynamic Target Capsule Matrix (Docked on Right Side) */}
-              <div className="self-end flex flex-col gap-1.5 my-auto max-w-[240px] pointer-events-auto">
-                
-                {/* Take Profit 2 */}
-                <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
-                  <span className="font-bold flex items-center gap-1 text-emerald-400">
-                    <Target className="w-3 h-3" /> TP2 (+7.8%)
-                  </span>
-                  <span className="font-extrabold text-emerald-300">{formatPrice(target2)}</span>
-                </div>
+              <div className="self-end flex flex-col gap-1.5 my-auto max-w-[240px] pointer-events-auto mr-1 sm:mr-14 md:mr-16">
+                {isShort ? (
+                  /* Short Layout: High Price to Low Price -> SL (above) -> Entry -> TP1 -> TP2 */
+                  <>
+                    {/* Invalidation Stop Loss (Above Price for Short) */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-rose-500/40 text-rose-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-rose-400">
+                        <ShieldAlert className="w-3 h-3 shrink-0" /> SL (+{slDeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-rose-300">{formatPrice(stopLoss)}</span>
+                    </div>
 
-                {/* Take Profit 1 */}
-                <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
-                  <span className="font-bold flex items-center gap-1 text-emerald-400">
-                    <Target className="w-3 h-3" /> TP1 (+4.2%)
-                  </span>
-                  <span className="font-extrabold text-emerald-300">{formatPrice(target1)}</span>
-                </div>
+                    {/* Recommended Short Entry */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-cyan-950/90 dark:bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-glow-cyan">
+                      <span className="font-extrabold text-cyan-400">SHORT ENTRY</span>
+                      <span className="font-black text-cyan-200">{formatPrice(entry)}</span>
+                    </div>
 
-                {/* Recommended Entry */}
-                <div className="px-2.5 py-1.5 rounded-xl bg-cyan-950/90 dark:bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-glow-cyan">
-                  <span className="font-extrabold text-cyan-400">ENTRY ZONE</span>
-                  <span className="font-black text-cyan-200">{formatPrice(p)}</span>
-                </div>
+                    {/* Take Profit 1 */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-emerald-400">
+                        <Target className="w-3 h-3 shrink-0" /> TP1 (-{tp1DeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-emerald-300">{formatPrice(target1)}</span>
+                    </div>
 
-                {/* Invalidation Stop Loss */}
-                <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-rose-500/40 text-rose-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
-                  <span className="font-bold flex items-center gap-1 text-rose-400">
-                    <ShieldAlert className="w-3 h-3" /> SL (-2.2%)
-                  </span>
-                  <span className="font-extrabold text-rose-300">{formatPrice(stopLoss)}</span>
-                </div>
+                    {/* Take Profit 2 */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-emerald-400">
+                        <Target className="w-3 h-3 shrink-0" /> TP2 (-{tp2DeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-emerald-300">{formatPrice(target2)}</span>
+                    </div>
+                  </>
+                ) : isHold ? (
+                  /* Hold Layout: Range High -> Pivot / Mid -> Range Low */
+                  <>
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-amber-500/40 text-amber-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-amber-400">
+                        <Target className="w-3 h-3 shrink-0" /> RESISTANCE (+{tp1DeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-amber-300">{formatPrice(target1)}</span>
+                    </div>
 
+                    <div className="px-2.5 py-1.5 rounded-xl bg-cyan-950/90 dark:bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-glow-cyan">
+                      <span className="font-extrabold text-cyan-400">PIVOT / MID</span>
+                      <span className="font-black text-cyan-200">{formatPrice(entry)}</span>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-rose-500/40 text-rose-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-rose-400">
+                        <ShieldAlert className="w-3 h-3 shrink-0" /> SUPPORT (-{slDeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-rose-300">{formatPrice(stopLoss)}</span>
+                    </div>
+                  </>
+                ) : (
+                  /* Long Layout: High Price to Low Price -> TP2 -> TP1 -> Entry -> SL */
+                  <>
+                    {/* Take Profit 2 */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-emerald-400">
+                        <Target className="w-3 h-3 shrink-0" /> TP2 (+{tp2DeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-emerald-300">{formatPrice(target2)}</span>
+                    </div>
+
+                    {/* Take Profit 1 */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-emerald-500/40 text-emerald-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-emerald-400">
+                        <Target className="w-3 h-3 shrink-0" /> TP1 (+{tp1DeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-emerald-300">{formatPrice(target1)}</span>
+                    </div>
+
+                    {/* Recommended Entry */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-cyan-950/90 dark:bg-cyan-950/90 border border-cyan-400 text-cyan-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-glow-cyan">
+                      <span className="font-extrabold text-cyan-400">ENTRY ZONE</span>
+                      <span className="font-black text-cyan-200">{formatPrice(entry)}</span>
+                    </div>
+
+                    {/* Invalidation Stop Loss */}
+                    <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/85 dark:bg-dark-900/90 border border-rose-500/40 text-rose-300 font-mono text-[10px] flex items-center justify-between gap-2 backdrop-blur-md shadow-md">
+                      <span className="font-bold flex items-center gap-1 text-rose-400">
+                        <ShieldAlert className="w-3 h-3 shrink-0" /> SL (-{slDeltaPct}%)
+                      </span>
+                      <span className="font-extrabold text-rose-300">{formatPrice(stopLoss)}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Bottom S/R Summary Bar */}
-              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300 bg-slate-950/80 dark:bg-dark-900/90 px-3 py-1.5 rounded-xl border border-white/10 backdrop-blur-md">
-                <div className="flex items-center gap-3">
-                  <span className="text-emerald-400 font-bold">Support 1: {formatPrice(support1)}</span>
-                  <span className="text-emerald-400/80 hidden sm:inline">Ascending Base & 20 EMA</span>
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300 bg-slate-950/80 dark:bg-dark-900/90 px-3 py-1.5 rounded-xl border border-white/10 backdrop-blur-md gap-2">
+                <div className="flex items-center gap-2 sm:gap-3 truncate">
+                  <span className="text-emerald-400 font-bold whitespace-nowrap">Support: {formatPrice(primarySupport.price)}</span>
+                  <span className="text-emerald-400/80 hidden sm:inline truncate">({primarySupport.description})</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-rose-400 font-bold">Resistance 1: {formatPrice(resistance1)}</span>
-                  <span className="text-rose-400/80 hidden sm:inline">Local Ceiling</span>
+                <div className="flex items-center gap-2 sm:gap-3 truncate">
+                  <span className="text-rose-400 font-bold whitespace-nowrap">Resistance: {formatPrice(primaryResistance.price)}</span>
+                  <span className="text-rose-400/80 hidden sm:inline truncate">({primaryResistance.description})</span>
                 </div>
               </div>
 
@@ -275,7 +405,7 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
           {isAnalyzing ? (
             <>
               <RefreshCw className="w-4 h-4 animate-spin text-cyan-300" />
-              <span>Running Stage {activeStageNumber}/4 Consensus...</span>
+              <span>Running Stage {activeStageNumber}/5 Consensus...</span>
             </>
           ) : (
             <>

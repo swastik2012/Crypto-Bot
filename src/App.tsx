@@ -252,7 +252,7 @@ export const App: React.FC = () => {
 
   // Analysis / Multi-Agent Execution State
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [activeStageNumber, setActiveStageNumber] = useState<number>(4);
+  const [activeStageNumber, setActiveStageNumber] = useState<number>(5);
 
   // Candlestick Data
   const candles = useMemo(() => {
@@ -421,9 +421,9 @@ export const App: React.FC = () => {
     const rawStage1Signal = res.stage1?.initial_thesis?.direction;
     const stage1Signal = (typeof rawStage1Signal === 'object' ? rawStage1Signal?.value : rawStage1Signal) || (signalVal.includes('SELL') ? 'SHORT' : 'LONG');
 
-    const defaultTp1 = stage1Signal === 'SHORT' ? asset.price * 0.935 : asset.price * 1.065;
-    const defaultTp2 = stage1Signal === 'SHORT' ? asset.price * 0.880 : asset.price * 1.120;
-    const defaultSl = stage1Signal === 'SHORT' ? asset.price * 1.042 : asset.price * 0.958;
+    const defaultTp1 = stage1Signal === 'SHORT' ? asset.price * 0.922 : asset.price * 1.078;
+    const defaultTp2 = stage1Signal === 'SHORT' ? asset.price * 0.850 : asset.price * 1.150;
+    const defaultSl = stage1Signal === 'SHORT' ? asset.price * 1.034 : asset.price * 0.966;
 
     return {
       asset,
@@ -631,6 +631,7 @@ export const App: React.FC = () => {
                 activeStageNumber={activeStageNumber}
                 keyLevels={pipelineData.stage1.keyLevels}
                 darkMode={darkMode}
+                pipelineData={pipelineData}
               />
             </section>
 

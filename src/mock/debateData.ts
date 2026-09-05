@@ -35,10 +35,10 @@ export function getMockPipelineData(
     isShort = true;
   }
 
-  // Swing calibrated targets: TP1 6.5%, TP2 12.0%, SL 4.2% (R:R > 1:2.20)
-  const target1 = isShort ? Math.round(p * 0.935 * 100) / 100 : Math.round(p * 1.065 * 100) / 100;
-  const target2 = isShort ? Math.round(p * 0.880 * 100) / 100 : Math.round(p * 1.120 * 100) / 100;
-  const stopLoss = isShort ? Math.round(p * 1.042 * 100) / 100 : Math.round(p * 0.958 * 100) / 100;
+  // Swing calibrated targets: TP1 7.8%, TP2 15.0%, SL 3.4% (R:R > 1:2.29)
+  const target1 = isShort ? Math.round(p * 0.922 * 100) / 100 : Math.round(p * 1.078 * 100) / 100;
+  const target2 = isShort ? Math.round(p * 0.850 * 100) / 100 : Math.round(p * 1.150 * 100) / 100;
+  const stopLoss = isShort ? Math.round(p * 1.034 * 100) / 100 : Math.round(p * 0.966 * 100) / 100;
 
   const patternName = isShort ? 'Bearish Supply Breakdown' : change < 0.2 ? 'Consolidation Range' : 'Ascending Triangle Breakout';
   const patternType = isShort ? 'bearish' : change < 0.2 ? 'neutral' : 'bullish';
@@ -159,7 +159,7 @@ export function getMockPipelineData(
         takeProfit1: target1,
         takeProfit2: target2,
         stopLoss: stopLoss,
-        effectiveRR: 2.20,
+        effectiveRR: 2.29,
         suggestedLeverage: '3x - 5x Cross',
         recommendedPositionUSD: 5000.0,
         timeHorizon: '12h - 48h (Swing)',
