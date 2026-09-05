@@ -17,8 +17,15 @@ except Exception as e:
     err_trace = traceback.format_exc()
     from fastapi import FastAPI
     from fastapi.responses import JSONResponse
-    from mangum import Mangum
+    from fastapi.middleware.cors import CORSMiddleware
     app = FastAPI()
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
     
     @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"])
     async def serverless_error_fallback(path: str):

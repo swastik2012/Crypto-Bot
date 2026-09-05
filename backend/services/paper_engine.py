@@ -17,6 +17,8 @@ from backend.models.schemas import (
 from backend.services.fee_service import fee_service, ExchangeFeePreset
 
 is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+BUNDLED_SEED_FILE = Path(__file__).resolve().parent.parent / "data" / "paper_account.json"
+
 if is_serverless:
     DATA_DIR = Path("/tmp/data")
 else:
@@ -64,6 +66,7 @@ class VirtualPaperEngine:
 
     def _save_to_disk(self):
         try:
+            self.storage_file.parent.mkdir(parents=True, exist_ok=True)
             data = {
                 "account_id": self.account_id,
                 "quote_currency": self.quote_currency,
@@ -82,9 +85,21 @@ class VirtualPaperEngine:
             print(f"[PaperEngine] Save error: {e}")
 
     def _load_from_disk(self):
-        if self.storage_file.exists():
+        # In serverless, if the writable /tmp storage file doesn't exist yet, seed from bundled file
+        if not self.storage_file.exists() and BUNDLED_SEED_FILE.exists() and self.storage_file != BUNDLED_SEED_FILE:
             try:
-                with open(self.storage_file, "r") as f:
+                self.storage_file.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copyfile(BUNDLED_SEED_FILE, self.storage_file)
+                print(f"[PaperEngine] Seeded {self.storage_file} from bundled {BUNDLED_SEED_FILE}")
+            except Exception as seed_err:
+                print(f"[PaperEngine] Seed copy notice: {seed_err}")
+
+        # Choose target file: active storage if exists, or bundled seed as fallback read
+        target = self.storage_file if self.storage_file.exists() else (BUNDLED_SEED_FILE if BUNDLED_SEED_FILE.exists() else None)
+        if target and target.exists():
+            try:
+                with open(target, "r") as f:
                     data = json.load(f)
                     self.cash_balance = data.get("cash_balance", self.starting_capital)
                     self.winning_trades = data.get("winning_trades", 0)
@@ -103,7 +118,7 @@ class VirtualPaperEngine:
                     self.trade_history = [
                         PaperTradeRecord(**t) for t in data.get("trade_history", [])
                     ]
-                    print(f"[PaperEngine] Loaded {len(self.open_positions)} open positions & {len(self.trade_history)} trade records from {self.storage_file}")
+                    print(f"[PaperEngine] Loaded {len(self.open_positions)} open positions & {len(self.trade_history)} trade records from {target}")
             except Exception as e:
                 print(f"[PaperEngine] Load error: {e}")
 

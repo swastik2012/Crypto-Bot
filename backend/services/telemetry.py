@@ -1,7 +1,11 @@
 import time
 import uuid
+import json
+from pathlib import Path
 from typing import List, Dict, Any, Optional
 from collections import deque
+
+SEED_TELEMETRY_FILE = Path(__file__).resolve().parent.parent / "data" / "telemetry_logs.json"
 
 class AgentTelemetryService:
     """
@@ -18,18 +22,43 @@ class AgentTelemetryService:
             "error_calls": 0,
             "total_latency_ms": 0,
         }
-        # Pre-seed initial boot diagnostic log
-        self.record_call(
-            provider="System Engine",
-            model="langchain/graph-consensus",
-            stage="System Boot",
-            status="SUCCESS",
-            status_code=200,
-            latency_ms=45,
-            endpoint="internal://aethertrade-core",
-            request_summary={"event": "Telemetry engine initialized", "max_buffer": max_entries},
-            response_summary={"status": "Online", "stream": "Ready"},
-        )
+        
+        # Check if authentic seed telemetry logs exist
+        seeded = False
+        if SEED_TELEMETRY_FILE.exists():
+            try:
+                with open(SEED_TELEMETRY_FILE, "r") as f:
+                    data = json.load(f)
+                    saved_logs = data.get("logs", [])
+                    saved_summary = data.get("summary", {})
+                    # Add logs preserving chronological order
+                    for entry in reversed(saved_logs):
+                        self._logs.appendleft(entry)
+                    if saved_summary:
+                        self.stats["total_calls"] = saved_summary.get("total_calls", len(self._logs))
+                        self.stats["success_calls"] = saved_summary.get("success_calls", len(self._logs))
+                        self.stats["fallback_calls"] = saved_summary.get("fallback_calls", 0)
+                        self.stats["error_calls"] = saved_summary.get("error_calls", 0)
+                        avg_lat = saved_summary.get("average_latency_ms", 2500)
+                        self.stats["total_latency_ms"] = int(avg_lat * self.stats["total_calls"])
+                    seeded = True
+                    print(f"[TelemetryService] Loaded {len(self._logs)} authentic agent calls from {SEED_TELEMETRY_FILE}")
+            except Exception as e:
+                print(f"[TelemetryService] Seed load error: {e}")
+
+        if not seeded or len(self._logs) == 0:
+            # Pre-seed initial boot diagnostic log if no seed file present
+            self.record_call(
+                provider="System Engine",
+                model="langchain/graph-consensus",
+                stage="System Boot",
+                status="SUCCESS",
+                status_code=200,
+                latency_ms=45,
+                endpoint="internal://aethertrade-core",
+                request_summary={"event": "Telemetry engine initialized", "max_buffer": max_entries},
+                response_summary={"status": "Online", "stream": "Ready"},
+            )
 
     def record_call(
         self,

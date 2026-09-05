@@ -30,6 +30,9 @@ htmlcov/
 # Local database & paper trade persistence
 backend/data/*.json
 !backend/data/.gitkeep
+!backend/data/paper_account.json
+!backend/data/trade_learnings.json
+!backend/data/telemetry_logs.json
 
 # Logs & temporary files
 /logs/

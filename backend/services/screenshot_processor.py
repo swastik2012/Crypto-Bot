@@ -2,7 +2,10 @@ import base64
 import io
 import re
 from typing import Optional, Tuple
-from PIL import Image
+try:
+    from PIL import Image
+except ImportError:
+    Image = None
 
 class ScreenshotProcessor:
     @staticmethod
@@ -33,8 +36,10 @@ class ScreenshotProcessor:
                 return False, None
                 
             img_bytes = base64.b64decode(clean_data)
-            img = Image.open(io.BytesIO(img_bytes))
-            return True, img.size
+            if Image is not None:
+                img = Image.open(io.BytesIO(img_bytes))
+                return True, img.size
+            return True, None
         except Exception:
             return False, None
 

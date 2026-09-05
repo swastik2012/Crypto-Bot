@@ -2,7 +2,7 @@ import uvicorn
 import time
 from typing import Optional
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from backend.config import settings
 from backend.api.routes_search import router as search_router
@@ -30,6 +30,19 @@ app = FastAPI(
     description="Multi-Agent AI Crypto Trading Assistant Backend with LangGraph Consensus Debate, 30-Minute Auto-Trading Loop, and Persistent Virtual Paper Engine.",
     lifespan=lifespan,
 )
+
+# ASGI Middleware to normalize paths if Vercel rewrites strip /api prefix
+class VercelPathNormalizationMiddleware:
+    def __init__(self, app):
+        self.app = app
+    async def __call__(self, scope, receive, send):
+        if scope.get("type") == "http":
+            path = scope.get("path", "")
+            if not path.startswith("/api") and path not in ["/", "/health", "/docs", "/openapi.json", "/redoc"]:
+                scope["path"] = f"/api{path}"
+        await self.app(scope, receive, send)
+
+app.add_middleware(VercelPathNormalizationMiddleware)
 
 # CORS Configuration for React Frontend
 app.add_middleware(
@@ -83,6 +96,7 @@ async def clear_telemetry_logs():
     return {"status": "success", "message": "Telemetry logs cleared"}
 
 @app.get("/")
+@app.get("/api")
 async def root():
     return {
         "status": "online",
@@ -113,6 +127,7 @@ async def get_forex_rates():
     }
 
 @app.get("/health")
+@app.get("/api/health")
 async def health_check():
     return {"status": "healthy", "service": settings.APP_NAME}
 

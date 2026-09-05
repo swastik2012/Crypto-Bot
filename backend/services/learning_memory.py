@@ -6,6 +6,8 @@ from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
+BUNDLED_SEED_FILE = Path(__file__).resolve().parent.parent / "data" / "trade_learnings.json"
+
 if is_serverless:
     DATA_DIR = Path("/tmp/data")
 else:
@@ -95,6 +97,7 @@ class LearningMemoryService:
 
     def _save_to_disk(self):
         try:
+            LEARNINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
             data = [l.dict() for l in self.learnings]
             with open(LEARNINGS_FILE, "w") as f:
                 json.dump(data, f, indent=2)
@@ -102,16 +105,27 @@ class LearningMemoryService:
             print(f"[LearningMemory] Save notice: {e}")
 
     def _load_from_disk(self):
-        if LEARNINGS_FILE.exists():
+        # In serverless, seed from bundled file if active storage doesn't exist yet
+        if not LEARNINGS_FILE.exists() and BUNDLED_SEED_FILE.exists() and LEARNINGS_FILE != BUNDLED_SEED_FILE:
             try:
-                with open(LEARNINGS_FILE, "r") as f:
+                LEARNINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+                import shutil
+                shutil.copyfile(BUNDLED_SEED_FILE, LEARNINGS_FILE)
+                print(f"[LearningMemory] Seeded {LEARNINGS_FILE} from bundled {BUNDLED_SEED_FILE}")
+            except Exception as seed_err:
+                print(f"[LearningMemory] Seed copy notice: {seed_err}")
+
+        target = LEARNINGS_FILE if LEARNINGS_FILE.exists() else (BUNDLED_SEED_FILE if BUNDLED_SEED_FILE.exists() else None)
+        if target and target.exists():
+            try:
+                with open(target, "r") as f:
                     raw_data = json.load(f)
                     self.learnings = [TradePostMortem(**item) for item in raw_data]
                     return
             except Exception as e:
                 print(f"[LearningMemory] Load notice: {e}")
 
-        # Seed with initial institutional learnings
+        # Seed with initial institutional learnings if no seed file present
         self.learnings = [TradePostMortem(**item) for item in DEFAULT_SEED_LEARNINGS]
         self._save_to_disk()
 
