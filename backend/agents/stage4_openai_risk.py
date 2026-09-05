@@ -1,5 +1,6 @@
 import time
 import json
+import asyncio
 import httpx
 from typing import Dict, Any, Tuple, List
 from backend.models.schemas import (
@@ -113,12 +114,12 @@ async def run_stage4_openai_risk(
 
     system_prompt = (
         "You are the Chief Risk Officer and Devil's Advocate for an institutional AI crypto hedge fund. "
-        "Your sole duty is to protect fund equity by ruthlessly searching for reasons NOT to take the trade.\n\n"
-        "MANDATORY RISK AUDIT CHECKLIST:\n"
-        "1. LIQUIDITY TRAP & FAKEOUT AUDIT: Is price sweeping previous swing highs/lows just to trap retail breakout traders? Calculate false_breakout_probability (0.0 to 100.0).\n"
-        "2. NEWS EXHAUSTION: Is the Stage 2 narrative already priced in ('buy the rumor, sell the news')?\n"
-        "3. PORTFOLIO CORRELATION: Check existing open positions to ensure the portfolio is not over-concentrated in one direction.\n"
-        "4. VETO POWER: If false_breakout_probability >= 40.0% or the R:R is substandard, you MUST downgrade safety_score (< 65) and provide a macro_trap_alert warning.\n\n"
+        "Your sole duty is to protect fund capital by ruthlessly searching for reasons NOT to take the trade.\n\n"
+        "MANDATORY INSTITUTIONAL RISK AUDIT CHECKLIST:\n"
+        "1. LIQUIDITY TRAPS & SWEEPS: Check if price has merely swept prior session highs/lows to trigger retail stop-runs before reversing. Compute false_breakout_probability (0.0 to 100.0).\n"
+        "2. ASYMMETRIC R:R HURDLE: Verify that the trade achieves at least 1:2.2 R:R to TP1. If R:R < 2.0, you MUST penalize safety_score (< 60).\n"
+        "3. NEWS & MOMENTUM EXHAUSTION: Check if Stage 2's macro news catalyst is already priced in ('buy the rumor, sell the news').\n"
+        "4. CHOP & COUNTER-TREND VETO: If multi-timeframe alignment opposes the 1D Macro Tide or price is trapped in consolidation, enforce an immediate VETO (safety_score < 50, issue macro_trap_alert).\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
@@ -161,7 +162,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "max_tokens": 450,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(4.5, connect=1.5)) as client:
                 resp = await client.post(
                     "https://integrate.api.nvidia.com/v1/chat/completions",
                     headers=headers,
@@ -183,7 +184,7 @@ async def run_stage4_openai_risk(
         except Exception as e:
             print(f"[Stage 4 NVIDIA Risk Officer Notice]: {e}")
 
-    # 2. Secondary Failover: OpenAI Flagship Risk Guard
+    # 2. Secondary Failover: OpenAI Flagship Risk Guard (Fast failover on 429 quota exhaustion)
     if not parsed_successfully and openai_key and not openai_key.startswith("your-"):
         try:
             headers = {
@@ -199,7 +200,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -224,9 +225,9 @@ async def run_stage4_openai_risk(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            gemini_model = settings.GEMINI_MODEL or "gemini-3.6-flash"
+            gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
             llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
             raw_text = resp.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()

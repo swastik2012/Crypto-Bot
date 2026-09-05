@@ -27,14 +27,14 @@ class Settings(BaseSettings):
     
     # Aliases
     NVIDIA_NIM_API_KEY: Optional[str] = os.getenv("NVIDIA_API_KEY", "")
-    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "deepseek-ai/deepseek-v4-pro")
+    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.6-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Model Defaults
-    DEFAULT_GEMINI_MODEL: str = "gemini-3.6-flash"
-    DEFAULT_NVIDIA_MODEL: str = "deepseek-ai/deepseek-v4-pro"
+    DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
     

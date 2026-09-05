@@ -1,5 +1,6 @@
 import time
 import json
+import asyncio
 import httpx
 from typing import Dict, Any, Tuple, List
 from backend.models.schemas import Stage2NewsSentimentResult, NewsArticleSchema, DebateMessageSchema
@@ -21,7 +22,7 @@ async def run_stage2_news_sentiment(
     """
     base_sym = symbol.split("/")[0].upper()
     nvidia_key = api_key or settings.NVIDIA_NIM_API_KEY
-    model_name = settings.NVIDIA_MODEL or "deepseek-ai/deepseek-v4-pro"
+    model_name = settings.NVIDIA_MODEL or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     
     # 1. Fetch live articles from CoinDesk, Cointelegraph, and CryptoSlate
     articles_raw = await news_scraper.get_latest_news_for_asset(symbol)
@@ -36,16 +37,16 @@ async def run_stage2_news_sentiment(
     system_prompt = (
         "You are the Senior Crypto Macro & News Intelligence Node for an institutional AI trading hedge fund. "
         "Your task is to ingest real-time news headlines from CoinDesk, Cointelegraph, and CryptoSlate, "
-        "and rigorously dissect genuine structural catalysts vs retail hype or 'sell-the-news' exhaustion traps.\n\n"
-        "EVALUATION CRITERIA:\n"
-        "1. STRUCTURAL CATALYSTS (Score > 75): Substantial net spot ETF inflows, sovereign/institutional accumulation, major protocol mainnet launches, favorable regulatory court precedents.\n"
-        "2. BEARISH / DISTRIBUTION DRIVERS (Score < 45): Spot exchange inflows (whale dumping), government token sales, macro monetary tightening, legal enforcement actions, derivatives de-leveraging.\n"
-        "3. EQUILIBRIUM / CHOP (Score 45 - 60): Mixed or low-impact news; market waiting for upcoming CPI/FOMC or key unlock events.\n\n"
+        "and rigorously dissect genuine structural catalysts vs retail hype, FUD traps, or 'sell-the-news' exhaustion.\n\n"
+        "INSTITUTIONAL EVALUATION CRITERIA:\n"
+        "1. STRUCTURAL CATALYSTS (Score > 75): Substantial net spot ETF inflows, sovereign/institutional treasury accumulation, major Layer-1/DeFi infrastructure milestones, favorable legal/regulatory clarity.\n"
+        "2. BEARISH DISTRIBUTION DRIVERS (Score < 45): Spot exchange inflows (whale dumping), government token sales, macro monetary tightening, legal enforcement actions, derivatives de-leveraging liquidations.\n"
+        "3. EQUILIBRIUM / CHOP (Score 45 - 60): Mixed, low-impact noise; market awaiting CPI/FOMC or key unlock events. Avoid taking aggressive risk in equilibrium news flow.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "sentiment_label": "BULLISH" | "NEUTRAL" | "BEARISH",\n'
         '  "sentiment_score": float (0.0 to 100.0),\n'
-        '  "news_gist": "2-3 sentence institutional executive summary explaining how current macro news impacts price direction",\n'
+        '  "news_gist": "2-3 sentence institutional executive summary explaining how current macro news impacts price direction and liquidity",\n'
         '  "key_catalysts": ["catalyst 1", "catalyst 2", "catalyst 3"],\n'
         '  "macro_narrative": "Dominant overarching narrative (e.g. Institutional Spot Inflows vs Regulatory Headwinds)",\n'
         '  "source_sentiment_breakdown": {\n'
@@ -159,7 +160,7 @@ async def run_stage2_news_sentiment(
                 "temperature": 0.1,
                 "max_tokens": 1000,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(1.0, connect=1.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=1.5)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -185,9 +186,9 @@ async def run_stage2_news_sentiment(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            gemini_model = settings.GEMINI_MODEL or "gemini-3.6-flash"
+            gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
             llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
             raw_text = resp.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()

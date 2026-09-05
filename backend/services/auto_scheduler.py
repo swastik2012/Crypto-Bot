@@ -212,7 +212,7 @@ class AutoTradingScheduler:
                 # Pure AI Multi-Agent Decision (NVIDIA NIM Risk Officer + Gemini Arbiter)
                 # ========================================================
                 can_execute = (
-                    confidence >= 75.0 and
+                    confidence >= 78.0 and
                     (is_buy or is_short) and
                     not already_open and
                     not portfolio_full
@@ -228,15 +228,15 @@ class AutoTradingScheduler:
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG
 
-                    # Compute accurate directional fallbacks
+                    # Compute accurate directional fallbacks (+7.8% TP1, +15.0% TP2, -3.4% SL)
                     if is_short:
-                        default_tp1 = round(current_price * 0.935, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 0.880, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 1.042, 4 if current_price < 1 else 2)
+                        default_tp1 = round(current_price * 0.922, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 0.850, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 1.034, 4 if current_price < 1 else 2)
                     else:
-                        default_tp1 = round(current_price * 1.065, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 1.120, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 0.958, 4 if current_price < 1 else 2)
+                        default_tp1 = round(current_price * 1.078, 4 if current_price < 1 else 2)
+                        default_tp2 = round(current_price * 1.150, 4 if current_price < 1 else 2)
+                        default_sl = round(current_price * 0.966, 4 if current_price < 1 else 2)
 
                     tp1 = plan.get("take_profit_1") or default_tp1 if isinstance(plan, dict) else (getattr(plan, "take_profit_1", None) or default_tp1)
                     tp2 = plan.get("take_profit_2") or default_tp2 if isinstance(plan, dict) else (getattr(plan, "take_profit_2", None) or default_tp2)

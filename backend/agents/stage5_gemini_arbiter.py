@@ -1,5 +1,6 @@
 import time
 import json
+import asyncio
 import httpx
 from typing import Dict, Any, Tuple, List
 from backend.models.schemas import (
@@ -92,9 +93,9 @@ async def run_stage5_gemini_arbiter(
             else:
                 signal = SignalAction.HOLD
 
-            tp1 = thesis.get("take_profit_1", round(current_price * 0.935, 2))
-            tp2 = thesis.get("take_profit_2", round(current_price * 0.880, 2))
-            sl = thesis.get("stop_loss", round(current_price * 1.042, 2))
+            tp1 = thesis.get("take_profit_1", round(current_price * 0.922, 2))
+            tp2 = thesis.get("take_profit_2", round(current_price * 0.850, 2))
+            sl = thesis.get("stop_loss", round(current_price * 1.034, 2))
             invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
             summary = (
                 f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
@@ -137,16 +138,16 @@ async def run_stage5_gemini_arbiter(
             (openai_score * 0.25),
             1
         )
-        if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+        if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
             signal = SignalAction.STRONG_BUY
         elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
             signal = SignalAction.BUY
         else:
             signal = SignalAction.HOLD
 
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.065, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.120, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.958, 2))
+        tp1 = thesis.get("take_profit_1", round(current_price * 1.078, 2))
+        tp2 = thesis.get("take_profit_2", round(current_price * 1.150, 2))
+        sl = thesis.get("stop_loss", round(current_price * 0.966, 2))
         invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
         summary = (
             f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
@@ -158,10 +159,10 @@ async def run_stage5_gemini_arbiter(
         "You are Agent 5 (Chief Consensus Arbiter & Trade Synthesizer powered by Google Gemini). "
         "Your duty is to impartially reconcile the multi-agent debate across: "
         "Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (Quant Monte Carlo Proof), and Stage 4 (Devil's Advocate Risk Guard).\n\n"
-        "ARBITRATION MANDATES:\n"
-        "1. VETO COMPLIANCE: If Stage 4 OpenAI flags false_breakout_probability >= 40.0% OR Stage 3 NVIDIA NIM flags R:R < 1.8, you MUST issue 'HOLD' (Neutral Stand Aside) to prevent capital destruction.\n"
-        "2. HIGH CONVICTION CRITERIA: Issue 'STRONG BUY' or 'STRONG SELL' only when consensus agreement >= 88.0% with zero critical trap alerts.\n"
-        "3. EXECUTION DISCIPLINE: Provide concise institutional synthesis, exact TP1 (50% scale-out), TP2 (trailing runner), and precise price invalidation condition.\n\n"
+        "ARBITRATION MANDATES FOR MAXIMUM PROFITABILITY:\n"
+        "1. STRICT VETO COMPLIANCE: If Stage 4 flags false_breakout_probability >= 35.0%, safety_score < 65, OR Stage 3 flags R:R < 2.0 or negative EV, you MUST issue 'HOLD' (Neutral Stand Aside) to prevent capital destruction.\n"
+        "2. HIGH CONVICTION CRITERIA: Issue 'STRONG BUY' or 'STRONG SELL' only when consensus agreement >= 85.0%, multi-timeframe concordance is at least 2/3, and zero critical macro trap alerts.\n"
+        "3. PROFIT HARVESTING DISCIPLINE: Provide concise institutional synthesis, exact TP1 (+7.8% - +8.5%, 50% scale-out with stop locked to break-even), TP2 (+15.0% - +18.0% runner), and precise structural invalidation.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "consensus_signal": "STRONG BUY" | "BUY" | "HOLD" | "SELL" | "STRONG SELL",\n'
@@ -172,7 +173,7 @@ async def run_stage5_gemini_arbiter(
     )
 
     user_prompt = (
-        f"ASSET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
+        f"ASSET: {symbol} | Current Price: ${current_price:,.2f} | MTF Alignment: {mtf_align}\n\n"
         f"1. STAGE 1 VISION: Direction={direction}, Patterns={[p.name for p in stage1.patterns]}\n"
         f"2. STAGE 2 NEWS GIST: Sentiment={stage2.sentiment_label} ({stage2.sentiment_score}%), Gist={stage2.news_gist}\n"
         f"3. STAGE 3 QUANT PROOF: Win Rate={stage3.monte_carlo_win_rate}%, R:R=1:{stage3.risk_reward_ratio}, Stress Score={stage3.stress_test_score}\n"
@@ -185,9 +186,9 @@ async def run_stage5_gemini_arbiter(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            target_engine = settings.GEMINI_MODEL or "gemini-3.6-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-2.5-flash"
             llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
-            resp = await llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")])
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
             raw_text = resp.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()

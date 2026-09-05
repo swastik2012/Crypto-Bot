@@ -1,5 +1,6 @@
 import time
 import json
+import asyncio
 from typing import Dict, Any, Tuple, List
 from backend.models.schemas import Stage1GeminiVisionResult, TechnicalPattern, SupportResistanceLevel, DebateMessageSchema
 from backend.config import settings
@@ -47,30 +48,33 @@ def _format_portfolio_context(account_state: Dict[str, Any]) -> str:
 STAGE1_SYSTEM_PROMPT = """You are Agent 1 (Chief Technical Visual Analyst powered by Google Gemini Vision).
 Your task is to conduct an uncompromising, institutional-grade technical analysis of the cryptocurrency chart.
 
-CRITICAL DIRECTIVES:
-1. MARKET REGIME & TREND STRUCTURE:
-   - Accurately determine if price is in:
-     * Bullish Continuation (Higher Highs / Higher Lows above key EMAs, expanding volume delta).
-     * Bearish Breakdown (Lower Highs / Lower Lows below key EMAs, supply rejection).
-     * Range Consolidation / Chop Squeeze (Price trapped inside horizontal support/resistance boundaries).
+CRITICAL DIRECTIVES FOR MAXIMUM PROFITABILITY:
+1. INSTITUTIONAL SMART MONEY CONCEPTS (SMC) & REGIME:
+   - Identify high-probability institutional footprints:
+     * Bullish/Bearish Order Blocks (OB): Unmitigated institutional demand or supply absorption blocks.
+     * Fair Value Gaps (FVG) / Liquidity Imbalances: Price returning to fill inefficiency before explosive continuation.
+     * Liquidity Sweeps / Turtle Soup: Wicks below prior swing lows or above prior swing highs that engineer retail stop runs before decisive displacement.
+     * Break of Structure (BOS) vs Change of Character (CHoCH) confirming structural shift.
 2. CAPITAL PRESERVATION & CHOP AVOIDANCE:
-   - If price is trading mid-range with contracting volume or conflicting signals, you MUST set direction to "NEUTRAL" (HOLD). Never force a directional entry in chop.
-   - Require a minimum 1:2.0 Risk:Reward ratio to the next structural liquidity level.
-3. PRECISE ASYMMETRIC EXECUTION TARGETS (SWING CALIBRATION):
-   - suggested_entry: Exact optimal limit/market entry zone.
-   - take_profit_1: First major structural resistance / liquidity target (+6.0% to +8.0% for Longs). Recommend 50% scale-out.
-   - take_profit_2: Macro Fibonacci extension runner (+12.0% to +16.0% for Longs).
-   - stop_loss: Hard structural invalidation placed safely beyond key swing levels (-3.8% to -5.0% distance to prevent noise wicks).
+   - If price is consolidating mid-range, trapped inside contracting Bollinger Bands, or volume delta is flat/neutral, you MUST set direction to "NEUTRAL" (HOLD).
+   - NEVER force a trade in chop. Missing consolidation is 100x better than taking a losing chop trade.
+   - Strictly veto any counter-trend trade fighting the 1D Macro Tide.
+3. PRECISE ASYMMETRIC EXECUTION TARGETS (HIGH-PROFIT SWING CALIBRATION):
+   - suggested_entry: Optimal limit/market entry zone at the edge of the demand/supply order block.
+   - take_profit_1: First major structural resistance / liquidity target (+7.8% to +8.5% for Longs, -7.8% to -8.5% for Shorts). 50% scale-out level with trailing stop locked to break-even.
+   - take_profit_2: Macro Fibonacci 1.618 extension runner (+14.5% to +18.0% for Longs, -14.5% to -18.0% for Shorts) to capture maximum swing expansion.
+   - stop_loss: Hard structural invalidation placed safely beyond key swing order blocks (-3.2% to -3.5% distance for Longs, +3.2% to +3.5% for Shorts).
+   - STRICT ASYMMETRY RULE: The setup MUST offer a minimum 1:2.2 Risk:Reward ratio to TP1, and > 1:3.5 blended R:R. If R:R < 2.0, reject the trade as "NEUTRAL".
 
 Return ONLY a valid JSON object matching this schema:
 {
   "patterns": [
     {
-      "name": "Pattern Name (e.g. Ascending Triangle / Bull Flag / Order Block Retest)",
+      "name": "Pattern Name (e.g. Order Block Demand Retest / Bullish FVG Mitigation / Liquidity Sweep Spring)",
       "type": "bullish_continuation" | "reversal_breakdown" | "consolidation" | "divergence",
       "timeframe": "1H" | "4H" | "1D",
       "reliability": float,
-      "description": "Technical description of trendline geometry and volume profile"
+      "description": "Technical description of trendline geometry, order blocks, and volume profile"
     }
   ],
   "key_levels": [
@@ -94,7 +98,7 @@ Return ONLY a valid JSON object matching this schema:
     "take_profit_2": float,
     "stop_loss": float,
     "suggested_allocation_pct": float,
-    "rationale": "High-conviction rationale explaining structural trigger and invalidation"
+    "rationale": "High-conviction rationale explaining structural trigger, liquidity sweep, and exact invalidation"
   }
 }"""
 
@@ -168,7 +172,7 @@ async def run_stage1_gemini_vision(
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             
-            target_engine = settings.GEMINI_MODEL or "gemini-3.6-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-2.5-flash"
             llm = ChatGoogleGenerativeAI(
                 model=target_engine,
                 google_api_key=effective_key,
@@ -201,7 +205,7 @@ async def run_stage1_gemini_vision(
             else:
                 msg = HumanMessage(content=f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}")
 
-            response = await llm.ainvoke([msg])
+            response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=8.0)
             raw_text = response.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()
@@ -326,9 +330,9 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=89.5, description=chosen[2]),
             TechnicalPattern(name="Bearish EMA 20/50 Death Spread", type="moving_average", timeframe=timeframe, reliability=86.2, description=f"20 EMA accelerating downward spread below 50 EMA baseline."),
         ]
-        target1 = round(p * 0.935, 4 if p < 1 else 2)
-        target2 = round(p * 0.880, 4 if p < 1 else 2)
-        stopLoss = round(p * 1.042, 4 if p < 1 else 2)
+        target1 = round(p * 0.922, 4 if p < 1 else 2)
+        target2 = round(p * 0.850, 4 if p < 1 else 2)
+        stopLoss = round(p * 1.034, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bearish Distribution", "signal": "SELL"}
         volume_analysis = f"24h sell delta dominant with {vol_str} turnover and repeated rejections at upper resistance band."
         initial_thesis = {
@@ -338,9 +342,9 @@ async def run_stage1_gemini_vision(
             "take_profit_2": target2,
             "stop_loss": stopLoss,
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum).",
+            "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum). Asymmetric R:R 1:2.29 to TP1.",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f}."
+        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f} (1:2.29 R:R)."
         pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
 
     elif direction == "NEUTRAL":
@@ -382,9 +386,9 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=93.2, description=chosen[2]),
             TechnicalPattern(name="Bullish Momentum Convergence", type="momentum", timeframe=timeframe, reliability=88.5, description=f"Positive volume delta (+18.4%) and higher swing lows supporting upside continuation."),
         ]
-        target1 = round(p * 1.065, 4 if p < 1 else 2)
-        target2 = round(p * 1.120, 4 if p < 1 else 2)
-        stopLoss = round(p * 0.958, 4 if p < 1 else 2)
+        target1 = round(p * 1.078, 4 if p < 1 else 2)
+        target2 = round(p * 1.150, 4 if p < 1 else 2)
+        stopLoss = round(p * 0.966, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bullish Expansion", "signal": "BUY"}
         volume_analysis = f"Expanding buyer delta (+22.4% net volume) with {vol_str} 24h turnover confirming institutional accumulation."
         initial_thesis = {
@@ -394,9 +398,9 @@ async def run_stage1_gemini_vision(
             "take_profit_2": target2,
             "stop_loss": stopLoss,
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum).",
+            "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum). Asymmetric R:R 1:2.29 to TP1.",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f}."
+        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f} (1:2.29 R:R)."
         pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
 
     key_levels = [
