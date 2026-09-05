@@ -11,8 +11,8 @@ for d in [str(root_dir), str(backend_dir)]:
 
 try:
     from backend.main import app
-    from mangum import Mangum
-    handler = Mangum(app, lifespan="off")
+    # Vercel Serverless Python natively supports ASGI FastAPI applications
+    handler = app
 except Exception as e:
     err_trace = traceback.format_exc()
     from fastapi import FastAPI
@@ -35,4 +35,4 @@ except Exception as e:
             "traceback": err_trace
         }, status_code=500)
         
-    handler = Mangum(app, lifespan="off")
+    handler = app
