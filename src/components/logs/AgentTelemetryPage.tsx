@@ -553,43 +553,6 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
       </GlassCard>
 
       {/* ========================================================================= */}
-      {/* 📜 REAL-TIME STREAMING API LOGS & JSON PAYLOADS */}
-      {/* ========================================================================= */}
-      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
-        {/* Provider Filter Tabs */}
-        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 w-full sm:w-auto overflow-x-auto">
-          {providers.map((p) => {
-            const isSelected = selectedProvider === p;
-            return (
-              <button
-                key={p}
-                onClick={() => setSelectedProvider(p)}
-                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
-                  isSelected
-                    ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
-                }`}
-              >
-                {p}
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Search Filter Input */}
-        <div className="relative w-full sm:w-80">
-          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search prompts, payloads, models..."
-            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/80 dark:bg-dark-900 border border-slate-300/80 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 shadow-xs"
-          />
-        </div>
-      </div>
-
-      {/* ========================================================================= */}
       {/* 🧠 AI SELF-LEARNING ADAPTIVE MEMORY & POST-MORTEM FEEDBACK LOOP */}
       {/* ========================================================================= */}
       <GlassCard className="p-4 sm:p-6 border border-purple-500/30 shadow-glass-lg">
@@ -647,12 +610,49 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
 
               <div className="text-[9px] text-slate-500 flex items-center justify-between pt-1 border-t border-purple-500/10">
                 <span>Exit: {learn.exit_reason}</span>
-                <span>{new Date((learn.timestamp || Date.now() / 1000) * 1000).toLocaleDateString()}</span>
+                <span>{learn.timestamp ? new Date(learn.timestamp * 1000).toLocaleDateString() : 'Recent'}</span>
               </div>
             </div>
           ))}
         </div>
       </GlassCard>
+
+      {/* ========================================================================= */}
+      {/* 📜 REAL-TIME STREAMING API LOGS & JSON PAYLOADS FILTERS */}
+      {/* ========================================================================= */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5">
+        {/* Provider Filter Tabs */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 w-full sm:w-auto overflow-x-auto">
+          {providers.map((p) => {
+            const isSelected = selectedProvider === p;
+            return (
+              <button
+                key={p}
+                onClick={() => setSelectedProvider(p)}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition-all shrink-0 cursor-pointer ${
+                  isSelected
+                    ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+                }`}
+              >
+                {p}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search Filter Input */}
+        <div className="relative w-full sm:w-80">
+          <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search prompts, payloads, models..."
+            className="w-full pl-9 pr-3 py-1.5 rounded-xl bg-white/80 dark:bg-dark-900 border border-slate-300/80 dark:border-white/10 text-xs text-slate-900 dark:text-slate-100 placeholder:text-slate-400 focus:outline-none focus:border-cyan-500/60 shadow-xs"
+          />
+        </div>
+      </div>
 
       {/* Live Stream Table */}
       <GlassCard className="p-3 sm:p-4 border border-white/80 dark:border-white/10 shadow-glass-md overflow-hidden">
