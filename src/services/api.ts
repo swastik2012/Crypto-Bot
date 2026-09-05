@@ -3,10 +3,17 @@
  * Dynamically supports local dev (http://127.0.0.1:8000) and Vercel Serverless
  */
 
-const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const isLocalhost = typeof window !== 'undefined' && (
+  window.location.hostname === 'localhost' || 
+  window.location.hostname === '127.0.0.1' ||
+  window.location.hostname.startsWith('192.168.') ||
+  window.location.hostname.startsWith('10.') ||
+  window.location.hostname.startsWith('172.') ||
+  window.location.hostname.endsWith('.local')
+);
 const API_BASE_URL = import.meta.env.VITE_API_URL !== undefined 
   ? import.meta.env.VITE_API_URL 
-  : (isLocalhost ? 'http://127.0.0.1:8000' : '');
+  : (isLocalhost && typeof window !== 'undefined' ? `http://${window.location.hostname}:8000` : '');
 
 const WS_BASE_URL = import.meta.env.VITE_WS_URL || (
   API_BASE_URL.startsWith('https')

@@ -55,20 +55,20 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
   return (
     <AnimatePresence>
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-2 sm:p-4 bg-black/60 backdrop-blur-sm">
           
           {/* Backdrop click dismiss */}
           <div className="absolute inset-0" onClick={onClose} />
 
           {/* Modal Window */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.96, y: 8 }}
+            initial={{ opacity: 0, scale: 0.96, y: 16 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.96, y: 8 }}
+            exit={{ opacity: 0, scale: 0.96, y: 16 }}
             transition={{ duration: 0.15, ease: 'easeOut' }}
-            className="relative z-10 w-full max-w-2xl max-h-[90vh] overflow-y-auto"
+            className="relative z-10 w-full max-w-2xl max-h-[88dvh] overflow-y-auto rounded-t-3xl sm:rounded-3xl"
           >
-            <GlassCard className="p-5 sm:p-6 border border-white/20 dark:border-white/10 shadow-glass-lg space-y-5">
+            <GlassCard className="p-4 sm:p-6 border border-white/20 dark:border-white/10 shadow-glass-lg space-y-4 sm:space-y-5 rounded-t-3xl sm:rounded-3xl">
               
               {/* Header */}
               <div className="flex items-center justify-between border-b border-slate-200/60 dark:border-white/10 pb-3">

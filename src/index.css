@@ -28,7 +28,27 @@
     color: var(--text-main);
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
     transition: background-color 0.3s cubic-bezier(0.4, 0, 0.2, 1), color 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    -webkit-tap-highlight-color: transparent;
+    overflow-x: hidden;
   }
+}
+
+/* Mobile Safe Area & Layout Utilities */
+.pb-safe {
+  padding-bottom: max(1.25rem, calc(env(safe-area-inset-bottom) + 1rem));
+}
+
+.pb-dock {
+  padding-bottom: max(5.5rem, calc(env(safe-area-inset-bottom) + 4.5rem));
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
 
 /* Apple Liquid Glass Styling Utilities */

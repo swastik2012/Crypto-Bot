@@ -246,77 +246,133 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
 
       {/* Tab 2: Persistent Completed Trade History Log */}
       {activeTab === 'HISTORY' && (
-        <div className="space-y-2 font-mono">
+        <div className="space-y-3 font-mono">
           {history.length === 0 ? (
             <div className="p-6 text-center text-xs text-slate-500 dark:text-slate-400 font-mono">
               No closed trade records yet.
             </div>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-white/10 text-[10px] text-slate-400 uppercase font-bold">
-                    <th className="py-2 px-3">Asset</th>
-                    <th className="py-2 px-3">Side / Lev</th>
-                    <th className="py-2 px-3">Entry</th>
-                    <th className="py-2 px-3">Exit</th>
-                    <th className="py-2 px-3">Gross PnL</th>
-                    <th className="py-2 px-3">Fees & TDS</th>
-                    <th className="py-2 px-3">Net PnL</th>
-                    <th className="py-2 px-3">Exit Reason</th>
-                    <th className="py-2 px-3 text-right">Closed At</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                  {history.map((item) => {
-                    const grossPnl = item.realized_pnl;
-                    const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
-                    const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);
-                    const isWin = netPnl >= 0;
-                    return (
-                      <tr key={item.trade_id} className="hover:bg-slate-100/50 dark:hover:bg-dark-800/40 transition-colors">
-                        <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-100">
-                          {item.symbol}
-                        </td>
-                        <td className="py-2.5 px-3">
+            <>
+              {/* Mobile Card View (Screens < sm) */}
+              <div className="sm:hidden space-y-2.5">
+                {history.map((item) => {
+                  const grossPnl = item.realized_pnl;
+                  const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
+                  const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);
+                  const isWin = netPnl >= 0;
+
+                  return (
+                    <div
+                      key={item.trade_id}
+                      className="p-3.5 rounded-2xl bg-white/80 dark:bg-dark-900/80 border border-slate-200 dark:border-white/5 space-y-2 shadow-xs"
+                    >
+                      {/* Top Header: Symbol, Side, Net PnL */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black text-sm text-slate-900 dark:text-slate-100">{item.symbol}</span>
                           <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.side === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
                             {item.side} {item.leverage}x
                           </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
-                          {formatPrice(item.entry_price)}
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
-                          {formatPrice(item.exit_price)}
-                        </td>
-                        <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
-                          {grossPnl >= 0 ? '+' : '-'}{formatPrice(Math.abs(grossPnl))}
-                        </td>
-                        <td className="py-2.5 px-3 text-rose-500 text-[11px]">
-                          -{formatPrice(totalFees)}
-                          {item.tds_deducted ? (
-                            <span className="text-[9px] text-amber-500 block font-bold">Incl 1% TDS</span>
-                          ) : (
-                            <span className="text-[9px] text-slate-400 block">{item.exchange_name || 'Binance'}</span>
-                          )}
-                        </td>
-                        <td className={`py-2.5 px-3 font-black ${isWin ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                        </div>
+                        <div className={`font-black text-sm ${isWin ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
                           {isWin ? '+' : '-'}{formatPrice(Math.abs(netPnl))}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className="text-[10px] text-slate-500 bg-slate-200/50 dark:bg-dark-800 px-2 py-0.5 rounded-full">
-                            {item.exit_reason.replace(/_/g, ' ')}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-slate-400 text-[10px]">
+                        </div>
+                      </div>
+
+                      {/* Entry -> Exit & Close Time */}
+                      <div className="grid grid-cols-2 gap-2 text-[11px] p-2 rounded-xl bg-slate-100/80 dark:bg-dark-850">
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Entry Price</span>
+                          <span className="font-bold text-slate-700 dark:text-slate-300">{formatPrice(item.entry_price)}</span>
+                        </div>
+                        <div>
+                          <span className="text-[9px] text-slate-400 block font-bold uppercase">Exit Price</span>
+                          <span className="font-bold text-cyan-600 dark:text-cyan-400">{formatPrice(item.exit_price)}</span>
+                        </div>
+                      </div>
+
+                      {/* Fees, Reason & Timestamp */}
+                      <div className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1 border-t border-slate-100 dark:border-white/5">
+                        <span className="text-rose-500 font-semibold">Fees: -{formatPrice(totalFees)}</span>
+                        <span className="bg-slate-200/60 dark:bg-dark-800 px-2 py-0.5 rounded-full font-medium">
+                          {item.exit_reason.replace(/_/g, ' ')}
+                        </span>
+                        <span>
                           {new Date(item.closed_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Desktop Table View (Screens >= sm) */}
+              <div className="hidden sm:block overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-white/10 text-[10px] text-slate-400 uppercase font-bold">
+                      <th className="py-2 px-3">Asset</th>
+                      <th className="py-2 px-3">Side / Lev</th>
+                      <th className="py-2 px-3">Entry</th>
+                      <th className="py-2 px-3">Exit</th>
+                      <th className="py-2 px-3">Gross PnL</th>
+                      <th className="py-2 px-3">Fees & TDS</th>
+                      <th className="py-2 px-3">Net PnL</th>
+                      <th className="py-2 px-3">Exit Reason</th>
+                      <th className="py-2 px-3 text-right">Closed At</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-white/5">
+                    {history.map((item) => {
+                      const grossPnl = item.realized_pnl;
+                      const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
+                      const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);
+                      const isWin = netPnl >= 0;
+                      return (
+                        <tr key={item.trade_id} className="hover:bg-slate-100/50 dark:hover:bg-dark-800/40 transition-colors">
+                          <td className="py-2.5 px-3 font-bold text-slate-800 dark:text-slate-100">
+                            {item.symbol}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${item.side === 'LONG' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-rose-500/10 text-rose-500'}`}>
+                              {item.side} {item.leverage}x
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                            {formatPrice(item.entry_price)}
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                            {formatPrice(item.exit_price)}
+                          </td>
+                          <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
+                            {grossPnl >= 0 ? '+' : '-'}{formatPrice(Math.abs(grossPnl))}
+                          </td>
+                          <td className="py-2.5 px-3 text-rose-500 text-[11px]">
+                            -{formatPrice(totalFees)}
+                            {item.tds_deducted ? (
+                              <span className="text-[9px] text-amber-500 block font-bold">Incl 1% TDS</span>
+                            ) : (
+                              <span className="text-[9px] text-slate-400 block">{item.exchange_name || 'Binance'}</span>
+                            )}
+                          </td>
+                          <td className={`py-2.5 px-3 font-black ${isWin ? 'text-emerald-700 dark:text-emerald-400' : 'text-rose-700 dark:text-rose-400'}`}>
+                            {isWin ? '+' : '-'}{formatPrice(Math.abs(netPnl))}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className="text-[10px] text-slate-500 bg-slate-200/50 dark:bg-dark-800 px-2 py-0.5 rounded-full">
+                              {item.exit_reason.replace(/_/g, ' ')}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3 text-right text-slate-400 text-[10px]">
+                            {new Date(item.closed_at * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </div>
       )}

@@ -120,13 +120,13 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
   };
 
   return (
-    <GlassCard className="p-4 sm:p-6 border border-white/80 dark:border-white/10 shadow-glass-lg relative overflow-hidden">
+    <GlassCard className="p-3 sm:p-6 border border-white/80 dark:border-white/10 shadow-glass-lg relative overflow-hidden">
       
       {/* Top Header: Price & Controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 mb-3 sm:mb-4">
         
         {/* Left: Asset Price & 24h Delta */}
-        <div className="flex items-center gap-3">
+        <div className="flex items-center justify-between sm:justify-start gap-2.5 sm:gap-3">
           <div className="flex items-center gap-2">
             <span className="text-xl sm:text-3xl font-black text-slate-900 dark:text-slate-100 font-mono tracking-tight">
               {formatPrice(asset.price)}
@@ -148,14 +148,14 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
         </div>
 
         {/* Right: Timeframe & AI Holographic Overlays HUD Toggle */}
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 w-full sm:w-auto">
           
           {/* AI Technical HUD Toggle */}
           <motion.button
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={() => setShowAiOverlays(!showAiOverlays)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-mono text-xs font-bold transition-all shadow-sm ${
+            className={`flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-xl font-mono text-[11px] sm:text-xs font-bold transition-all shadow-sm ${
               showAiOverlays
                 ? 'bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-cyan-800 dark:text-cyan-300 border border-cyan-500/40 shadow-glow-cyan'
                 : 'bg-slate-200/70 dark:bg-dark-850 text-slate-600 dark:text-slate-400 border border-slate-300/60 dark:border-white/5 hover:text-slate-900 dark:hover:text-slate-200'
@@ -176,14 +176,14 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
           </motion.button>
 
           {/* Timeframe Selector Pills */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5">
+          <div className="flex items-center p-0.5 sm:p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 shrink-0">
             {timeIntervals.map((interval) => (
               <motion.button
                 key={interval}
                 whileHover={{ scale: 1.05 }}
                 whileTap={{ scale: 0.95 }}
                 onClick={() => onTimeIntervalChange(interval)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-mono font-bold transition-all ${
+                className={`px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-mono font-bold transition-all ${
                   timeInterval === interval
                     ? 'bg-cyan-500/25 text-cyan-800 dark:text-cyan-400 border border-cyan-500/50 shadow-sm'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
@@ -270,8 +270,8 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
                 </div>
               </div>
 
-              {/* Floating Dynamic Target Capsule Matrix (Docked on Right Side) */}
-              <div className="self-end flex flex-col gap-1.5 my-auto max-w-[240px] pointer-events-auto mr-1 sm:mr-14 md:mr-16">
+              {/* Floating Dynamic Target Capsule Matrix (Docked on Right Side on Desktop) */}
+              <div className="hidden sm:flex self-end flex-col gap-1.5 my-auto max-w-[240px] pointer-events-auto mr-1 sm:mr-14 md:mr-16">
                 {isShort ? (
                   /* Short Layout: High Price to Low Price -> SL (above) -> Entry -> TP1 -> TP2 */
                   <>
@@ -363,14 +363,32 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
                 )}
               </div>
 
+              {/* Mobile Target Summary Pill (Docked on Right for mobile) */}
+              <div className="sm:hidden self-end pointer-events-auto my-auto">
+                <div className="px-2.5 py-1.5 rounded-xl bg-slate-900/90 dark:bg-dark-900/95 backdrop-blur-md border border-cyan-400/40 font-mono text-[10px] flex flex-col gap-1 shadow-lg">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-cyan-300 font-bold">ENTRY</span>
+                    <span className="text-white font-bold">{formatPrice(entry)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-emerald-400 font-bold">TP1</span>
+                    <span className="text-emerald-300 font-bold">{formatPrice(target1)}</span>
+                  </div>
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-rose-400 font-bold">SL</span>
+                    <span className="text-rose-300 font-bold">{formatPrice(stopLoss)}</span>
+                  </div>
+                </div>
+              </div>
+
               {/* Bottom S/R Summary Bar */}
-              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300 bg-slate-950/80 dark:bg-dark-900/90 px-3 py-1.5 rounded-xl border border-white/10 backdrop-blur-md gap-2">
-                <div className="flex items-center gap-2 sm:gap-3 truncate">
-                  <span className="text-emerald-400 font-bold whitespace-nowrap">Support: {formatPrice(primarySupport.price)}</span>
+              <div className="flex items-center justify-between text-[10px] font-mono text-slate-300 bg-slate-950/85 dark:bg-dark-900/90 px-2.5 sm:px-3 py-1.5 rounded-xl border border-white/10 backdrop-blur-md gap-2">
+                <div className="flex items-center gap-1.5 sm:gap-3 truncate">
+                  <span className="text-emerald-400 font-bold whitespace-nowrap">Sup: {formatPrice(primarySupport.price)}</span>
                   <span className="text-emerald-400/80 hidden sm:inline truncate">({primarySupport.description})</span>
                 </div>
-                <div className="flex items-center gap-2 sm:gap-3 truncate">
-                  <span className="text-rose-400 font-bold whitespace-nowrap">Resistance: {formatPrice(primaryResistance.price)}</span>
+                <div className="flex items-center gap-1.5 sm:gap-3 truncate">
+                  <span className="text-rose-400 font-bold whitespace-nowrap">Res: {formatPrice(primaryResistance.price)}</span>
                   <span className="text-rose-400/80 hidden sm:inline truncate">({primaryResistance.description})</span>
                 </div>
               </div>
@@ -382,18 +400,18 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
       </div>
 
       {/* Hero Action Button: "Capture & Run Multi-Agent Analysis" */}
-      <div className="mt-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-        <div className="flex items-center gap-2 text-xs font-mono font-medium text-slate-600 dark:text-slate-400">
-          <Camera className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400" />
-          <span>Ingesting live <b>{tvSymbol}</b> [{formatPrice(p)}] into LangGraph consensus</span>
+      <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row items-center justify-between gap-2.5 sm:gap-3">
+        <div className="flex items-center gap-2 text-[11px] sm:text-xs font-mono font-medium text-slate-600 dark:text-slate-400 text-center sm:text-left">
+          <Camera className="w-3.5 h-3.5 text-cyan-600 dark:text-cyan-400 shrink-0" />
+          <span className="truncate">Ingesting <b>{tvSymbol}</b> [{formatPrice(p)}] into LangGraph</span>
         </div>
 
         <motion.button
-          whileHover={{ scale: 1.04, boxShadow: '0 0 30px rgba(0, 240, 255, 0.4)' }}
-          whileTap={{ scale: 0.95 }}
+          whileHover={{ scale: 1.03, boxShadow: '0 0 30px rgba(0, 240, 255, 0.4)' }}
+          whileTap={{ scale: 0.96 }}
           onClick={onRunAnalysis}
           disabled={isAnalyzing}
-          className={`w-full sm:w-auto relative group overflow-hidden px-6 py-3 rounded-2xl font-mono text-sm font-bold flex items-center justify-center gap-2.5 transition-all shadow-lg ${
+          className={`w-full sm:w-auto relative group overflow-hidden px-5 sm:px-6 py-3 min-h-[48px] rounded-2xl font-mono text-xs sm:text-sm font-bold flex items-center justify-center gap-2 transition-all shadow-lg cursor-pointer ${
             isAnalyzing
               ? 'bg-slate-600 text-slate-200 cursor-not-allowed'
               : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-purple-600 text-white shadow-glow-cyan'

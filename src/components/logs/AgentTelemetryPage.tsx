@@ -458,8 +458,8 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
           </div>
         </div>
 
-        {/* Stage Selector Tabs */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 my-4">
+        {/* Stage Selector Tabs (Horizontal Snap on Mobile, Grid on Desktop) */}
+        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-5 snap-x snap-mandatory my-3 sm:my-4">
           {STAGE_TEMPLATES.map((stage) => {
             const isSelected = selectedStageTab === stage.id;
             const Icon = stage.icon;
@@ -467,7 +467,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
               <button
                 key={stage.id}
                 onClick={() => setSelectedStageTab(stage.id)}
-                className={`p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
+                className={`min-w-[125px] sm:min-w-0 flex-1 snap-start shrink-0 sm:shrink p-2.5 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
                   isSelected
                     ? 'bg-gradient-to-b from-cyan-500/20 to-blue-500/10 border-cyan-500/50 shadow-glow-cyan text-cyan-800 dark:text-cyan-300'
                     : 'bg-slate-200/50 dark:bg-dark-900/60 border-slate-300/50 dark:border-white/5 text-slate-600 dark:text-slate-400 hover:border-slate-400 dark:hover:border-white/20'

@@ -15,6 +15,8 @@ import {
   Play,
   Pause,
   RotateCcw,
+  LineChart,
+  Terminal,
 } from 'lucide-react';
 import type { CryptoAsset } from '../../types';
 import { Badge } from '../common/Badge';
@@ -220,7 +222,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   exit={{ opacity: 0, y: 8, scale: 0.96 }}
                   transition={{ duration: 0.15 }}
                   onClick={(e) => e.stopPropagation()}
-                  className="absolute left-0 top-full mt-2 w-72 rounded-2xl liquid-glass p-2.5 border border-white/20 dark:border-white/10 shadow-glass-lg z-50 font-mono text-xs"
+                  className="absolute left-0 top-full mt-2 w-72 max-w-[calc(100vw-2rem)] rounded-2xl liquid-glass p-2.5 border border-white/20 dark:border-white/10 shadow-glass-lg z-50 font-mono text-xs"
                 >
                   <div className="relative mb-2">
                     <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
@@ -295,9 +297,9 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="font-extrabold text-[11px]">{currency}</span>
           </motion.button>
 
-          {/* View Switcher: Terminal vs Live API Logs */}
+          {/* Desktop View Switcher: Terminal vs Live API Logs (hidden on mobile, moved to bottom dock) */}
           {onViewChange && (
-            <div className="flex items-center gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-dark-900 border border-slate-300/60 dark:border-white/10 shrink-0 font-mono text-xs font-bold">
+            <div className="hidden md:flex items-center gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-dark-900 border border-slate-300/60 dark:border-white/10 shrink-0 font-mono text-xs font-bold">
               <button
                 onClick={() => onViewChange('terminal')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
@@ -385,11 +387,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               </span>
             </div>
 
-            {/* 1-Click Reset Account Button */}
+            {/* 1-Click Reset Account Button (Desktop) */}
             {onResetPaperAccount && (
               <button
                 onClick={onResetPaperAccount}
-                className="p-1 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                className="hidden sm:inline-flex p-1 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
                 title="Reset Paper Account to $10,000 & Clear All Open Positions"
               >
                 <RotateCcw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" />
@@ -405,16 +407,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Badge>
           )}
 
-          {/* Agent Parameters & Settings Button */}
+          {/* Agent Parameters & Settings Button (Desktop - available in bottom dock on mobile) */}
           <motion.button
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onOpenConfig}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-slate-800 dark:text-slate-100 border border-cyan-500/30 font-mono text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+            className="hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-slate-800 dark:text-slate-100 border border-cyan-500/30 font-mono text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
             title="Configure AI Models & Parameters"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="hidden sm:inline shrink-0">Agents</span>
+            <span className="shrink-0">Agents</span>
           </motion.button>
 
           {/* Theme Toggle Button (Guaranteed Visible & Shrink-Protected) */}
@@ -435,6 +437,91 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
       </div>
+
+      {/* Floating Mobile Bottom Navigation Dock (Visible on screens < md) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-safe pt-1.5 bg-slate-900/92 dark:bg-[#070A11]/95 backdrop-blur-2xl border-t border-slate-300/20 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.35)]">
+        <div className="max-w-md mx-auto grid grid-cols-5 items-center gap-1 font-mono text-[10px]">
+          
+          {/* 1. Terminal View */}
+          <button
+            onClick={() => onViewChange && onViewChange('terminal')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all cursor-pointer ${
+              activeView === 'terminal'
+                ? 'text-cyan-400 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl transition-all ${activeView === 'terminal' ? 'bg-cyan-500/25 shadow-glow-cyan text-cyan-300' : 'text-slate-400'}`}>
+              <LineChart className="w-4 h-4" />
+            </div>
+            <span className="mt-0.5 tracking-tight font-medium">Terminal</span>
+          </button>
+
+          {/* 2. Telemetry View */}
+          <button
+            onClick={() => onViewChange && onViewChange('telemetry')}
+            className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all cursor-pointer relative ${
+              activeView === 'telemetry'
+                ? 'text-cyan-400 font-bold'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <div className={`p-1.5 rounded-xl transition-all relative ${activeView === 'telemetry' ? 'bg-cyan-500/25 shadow-glow-cyan text-cyan-300' : 'text-slate-400'}`}>
+              <Terminal className="w-4 h-4" />
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            </div>
+            <span className="mt-0.5 tracking-tight font-medium">Telemetry</span>
+          </button>
+
+          {/* 3. 30m Auto-Trader Controller */}
+          {onToggleAutoTrader ? (
+            <button
+              onClick={onToggleAutoTrader}
+              className={`flex flex-col items-center justify-center py-1.5 rounded-xl transition-all cursor-pointer ${
+                isAutoActive
+                  ? 'text-emerald-400 font-bold'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+              title="Tap to Pause / Resume 30m Auto-Trader"
+            >
+              <div className={`p-1.5 rounded-xl flex items-center justify-center transition-all ${
+                isAutoActive ? 'bg-emerald-500/25 shadow-glow-emerald text-emerald-300' : 'bg-slate-800/80 text-slate-400'
+              }`}>
+                <Bot className="w-4 h-4" />
+              </div>
+              <span className="mt-0.5 tracking-tight font-black text-[9px]">
+                {isAutoActive ? formatCountdown(localSecondsLeft) : 'Paused'}
+              </span>
+            </button>
+          ) : <div />}
+
+          {/* 4. Agents Config */}
+          <button
+            onClick={onOpenConfig}
+            className="flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-cyan-300 transition-all cursor-pointer"
+          >
+            <div className="p-1.5 rounded-xl text-cyan-400 hover:bg-cyan-500/20">
+              <Sliders className="w-4 h-4" />
+            </div>
+            <span className="mt-0.5 tracking-tight font-medium">Agents</span>
+          </button>
+
+          {/* 5. 1-Click Paper Reset */}
+          {onResetPaperAccount ? (
+            <button
+              onClick={onResetPaperAccount}
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-rose-400 transition-all cursor-pointer"
+              title="Reset Virtual Paper Balance"
+            >
+              <div className="p-1.5 rounded-xl hover:bg-rose-500/20 text-rose-400">
+                <RotateCcw className="w-4 h-4" />
+              </div>
+              <span className="mt-0.5 tracking-tight font-medium">Reset</span>
+            </button>
+          ) : <div />}
+
+        </div>
+      </nav>
     </header>
   );
 };

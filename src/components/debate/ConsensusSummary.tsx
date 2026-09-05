@@ -52,45 +52,45 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
   return (
     <GlassCard
       variant={cardVariant}
-      className={`p-5 sm:p-7 border-2 ${borderColor} relative overflow-hidden shadow-glass-lg`}
+      className={`p-4 sm:p-7 border-2 ${borderColor} relative overflow-hidden shadow-glass-lg`}
     >
       {/* Background ambient gradient flare */}
       <div className={`absolute top-0 right-0 w-80 h-80 rounded-full ${glowColor} blur-[80px] pointer-events-none`} />
 
-      <div className="relative z-10 flex flex-col gap-5">
+      <div className="relative z-10 flex flex-col gap-4 sm:gap-5">
         
         {/* Top Header: Signal Verdict + Confidence Meter */}
-        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-300/80 dark:border-white/10 pb-4">
-          <div className="flex items-center gap-3.5">
-            <div className={`w-12 h-12 rounded-2xl p-[1px] flex items-center justify-center ${
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4 border-b border-slate-300/80 dark:border-white/10 pb-3 sm:pb-4">
+          <div className="flex items-center gap-3">
+            <div className={`w-11 h-11 sm:w-12 sm:h-12 rounded-2xl p-[1px] flex items-center justify-center shrink-0 ${
               isBullish ? 'bg-gradient-to-tr from-emerald-500 to-teal-400 shadow-glow-emerald' : isNeutral ? 'bg-gradient-to-tr from-amber-500 to-yellow-400' : 'bg-gradient-to-tr from-rose-500 to-orange-500 shadow-glow-rose'
             }`}>
               <div className="w-full h-full bg-slate-900 rounded-[15px] flex items-center justify-center">
                 {isBullish ? (
-                  <TrendingUp className="w-6 h-6 text-emerald-400" />
+                  <TrendingUp className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
                 ) : isNeutral ? (
-                  <PauseCircle className="w-6 h-6 text-amber-400" />
+                  <PauseCircle className="w-5 h-5 sm:w-6 sm:h-6 text-amber-400" />
                 ) : (
-                  <TrendingDown className="w-6 h-6 text-rose-400" />
+                  <TrendingDown className="w-5 h-5 sm:w-6 sm:h-6 text-rose-400" />
                 )}
               </div>
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-                  LangChain Consensus Verdict
+              <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
+                <span className="text-[10px] sm:text-xs font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
+                  Consensus Verdict
                 </span>
                 <Badge signal={consensusSignal} pulse size="sm">
-                  <CheckCircle2 className="w-3 h-3" /> {isBullish ? 'Bullish Consensus' : isNeutral ? 'Neutral / Stand Aside' : 'Bearish Short Consensus'}
+                  <CheckCircle2 className="w-3 h-3" /> {isBullish ? 'Bullish' : isNeutral ? 'Neutral' : 'Bearish Short'}
                 </Badge>
               </div>
-              <div className="flex items-center gap-3">
-                <h2 className={`text-2xl sm:text-3xl font-black font-mono tracking-tight ${
+              <div className="flex items-center gap-2 sm:gap-3">
+                <h2 className={`text-xl sm:text-3xl font-black font-mono tracking-tight ${
                   isBullish ? 'text-emerald-600 dark:text-emerald-400' : isNeutral ? 'text-amber-600 dark:text-amber-400' : 'text-rose-600 dark:text-rose-400'
                 }`}>
                   {consensusSignal}
                 </h2>
-                <span className="text-xs font-mono font-medium text-slate-600 dark:text-slate-400 hidden sm:inline">
+                <span className="text-[11px] font-mono font-medium text-slate-600 dark:text-slate-400 hidden sm:inline">
                   | Horizon: {executionPlan.timeHorizon}
                 </span>
               </div>
@@ -98,10 +98,10 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
           </div>
 
           {/* Confidence Gauge */}
-          <div className="flex items-center gap-4 bg-white/90 dark:bg-dark-900/80 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
-            <div className="text-right font-mono">
-              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Consensus Score</div>
-              <div className="text-xl sm:text-2xl font-black text-cyan-700 dark:text-cyan-400 leading-none">
+          <div className="flex items-center justify-between sm:justify-end gap-3 bg-white/90 dark:bg-dark-900/80 px-3.5 py-2 rounded-2xl border border-slate-200 dark:border-white/5 shadow-sm">
+            <div className="text-left sm:text-right font-mono">
+              <div className="text-[10px] text-slate-500 dark:text-slate-400 font-bold uppercase">Consensus Conviction</div>
+              <div className="text-lg sm:text-2xl font-black text-cyan-700 dark:text-cyan-400 leading-none">
                 {consensusConfidence}%
               </div>
             </div>
@@ -236,12 +236,12 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
         {/* Bottom Agent Matrix & Simulated 1-Click Trade Trigger */}
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
           {/* Agent Agreement Scores */}
-          <div className="flex items-center gap-3 sm:gap-4 text-xs font-mono text-slate-600 dark:text-slate-400 font-medium">
+          <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4 text-[11px] sm:text-xs font-mono text-slate-600 dark:text-slate-400 font-medium text-center sm:text-left">
             <span>Alignment:</span>
-            <div className="flex items-center gap-2 font-bold">
+            <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 font-bold">
               <span className="text-blue-600 dark:text-blue-400">Gemini {agentConsensusMatrix.geminiScore}%</span>
               <span>•</span>
-              <span className="text-[#598c00] dark:text-[#76B900]">NVIDIA NIM {agentConsensusMatrix.nvidiaScore}%</span>
+              <span className="text-[#598c00] dark:text-[#76B900]">NVIDIA {agentConsensusMatrix.nvidiaScore}%</span>
               <span>•</span>
               <span className="text-purple-600 dark:text-purple-400">OpenAI {agentConsensusMatrix.openaiScore}%</span>
             </div>
@@ -249,10 +249,10 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
 
           {/* 1-Click Paper Trade Button */}
           <motion.button
-            whileHover={{ scale: 1.04 }}
+            whileHover={{ scale: 1.03 }}
             whileTap={{ scale: 0.96 }}
             onClick={onExecuteTrade}
-            className={`w-full sm:w-auto px-5 py-2.5 rounded-xl font-mono text-xs font-black flex items-center justify-center gap-2 cursor-pointer ${
+            className={`w-full sm:w-auto px-5 py-3 min-h-[48px] rounded-2xl font-mono text-xs sm:text-sm font-black flex items-center justify-center gap-2 cursor-pointer shadow-lg ${
               isBullish
                 ? 'bg-gradient-to-r from-emerald-500 to-teal-500 text-slate-950 shadow-glow-emerald'
                 : isNeutral

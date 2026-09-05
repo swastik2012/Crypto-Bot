@@ -95,42 +95,42 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
           </div>
 
           {/* View Mode Toggle Switcher */}
-          <div className="flex items-center p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 font-mono text-xs font-bold">
+          <div className="grid grid-cols-3 w-full md:w-auto p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 font-mono text-[10px] sm:text-xs font-bold text-center">
             <button
               onClick={() => setActiveViewMode('consensus')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer truncate ${
                 activeViewMode === 'consensus'
                   ? 'bg-emerald-500/20 text-emerald-800 dark:text-emerald-400 border border-emerald-500/40 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
-              Consensus Hero
+              Consensus
             </button>
             <button
               onClick={() => setActiveViewMode('breakdown')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer truncate ${
                 activeViewMode === 'breakdown'
                   ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
-              Stage Inspector
+              Stages
             </button>
             <button
               onClick={() => setActiveViewMode('transcript')}
-              className={`px-3 py-1.5 rounded-lg transition-all cursor-pointer ${
+              className={`px-2 sm:px-3 py-1.5 rounded-lg transition-all cursor-pointer truncate ${
                 activeViewMode === 'transcript'
                   ? 'bg-purple-500/20 text-purple-800 dark:text-purple-400 border border-purple-500/40 shadow-xs'
                   : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
               }`}
             >
-              Agent Debate Log
+              Debate Log
             </button>
           </div>
         </div>
 
-        {/* 5 Interactive Stage Cards Horizontal Bar */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+        {/* 5 Interactive Stage Cards Bar (Horizontal Snap on Mobile, Grid on Desktop) */}
+        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-5 snap-x snap-mandatory">
           {stages.map((stage) => {
             const Icon = stage.icon;
             const isSelected = selectedStageTab === stage.id;
@@ -147,7 +147,7 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
                     setActiveViewMode('breakdown');
                   }
                 }}
-                className={`p-2.5 rounded-2xl text-left border transition-all relative overflow-hidden font-mono cursor-pointer ${
+                className={`min-w-[135px] sm:min-w-0 flex-1 p-2 sm:p-2.5 rounded-2xl text-left border transition-all relative overflow-hidden font-mono cursor-pointer snap-start shrink-0 sm:shrink ${
                   isSelected
                     ? `${stage.activeBg} ${stage.borderColor} shadow-glass-sm`
                     : 'bg-white/70 dark:bg-dark-900/40 border-slate-200 dark:border-white/5 hover:border-slate-400/40'

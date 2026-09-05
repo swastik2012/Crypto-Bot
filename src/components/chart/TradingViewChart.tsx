@@ -102,7 +102,7 @@ const TradingViewChartComponent: React.FC<TradingViewChartProps> = ({
   return (
     <div
       id={containerId}
-      className={`relative w-full h-[400px] sm:h-[460px] rounded-2xl md:rounded-3xl overflow-hidden bg-white/40 dark:bg-dark-950/70 border border-slate-200/80 dark:border-white/10 shadow-inner ${className}`}
+      className={`relative w-full h-[320px] xs:h-[350px] sm:h-[440px] md:h-[480px] rounded-2xl md:rounded-3xl overflow-hidden bg-white/40 dark:bg-dark-950/70 border border-slate-200/80 dark:border-white/10 shadow-inner ${className}`}
     >
       {/* Skeleton Shimmer Loader during initialization */}
       <AnimatePresence>
