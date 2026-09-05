@@ -5,8 +5,9 @@ import os
 # Add parent directory to sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+from pathlib import Path
 from backend.services.symbol_resolver import symbol_resolver
-from backend.services.paper_engine import paper_engine
+from backend.services.paper_engine import VirtualPaperEngine
 from backend.agents.graph import consensus_pipeline
 from backend.models.schemas import PlacePaperOrderRequest, PositionSide
 
@@ -24,9 +25,13 @@ async def run_tests():
         print(f"  ✓ Query: '{q}' -> Best Match: {best.pair if best else 'None'} (Score: {best.match_score if best else 0}%, Price: ${best.current_price if best else 0})")
         assert best is not None, f"Failed to match query {q}"
 
-    # 2. Test Paper Trading Engine
-    print("\n[2/3] Testing Virtual Paper Trading Engine...")
-    state = paper_engine.initialize(initial_balance=10000.0, quote_currency="USDT")
+    # 2. Test Paper Trading Engine (Using Isolated Test Engine to Protect Real Portfolio)
+    print("\n[2/3] Testing Virtual Paper Trading Engine (Isolated Test Instance)...")
+    test_engine = VirtualPaperEngine(
+        account_id="test_paper_account",
+        storage_file=Path("/tmp/test_paper_account.json")
+    )
+    state = test_engine.initialize(initial_balance=10000.0, quote_currency="USDT")
     print(f"  ✓ Account Initialized: Cash = ${state.cash_balance:,.2f}, Total Equity = ${state.total_equity:,.2f}")
 
     # Place a 5x Long Order on SOL
@@ -41,17 +46,17 @@ async def run_tests():
         stop_loss=170.0,
         agent_rationale="LangChain Consensus Strong Buy",
     )
-    pos = paper_engine.execute_order(order, current_market_price=175.0)
+    pos = test_engine.execute_order(order, current_market_price=175.0)
     print(f"  ✓ Order Executed: {pos.position_id} | Side: {pos.side} | Margin Used: ${pos.margin_used:,.2f} | Liq: ${pos.liquidation_price:,.2f}")
 
     # Simulate Price Tick to $180 (Price Increase -> Positive Unrealized PnL)
-    state = paper_engine.get_state(current_prices={"SOL": 180.0})
+    state = test_engine.get_state(current_prices={"SOL": 180.0})
     updated_pos = state.open_positions[0]
     print(f"  ✓ Price Tick $180.00 -> Position PnL: ${updated_pos.unrealized_pnl:,.2f} (+{updated_pos.unrealized_pnl_pct}%) | Equity: ${state.total_equity:,.2f}")
     assert updated_pos.unrealized_pnl > 0, "Unrealized PnL should be positive"
 
     # Simulate Take-Profit Hit ($191.0)
-    closed = paper_engine.evaluate_price_ticks({"SOL": 191.0})
+    closed = test_engine.evaluate_price_ticks({"SOL": 191.0})
     print(f"  ✓ Price Tick $191.00 -> TP Triggered! Closed Trades: {len(closed)} | Realized PnL: ${closed[0].realized_pnl:,.2f} (+{closed[0].realized_pnl_pct}%)")
     assert len(closed) >= 1, "Take Profit should have triggered"
 

@@ -41,6 +41,7 @@ class VirtualPaperEngine:
         quote_currency: str = "USDT",
         default_allocation_pct: float = 5.0,
         max_leverage: int = 20,
+        storage_file: Optional[Path] = None,
     ):
         self.account_id = account_id
         self.quote_currency = quote_currency
@@ -48,6 +49,7 @@ class VirtualPaperEngine:
         self.cash_balance = initial_balance
         self.default_allocation_pct = default_allocation_pct
         self.max_leverage = max_leverage
+        self.storage_file = storage_file or STORAGE_FILE
         
         self.open_positions: Dict[str, PaperPosition] = {}
         self.trade_history: List[PaperTradeRecord] = []
@@ -74,15 +76,15 @@ class VirtualPaperEngine:
                 "open_positions": [p.dict() for p in self.open_positions.values()],
                 "trade_history": [t.dict() for t in self.trade_history],
             }
-            with open(STORAGE_FILE, "w") as f:
+            with open(self.storage_file, "w") as f:
                 json.dump(data, f, indent=2)
         except Exception as e:
             print(f"[PaperEngine] Save error: {e}")
 
     def _load_from_disk(self):
-        if STORAGE_FILE.exists():
+        if self.storage_file.exists():
             try:
-                with open(STORAGE_FILE, "r") as f:
+                with open(self.storage_file, "r") as f:
                     data = json.load(f)
                     self.cash_balance = data.get("cash_balance", self.starting_capital)
                     self.winning_trades = data.get("winning_trades", 0)
@@ -101,7 +103,7 @@ class VirtualPaperEngine:
                     self.trade_history = [
                         PaperTradeRecord(**t) for t in data.get("trade_history", [])
                     ]
-                    print(f"[PaperEngine] Loaded {len(self.open_positions)} open positions & {len(self.trade_history)} trade records from {STORAGE_FILE}")
+                    print(f"[PaperEngine] Loaded {len(self.open_positions)} open positions & {len(self.trade_history)} trade records from {self.storage_file}")
             except Exception as e:
                 print(f"[PaperEngine] Load error: {e}")
 
