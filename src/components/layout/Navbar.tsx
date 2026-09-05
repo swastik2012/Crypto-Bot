@@ -158,8 +158,8 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full px-2 sm:px-4 lg:px-6 pt-2 sm:pt-3 pb-1.5">
-      <div className="max-w-7xl mx-auto rounded-2xl md:rounded-3xl liquid-glass px-2.5 sm:px-3.5 py-2 flex items-center justify-between gap-1.5 sm:gap-2.5 border border-white/20 dark:border-white/10 shadow-glass-md relative">
+    <header className="sticky top-0 z-40 w-full max-w-full overflow-hidden sm:overflow-visible px-2 sm:px-4 lg:px-6 pt-2 sm:pt-3 pb-1.5">
+      <div className="max-w-7xl mx-auto rounded-2xl md:rounded-3xl liquid-glass px-2 sm:px-3.5 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2.5 border border-white/20 dark:border-white/10 shadow-glass-md relative">
         
         {/* Left: Branding & Compact Asset Switcher */}
         <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
@@ -174,7 +174,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <Sparkles className="w-3.5 h-3.5 text-brand-cyan animate-pulse-slow" />
               </div>
             </div>
-            <div>
+            <div className="hidden sm:block">
               <div className="flex items-center gap-1 leading-tight">
                 <span className="font-black text-xs sm:text-sm tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
                   AetherTrade
@@ -201,7 +201,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="text-cyan-400">{selectedAsset.icon}</span>
               <span>{selectedAsset.pair}</span>
               <span
-                className={`text-[10px] px-1 py-0.2 rounded hidden xs:inline ${
+                className={`text-[10px] px-1 py-0.2 rounded hidden sm:inline ${
                   selectedAsset.change24h >= 0
                     ? 'text-emerald-500 bg-emerald-500/10'
                     : 'text-rose-500 bg-rose-500/10'
@@ -294,7 +294,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className={`text-xs font-black ${currency === 'INR' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
               {currency === 'INR' ? '₹' : '$'}
             </span>
-            <span className="font-extrabold text-[11px]">{currency}</span>
+            <span className="font-extrabold text-[11px] hidden sm:inline">{currency}</span>
           </motion.button>
 
           {/* Desktop View Switcher: Terminal vs Live API Logs (hidden on mobile, moved to bottom dock) */}
@@ -439,7 +439,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Floating Mobile Bottom Navigation Dock (Visible on screens < md) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-safe pt-1.5 bg-slate-900/92 dark:bg-[#070A11]/95 backdrop-blur-2xl border-t border-slate-300/20 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.35)]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-safe pt-1.5 bg-[#0B0F19] dark:bg-[#070A11] border-t border-slate-300/20 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
         <div className="max-w-md mx-auto grid grid-cols-5 items-center gap-1 font-mono text-[10px]">
           
           {/* 1. Terminal View */}

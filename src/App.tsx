@@ -36,11 +36,19 @@ export const App: React.FC = () => {
   const [darkMode, setDarkMode] = useState<boolean>(() => true);
 
   useEffect(() => {
+    const bgColor = darkMode ? '#070A11' : '#F1F5F9';
     if (darkMode) {
       document.documentElement.classList.add('dark');
+      document.documentElement.style.colorScheme = 'dark';
     } else {
       document.documentElement.classList.remove('dark');
+      document.documentElement.style.colorScheme = 'light';
     }
+    document.documentElement.style.backgroundColor = bgColor;
+    document.body.style.backgroundColor = bgColor;
+
+    const metas = document.querySelectorAll('meta[name="theme-color"]');
+    metas.forEach((m) => m.setAttribute('content', bgColor));
   }, [darkMode]);
 
   const toggleTheme = useCallback(() => {
@@ -582,7 +590,7 @@ export const App: React.FC = () => {
   }, [isAnalyzing, selectedAsset, timeInterval, agentConfig]);
 
   return (
-    <div className="relative min-h-screen flex flex-col font-sans bg-slate-100 dark:bg-[#070A11] text-slate-900 dark:text-slate-100 transition-colors duration-300">
+    <div className="relative min-h-screen w-full max-w-full overflow-x-hidden flex flex-col font-sans bg-slate-100 dark:bg-[#070A11] text-slate-900 dark:text-slate-100 transition-colors duration-300">
       
       {/* Ambient Liquid Glowing Blur Bubbles in Background */}
       <LiquidBackground />
