@@ -49,6 +49,14 @@ class MultiAgentConsensusPipeline:
             match_info = symbol_resolver.resolve(base_sym, limit=1)
             current_price = match_info.best_match.current_price if match_info.best_match else 78150.0
 
+        # DERIVATIVES MICROSTRUCTURE ENGINE (Binance Futures: Funding Rate, OI Delta, CVD)
+        from backend.services.derivatives_service import derivatives_service
+        derivatives_data = await derivatives_service.get_derivatives_microstructure(
+            symbol=symbol,
+            current_price=current_price,
+            price_change_24h=0.0,
+        )
+
         # STAGE 1: Gemini Vision Ingestion
         stage1_res, msg1 = await run_stage1_gemini_vision(
             symbol=symbol,
@@ -70,7 +78,7 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg2)
 
-        # STAGE 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+        # STAGE 3: TypeSafe AI Jev — System One Fast-Twitch Reflex Gate (Ingests Stages 1-2 & Derivatives Order Flow)
         stage_jev_res, msg_jev = await run_stage_jev_system_one(
             symbol=symbol,
             stage1_res=stage1_res,
@@ -78,6 +86,7 @@ class MultiAgentConsensusPipeline:
             current_price=current_price,
             account_state=account_state,
             api_key=active_typesafe_key,
+            derivatives_data=derivatives_data,
         )
         debate_stream.append(msg_jev)
 
@@ -93,7 +102,7 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg3)
 
-        # STAGE 5: OpenAI Risk & Counter-Trend Validator (Ingests Stages 1-4 & Jev)
+        # STAGE 5: OpenAI Risk & Counter-Trend Validator (Ingests Stages 1-4, Jev & Derivatives Microstructure)
         stage4_res, msg4 = await run_stage4_openai_risk(
             symbol=symbol,
             stage1=stage1_res,
@@ -103,10 +112,11 @@ class MultiAgentConsensusPipeline:
             account_state=account_state,
             api_key=openai_key,
             stage_jev=stage_jev_res,
+            derivatives_data=derivatives_data,
         )
         debate_stream.append(msg4)
 
-        # STAGE 6: Gemini Consensus Arbiter (Reconciles System 1 & System 2)
+        # STAGE 6: Gemini Consensus Arbiter (Reconciles System 1 & System 2 with Derivatives Order Flow)
         stage5_res, msg5 = await run_stage5_gemini_arbiter(
             symbol=symbol,
             stage1=stage1_res,
@@ -118,6 +128,8 @@ class MultiAgentConsensusPipeline:
             strategy_preset=strategy_preset,
             api_key=gemini_key,
             stage_jev=stage_jev_res,
+            timeframe=timeframe,
+            derivatives_data=derivatives_data,
         )
         debate_stream.append(msg5)
 
@@ -167,6 +179,7 @@ class MultiAgentConsensusPipeline:
             stage3=stage3_res,
             stage4=stage4_res,
             stage5=stage5_res,
+            derivatives_data=derivatives_data,
             debate_stream=debate_stream,
             auto_executed=auto_executed,
             executed_position=executed_position,

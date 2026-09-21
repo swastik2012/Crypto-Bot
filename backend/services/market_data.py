@@ -274,4 +274,98 @@ class MarketDataService:
         self._cache[clean_key] = {"time": now, "data": confluence_obj}
         return confluence_obj
 
+    async def calculate_dynamic_atr_targets(
+        self,
+        symbol: str,
+        current_price: float,
+        direction: str = "LONG",
+        timeframe: str = "15m",
+        sl_multiplier: float = 1.5,
+        tp1_multiplier: float = 2.0,
+        tp2_multiplier: float = 4.0,
+    ) -> Dict:
+        """
+        Calculates volatility-adaptive stop-loss and take-profit targets using 14-period ATR.
+        Replaces static percentages with dynamic volatility bands, eliminating wick-outs
+        during high-volatility expansions and tightening risk during low-volatility regimes.
+        """
+        p = current_price or 78150.0
+        prec = 4 if p < 1.0 else 2
+
+        # 1. Fetch recent klines to calculate fresh 14-period ATR
+        klines = await self.fetch_klines(symbol, timeframe, limit=20)
+        atr = 0.0
+        if klines and len(klines) >= 10:
+            highs = [float(k[2]) for k in klines]
+            lows = [float(k[3]) for k in klines]
+            closes = [float(k[4]) for k in klines]
+            atr = self._calculate_atr(highs, lows, closes, 14)
+
+        # Fallback to cached MTF or asset default if klines unavailable
+        if atr <= 0.0:
+            clean_key = symbol.upper()
+            if clean_key in self._cache:
+                cached = self._cache[clean_key]["data"]
+                atr = cached.screen_15m.volatility_atr or cached.screen_4h.volatility_atr
+            if atr <= 0.0:
+                atr = round(p * 0.022, prec)
+
+        atr_pct = round((atr / p) * 100.0, 2)
+
+        # 2. Determine Volatility Regime
+        if atr_pct < 1.2:
+            vol_regime = "Compressed Chop (Low Volatility)"
+        elif atr_pct > 3.5:
+            vol_regime = "High Volatility Expansion"
+        else:
+            vol_regime = "Normal Volatility"
+
+        # 3. Calculate distance with safety clamping (1.2% min SL distance, 5.5% max SL distance)
+        sl_distance = max(p * 0.012, min(p * 0.055, atr * sl_multiplier))
+        tp1_distance = max(p * 0.018, atr * tp1_multiplier)
+        tp2_distance = max(p * 0.035, atr * tp2_multiplier)
+
+        # Guarantee asymmetric R:R (TP1 >= 1.25x SL, TP2 >= 2.5x SL)
+        if tp1_distance < (sl_distance * 1.25):
+            tp1_distance = round(sl_distance * 1.33, prec)
+        if tp2_distance < (sl_distance * 2.4):
+            tp2_distance = round(sl_distance * 2.67, prec)
+
+        # 4. Synthesize Geometry based on direction
+        dir_upper = direction.upper()
+        if dir_upper in ["SHORT", "SELL", "BEARISH"]:
+            sl = round(p + sl_distance, prec)
+            tp1 = round(p - tp1_distance, prec)
+            tp2 = round(p - tp2_distance, prec)
+            rr_tp1 = round(tp1_distance / sl_distance, 2)
+            rr_tp2 = round(tp2_distance / sl_distance, 2)
+        elif dir_upper in ["NEUTRAL", "HOLD"]:
+            sl = round(p - (atr * 1.0), prec)
+            tp1 = round(p + (atr * 1.2), prec)
+            tp2 = round(p + (atr * 2.0), prec)
+            rr_tp1 = 1.20
+            rr_tp2 = 2.00
+        else:  # LONG / BUY / BULLISH
+            sl = round(p - sl_distance, prec)
+            tp1 = round(p + tp1_distance, prec)
+            tp2 = round(p + tp2_distance, prec)
+            rr_tp1 = round(tp1_distance / sl_distance, 2)
+            rr_tp2 = round(tp2_distance / sl_distance, 2)
+
+        return {
+            "take_profit_1": tp1,
+            "take_profit_2": tp2,
+            "stop_loss": sl,
+            "atr_14": round(atr, prec),
+            "atr_pct": atr_pct,
+            "volatility_regime": vol_regime,
+            "risk_reward_tp1": rr_tp1,
+            "risk_reward_tp2": rr_tp2,
+            "sl_distance": round(sl_distance, prec),
+            "tp1_distance": round(tp1_distance, prec),
+            "tp2_distance": round(tp2_distance, prec),
+            "direction": dir_upper,
+        }
+
 market_data_service = MarketDataService()
+

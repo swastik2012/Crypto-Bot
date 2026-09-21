@@ -2,7 +2,7 @@ import time
 import json
 import asyncio
 import httpx
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from backend.models.schemas import (
     Stage4OpenAIRiskResult,
     Stage1GeminiVisionResult,
@@ -22,6 +22,14 @@ def _format_portfolio_summary(account_state: Dict[str, Any]) -> str:
         lines.append(f"  • {p.get('symbol')} {p.get('side')} Entry: ${p.get('entry_price', 0):,.2f}")
     return "\n".join(lines)
 
+def _get_mtf_trend_1d(mtf: Any) -> str:
+    if not mtf:
+        return "N/A"
+    screen_1d = getattr(mtf, "screen_1d", None) if not isinstance(mtf, dict) else mtf.get("screen_1d")
+    if not screen_1d:
+        return "N/A"
+    return getattr(screen_1d, "trend", "N/A") if not isinstance(screen_1d, dict) else screen_1d.get("trend", "N/A")
+
 async def run_stage4_openai_risk(
     symbol: str,
     stage1: Stage1GeminiVisionResult,
@@ -31,11 +39,12 @@ async def run_stage4_openai_risk(
     account_state: Dict[str, Any],
     api_key: str = "",
     stage_jev: Optional[Any] = None,
+    derivatives_data: Optional[Any] = None,
 ) -> Tuple[Stage4OpenAIRiskResult, DebateMessageSchema]:
     """
     Stage 5: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
-    - Audits Vision (Stage 1), News Narrative (Stage 2), System 1 Jev Reflex (Stage 3), and Quant Proof (Stage 4).
-    - Checks for 'Buy the Rumor, Sell the News' traps, liquidity sweeps, toxic flow, and invalidation bounds.
+    - Audits Vision (Stage 1), News Narrative (Stage 2), System 1 Jev Reflex (Stage 3), Quant Proof (Stage 4), and Derivatives Microstructure.
+    - Checks for 'Buy the Rumor, Sell the News' traps, liquidity sweeps, toxic flow, CVD divergences, and invalidation bounds.
     """
     openai_key = api_key or settings.OPENAI_API_KEY
     model_name = settings.OPENAI_MODEL or "gpt-4o"
@@ -45,11 +54,39 @@ async def run_stage4_openai_risk(
     stop_loss = thesis.get("stop_loss", round(current_price * 0.978, 2))
     pat_name = stage1.patterns[0].name if stage1.patterns else "Technical Setup"
     mtf = getattr(stage1, "multi_timeframe_confluence", None)
-    has_mtf_warning = mtf.counter_trend_warning if mtf else False
-    mtf_align = mtf.alignment_score if mtf else "3/3 FULL CONFLUENCE"
+    has_mtf_warning = getattr(mtf, "counter_trend_warning", False) if not isinstance(mtf, dict) else mtf.get("counter_trend_warning", False)
+    mtf_align = getattr(mtf, "alignment_score", "3/3 FULL CONFLUENCE") if not isinstance(mtf, dict) else mtf.get("alignment_score", "3/3 FULL CONFLUENCE")
+    trend_1d = _get_mtf_trend_1d(mtf)
 
-    # Dynamic risk calculations based on Stage 1, MTF, & Stage 3 outputs
-    if has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+    if hasattr(derivatives_data, "model_dump"):
+        deriv_dict = derivatives_data.model_dump()
+    elif hasattr(derivatives_data, "dict"):
+        deriv_dict = derivatives_data.dict()
+    else:
+        deriv_dict = derivatives_data or {}
+
+    pred_risk = deriv_dict.get("predatory_liquidation_risk", "LOW")
+    cvd_div = deriv_dict.get("cvd_divergence", "NEUTRAL")
+    funding_reg = deriv_dict.get("funding_regime", "NEUTRAL")
+    funding_rate = deriv_dict.get("funding_rate_8h_pct", 0.01)
+
+    # Dynamic risk calculations based on Stage 1, MTF, Stage 3, and Derivatives Microstructure
+    if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
+        safety_score = 38.0
+        false_breakout_prob = 84.0
+        ob_floor = round(current_price * 0.975, 2)
+        ob_ceil = round(current_price * 1.025, 2)
+        order_block_status = f"Predatory Liquidation Trap Zone: {funding_reg} with {cvd_div}."
+        macro_trap_alert = f"DERIVATIVES TRAP WARNING: High predatory liquidation risk. Funding={funding_rate:+.4f}% ({funding_reg}) with {cvd_div}. Imminent stop-run sweep detected."
+        critique_gemini = (
+            f"Stage 1 technical setup '{pat_name}' is compromised by predatory order flow ({cvd_div}). "
+            f"Whales are positioning for a retail liquidation flush. Immediate veto enforced."
+        )
+        critique_nvidia = (
+            f"Stage 3 Quant assumptions fail to account for adverse selection: funding={funding_rate:+.4f}%. "
+            f"Chief Risk Officer mandate: Stand aside in cash."
+        )
+    elif has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
         safety_score = 42.0
         false_breakout_prob = 74.5
         ob_floor = round(current_price * 0.980, 2)
@@ -57,7 +94,7 @@ async def run_stage4_openai_risk(
         order_block_status = f"High-Risk Range Liquidity Trap: 1D Macro Trend conflicts with proposed {direction} setup."
         macro_trap_alert = f"CRITICAL WARNING: {mtf_align}. Lower-timeframe trigger is fighting the 1D Macro tide. High liquidity trap probability."
         critique_gemini = (
-            f"Stage 1 '{pat_name}' flagged as low-conviction counter-trend. 1D Macro Trend ({mtf.screen_1d.trend if mtf else 'N/A'}) "
+            f"Stage 1 '{pat_name}' flagged as low-conviction counter-trend. 1D Macro Trend ({trend_1d}) "
             f"threatens immediate invalidation of {direction} thesis."
         )
         critique_nvidia = (
@@ -97,6 +134,9 @@ async def run_stage4_openai_risk(
     else: # LONG
         false_breakout_prob = round(min(max(100.0 - stage3.monte_carlo_win_rate + 3.2, 8.5), 28.0), 1)
         safety_score = round(min(max(stage3.stress_test_score * 0.96, 78.0), 97.0), 1)
+        if cvd_div == "BULLISH_ABSORPTION":
+            safety_score = min(98.5, safety_score + 4.0)
+            false_breakout_prob = max(6.0, false_breakout_prob - 4.0)
         ob_floor = round(current_price * 0.982, 2)
         ob_ceil = round(current_price * 0.996, 2)
         order_block_status = f"Unmitigated Bullish Demand Order Block verified between ${ob_floor:,.2f} and ${ob_ceil:,.2f}."
@@ -120,7 +160,8 @@ async def run_stage4_openai_risk(
         "1. LIQUIDITY TRAPS & SWEEPS: Check if price has merely swept prior session highs/lows to trigger retail stop-runs before reversing. Compute false_breakout_probability (0.0 to 100.0).\n"
         "2. ASYMMETRIC R:R HURDLE: Verify that the trade achieves at least 1:2.2 R:R to TP1. If R:R < 2.0, you MUST penalize safety_score (< 60).\n"
         "3. NEWS & MOMENTUM EXHAUSTION: Check if Stage 2's macro news catalyst is already priced in ('buy the rumor, sell the news').\n"
-        "4. CHOP & COUNTER-TREND VETO: If multi-timeframe alignment opposes the 1D Macro Tide or price is trapped in consolidation, enforce an immediate VETO (safety_score < 50, issue macro_trap_alert).\n\n"
+        "4. CHOP & COUNTER-TREND VETO: If multi-timeframe alignment opposes the 1D Macro Tide or price is trapped in consolidation, enforce an immediate VETO (safety_score < 50, issue macro_trap_alert).\n"
+        "5. DERIVATIVES ORDER FLOW & CVD: Verify that funding rates are not crowded (> +0.03% or < -0.03%) and Cumulative Volume Delta does not show buyer/seller exhaustion.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
@@ -141,6 +182,10 @@ async def run_stage4_openai_risk(
         f"- Gist: {stage2.news_gist}\n\n"
         f"STAGE 3 QUANT CALCULATIONS:\n- Monte Carlo Win Rate: {stage3.monte_carlo_win_rate}%\n"
         f"- R:R Ratio: 1:{stage3.risk_reward_ratio} | Stress Score: {stage3.stress_test_score}\n\n"
+        f"DERIVATIVES ORDER FLOW (Binance Futures):\n"
+        f"- Funding Rate: {funding_rate:+.4f}% ({funding_reg})\n"
+        f"- CVD Divergence: {cvd_div} | Predatory Risk: {pred_risk}\n"
+        f"- Open Interest Delta: {deriv_dict.get('open_interest_change_1h_pct', 0.0):+.1f}% ({deriv_dict.get('oi_interpretation', 'NEUTRAL')})\n\n"
         f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
         f"Conduct a ruthless risk audit. Cross-reference past failure modes, compute false breakout probability, and evaluate safety score."
     )
@@ -172,16 +217,23 @@ async def run_stage4_openai_risk(
                 if resp.status_code == 200:
                     data = resp.json()
                     raw_content = data["choices"][0]["message"]["content"]
-                    cleaned_content = raw_content.replace("```json", "").replace("```", "").strip()
-                    parsed = json.loads(cleaned_content)
-                    safety_score = float(parsed.get("safety_score", safety_score))
-                    false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
-                    order_block_status = parsed.get("order_block_status", order_block_status)
-                    macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
-                    critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
-                    critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                    model_name = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-                    parsed_successfully = True
+                    if "```json" in raw_content:
+                        json_str = raw_content.split("```json")[1].split("```")[0].strip()
+                        parsed = json.loads(json_str)
+                    elif "{" in raw_content:
+                        json_str = raw_content[raw_content.find("{"):raw_content.rfind("}")+1]
+                        parsed = json.loads(json_str)
+                    else:
+                        parsed = {}
+                    if parsed and "safety_score" in parsed:
+                        safety_score = float(parsed.get("safety_score", safety_score))
+                        false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                        order_block_status = parsed.get("order_block_status", order_block_status)
+                        macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                        critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                        critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                        model_name = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+                        parsed_successfully = True
         except Exception as e:
             print(f"[Stage 4 NVIDIA Risk Officer Notice]: {e}")
 
@@ -251,9 +303,8 @@ async def run_stage4_openai_risk(
             print(f"[Stage 4 LLM Risk Notice]: {e}")
 
     # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime
-    mtf = stage1.multi_timeframe_confluence
     proposed_dir = stage1.initial_thesis.get("direction", "NEUTRAL") if stage1.initial_thesis else "NEUTRAL"
-    if mtf and mtf.screen_1d.trend == "BULLISH" and proposed_dir == "SHORT":
+    if trend_1d == "BULLISH" and proposed_dir == "SHORT":
         macro_trap_alert = "CRITICAL: Counter-trend short proposed while 1D Macro Tide is BULLISH. High risk of short squeeze."
         false_breakout_prob = max(false_breakout_prob, 78.0)
         safety_score = min(safety_score, 32.0)
@@ -269,6 +320,7 @@ async def run_stage4_openai_risk(
         latency_ms=latency_ms,
         liquidity_sweep_risk="Low",
         false_breakout_probability=false_breakout_prob,
+        orderBlockStatus=order_block_status,
         order_block_status=order_block_status,
         macro_trap_alert=macro_trap_alert,
         critique_of_gemini=critique_gemini,

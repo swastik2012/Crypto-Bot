@@ -238,15 +238,16 @@ class AutoTradingScheduler:
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG
 
-                    # Compute accurate directional fallbacks (+7.8% TP1, +15.0% TP2, -3.4% SL)
-                    if is_short:
-                        default_tp1 = round(current_price * 0.922, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 0.850, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 1.034, 4 if current_price < 1 else 2)
-                    else:
-                        default_tp1 = round(current_price * 1.078, 4 if current_price < 1 else 2)
-                        default_tp2 = round(current_price * 1.150, 4 if current_price < 1 else 2)
-                        default_sl = round(current_price * 0.966, 4 if current_price < 1 else 2)
+                    # Compute accurate directional fallbacks via Dynamic ATR Volatility Geometry
+                    from backend.services.market_data import market_data_service
+                    atr_fallbacks = await market_data_service.calculate_dynamic_atr_targets(
+                        symbol=pair,
+                        current_price=current_price,
+                        direction="SHORT" if is_short else "LONG",
+                    )
+                    default_tp1 = atr_fallbacks["take_profit_1"]
+                    default_tp2 = atr_fallbacks["take_profit_2"]
+                    default_sl = atr_fallbacks["stop_loss"]
 
                     tp1 = plan.get("take_profit_1") or default_tp1 if isinstance(plan, dict) else (getattr(plan, "take_profit_1", None) or default_tp1)
                     tp2 = plan.get("take_profit_2") or default_tp2 if isinstance(plan, dict) else (getattr(plan, "take_profit_2", None) or default_tp2)

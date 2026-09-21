@@ -20,10 +20,11 @@ async def run_stage_jev_system_one(
     current_price: float,
     account_state: Dict[str, Any],
     api_key: str = "",
+    derivatives_data: Optional[Any] = None,
 ) -> Tuple[StageJevSystemOneResult, DebateMessageSchema]:
     """
-    Stage 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
-    - Ingests real-time market micro-structure, visual cues (Stage 1), and news sentiment (Stage 2).
+    Stage 3: TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+    - Ingests real-time market micro-structure, derivatives order flow (funding, CVD, OI), visual cues (Stage 1), and news (Stage 2).
     - Submits typed questions to TypeSafe AI System One API (https://api.typesafe.ai/v1/systemone).
     - Obtains calibrated probabilities for execution bias, market regime, edge existence, and execution urgency.
     - Operates at sub-200ms latency, acting as the intuitive fast-twitch reflex before System 2 deliberative consensus.
@@ -63,6 +64,21 @@ async def run_stage_jev_system_one(
         "open_positions_count": len(account_state.get("open_positions", [])),
         "available_cash": account_state.get("cash_balance", 10000.0),
     }
+
+    # Enrich state with live derivatives microstructure if available
+    if derivatives_data:
+        deriv_dict = derivatives_data.dict() if hasattr(derivatives_data, "dict") else derivatives_data
+        jev_state.update({
+            "funding_rate_8h_pct": deriv_dict.get("funding_rate_8h_pct", 0.01),
+            "funding_regime": deriv_dict.get("funding_regime", "NEUTRAL"),
+            "open_interest_usd": deriv_dict.get("open_interest_usd", 0.0),
+            "open_interest_change_1h_pct": deriv_dict.get("open_interest_change_1h_pct", 0.0),
+            "oi_interpretation": deriv_dict.get("oi_interpretation", "NEUTRAL"),
+            "taker_buy_ratio": deriv_dict.get("taker_buy_ratio", 1.0),
+            "cvd_divergence": deriv_dict.get("cvd_divergence", "NEUTRAL"),
+            "predatory_liquidation_risk": deriv_dict.get("predatory_liquidation_risk", "LOW"),
+            "liquidation_bias": deriv_dict.get("liquidation_bias", "BALANCED"),
+        })
 
     # 2. Construct Typed Questions for Jev (choice, score, noul)
     jev_questions = {
@@ -147,8 +163,28 @@ async def run_stage_jev_system_one(
 
     # 4. Deterministic Fast-Twitch Calculation Fallback if not successful
     if not call_success:
-        # Calibrated probabilities based on live quantitative data
-        if direction == "LONG" and news_sentiment_score >= 55.0:
+        # Check derivatives overrides
+        deriv_dict = derivatives_data.dict() if hasattr(derivatives_data, "dict") else (derivatives_data or {})
+        pred_risk = deriv_dict.get("predatory_liquidation_risk", "LOW")
+        cvd_div = deriv_dict.get("cvd_divergence", "NEUTRAL")
+        funding_reg = deriv_dict.get("funding_regime", "NEUTRAL")
+
+        # Predatory Liquidation Override: High risk or severe CVD exhaustion forces Stand Aside
+        if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
+            bias_val = "HOLD"
+            bias_probs = {"BUY": 0.15, "HOLD": 0.72, "SELL": 0.13}
+            regime_val = "liquidity_sweep"
+            regime_probs = {"trend_continuation": 0.08, "mean_reversion": 0.22, "high_risk_chop": 0.15, "liquidity_sweep": 0.55}
+            edge_val = False
+            edge_prob = 0.22
+            urgency_val = "Stand Aside / Invalidation Risk"
+            urgency_probs = {"Stand Aside / Invalidation Risk": 0.78, "Wait for Pullback to Limit Order": 0.16, "Immediate Market Execution": 0.06}
+            toxic_val = True
+            toxic_prob = 0.88
+            conviction_val = "Low Conviction (Under 60%)"
+            conviction_probs = {"Low Conviction (Under 60%)": 0.68, "Moderate Conviction (60% - 75%)": 0.20, "High Conviction (75% - 88%)": 0.10, "Extreme Conviction (Above 88%)": 0.02}
+            bias_conf = 0.78
+        elif direction == "LONG" and news_sentiment_score >= 55.0:
             bias_val = "BUY"
             bias_probs = {"BUY": 0.84, "HOLD": 0.11, "SELL": 0.05}
             regime_val = "trend_continuation"

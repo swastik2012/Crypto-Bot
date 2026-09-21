@@ -59,12 +59,12 @@ CRITICAL DIRECTIVES FOR MAXIMUM PROFITABILITY:
    - If price is consolidating mid-range, trapped inside contracting Bollinger Bands, or volume delta is flat/neutral, you MUST set direction to "NEUTRAL" (HOLD).
    - NEVER force a trade in chop. Missing consolidation is 100x better than taking a losing chop trade.
    - Strictly veto any counter-trend trade fighting the 1D Macro Tide.
-3. PRECISE ASYMMETRIC EXECUTION TARGETS (HIGH-PROFIT SWING CALIBRATION):
+3. PRECISE ASYMMETRIC VOLATILITY-ADAPTIVE EXECUTION TARGETS (DYNAMIC ATR GEOMETRY):
    - suggested_entry: Optimal limit/market entry zone at the edge of the demand/supply order block.
-   - take_profit_1: First major structural resistance / liquidity target (+7.8% to +8.5% for Longs, -7.8% to -8.5% for Shorts). 50% scale-out level with trailing stop locked to break-even.
-   - take_profit_2: Macro Fibonacci 1.618 extension runner (+14.5% to +18.0% for Longs, -14.5% to -18.0% for Shorts) to capture maximum swing expansion.
-   - stop_loss: Hard structural invalidation placed safely beyond key swing order blocks (-3.2% to -3.5% distance for Longs, +3.2% to +3.5% for Shorts).
-   - STRICT ASYMMETRY RULE: The setup MUST offer a minimum 1:2.2 Risk:Reward ratio to TP1, and > 1:3.5 blended R:R. If R:R < 2.0, reject the trade as "NEUTRAL".
+   - take_profit_1: Dynamic ATR Target 1 (2.0x ATR_14). 50% scale-out level with trailing stop locked to break-even.
+   - take_profit_2: Dynamic ATR Target 2 (4.0x ATR_14) macro expansion runner to capture maximum volatility trend.
+   - stop_loss: Structural invalidation placed safely beyond key swing order blocks (1.5x ATR_14 distance, clamped between 1.2% min and 5.5% max).
+   - STRICT ASYMMETRY RULE: Minimum 1:1.33 R:R to TP1, and >= 1:2.67 blended R:R to TP2. If R:R < 1.33, reject as "NEUTRAL".
 
 Return ONLY a valid JSON object matching this schema:
 {
@@ -166,6 +166,14 @@ async def run_stage1_gemini_vision(
     high_24h = round(effective_price * 1.035, 2)
     low_24h = round(effective_price * 0.965, 2)
 
+    # Compute baseline Dynamic ATR Volatility Geometry
+    atr_targets = await market_data_service.calculate_dynamic_atr_targets(
+        symbol=symbol,
+        current_price=effective_price,
+        direction="LONG" if change_24h >= 0 else "SHORT",
+        timeframe=timeframe,
+    )
+
     # If API key is present, invoke Google Gemini 3.6 Flash model dynamically
     if effective_key:
         try:
@@ -185,6 +193,11 @@ async def run_stage1_gemini_vision(
                 f"- Current Live Price: ${current_price:,.2f}\n"
                 f"- 24h Price Change: {change_24h:+.2f}%\n"
                 f"- 24h High: ${high_24h:,.2f} | 24h Low: ${low_24h:,.2f}\n\n"
+                f"DYNAMIC ATR VOLATILITY GEOMETRY (Binance 14-Period):\n"
+                f"• Volatility Regime: {atr_targets['volatility_regime']} (ATR: ${atr_targets['atr_14']:,.2f} / {atr_targets['atr_pct']}% of price)\n"
+                f"• Recommended Dynamic SL: ${atr_targets['stop_loss']:,.2f} ({atr_targets['sl_distance']:,.2f} buffer)\n"
+                f"• Recommended Dynamic TP1: ${atr_targets['take_profit_1']:,.2f} (1:{atr_targets['risk_reward_tp1']} R:R)\n"
+                f"• Recommended Dynamic TP2: ${atr_targets['take_profit_2']:,.2f} (1:{atr_targets['risk_reward_tp2']} R:R)\n\n"
                 f"TRIPLE-SCREEN MULTI-TIMEFRAME CONFLUENCE (Binance Live):\n"
                 f"• Screen 1 (1D Macro Tide): {mtf_raw.screen_1d.trend} (RSI: {mtf_raw.screen_1d.rsi_14}, {mtf_raw.screen_1d.structure_signal})\n"
                 f"• Screen 2 (4H Structural Wave): {mtf_raw.screen_4h.trend} (Demand: ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, Supply: ${mtf_raw.screen_4h.key_supply_zone[1]:,.2f})\n"
@@ -319,6 +332,17 @@ async def run_stage1_gemini_vision(
     # Deterministic pattern selector based on asset and momentum
     seed = int(abs(hash(symbol)) + int(time.time() // 300)) % 3
 
+    # Dynamic ATR Volatility Geometry for Fallback Thesis
+    atr_plan = await market_data_service.calculate_dynamic_atr_targets(
+        symbol=symbol,
+        current_price=p,
+        direction=direction,
+        timeframe=timeframe,
+    )
+    target1 = atr_plan["take_profit_1"]
+    target2 = atr_plan["take_profit_2"]
+    stopLoss = atr_plan["stop_loss"]
+
     if direction == "SHORT":
         pattern_candidates = [
             ("Bearish Head & Shoulders Breakdown", "reversal_breakdown", f"Decisive breakdown below neckline support with expanding sell volume below ${p * 0.992:,.2f}."),
@@ -330,9 +354,6 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=89.5, description=chosen[2]),
             TechnicalPattern(name="Bearish EMA 20/50 Death Spread", type="moving_average", timeframe=timeframe, reliability=86.2, description=f"20 EMA accelerating downward spread below 50 EMA baseline."),
         ]
-        target1 = round(p * 0.922, 4 if p < 1 else 2)
-        target2 = round(p * 0.850, 4 if p < 1 else 2)
-        stopLoss = round(p * 1.034, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bearish Distribution", "signal": "SELL"}
         volume_analysis = f"24h sell delta dominant with {vol_str} turnover and repeated rejections at upper resistance band."
         initial_thesis = {
@@ -341,11 +362,15 @@ async def run_stage1_gemini_vision(
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
+            "atr_14": atr_plan["atr_14"],
+            "atr_pct": atr_plan["atr_pct"],
+            "volatility_regime": atr_plan["volatility_regime"],
+            "risk_reward_tp1": atr_plan["risk_reward_tp1"],
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum). Asymmetric R:R 1:2.29 to TP1.",
+            "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum). Dynamic ATR geometry: SL=${stopLoss:,.2f}, TP1=${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R).",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f} (1:2.29 R:R)."
-        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
+        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
+        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     elif direction == "NEUTRAL":
         pattern_candidates = [
@@ -358,9 +383,6 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=74.0, description=chosen[2]),
             TechnicalPattern(name="Oscillator Midline Equilibrium", type="oscillator", timeframe=timeframe, reliability=71.5, description=f"RSI hovering near 50 neutral baseline with balanced buyer/seller absorption."),
         ]
-        target1 = round(p * 1.025, 4 if p < 1 else 2)
-        target2 = round(p * 1.045, 4 if p < 1 else 2)
-        stopLoss = round(p * 0.975, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Neutral Equilibrium", "signal": "HOLD"}
         volume_analysis = f"Balanced volume profile ({vol_str} 24h) with no clear institutional delta dominance."
         initial_thesis = {
@@ -369,11 +391,15 @@ async def run_stage1_gemini_vision(
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
+            "atr_14": atr_plan["atr_14"],
+            "atr_pct": atr_plan["atr_pct"],
+            "volatility_regime": atr_plan["volatility_regime"],
+            "risk_reward_tp1": atr_plan["risk_reward_tp1"],
             "suggested_allocation_pct": 0.0,
             "rationale": f"{symbol} trading in equilibrium consolidation ({change_24h:+.2f}%). Stand aside until confirmed breakout above ${target1:,.2f} or below ${stopLoss:,.2f}.",
         }
         debate_content = f"Gemini 3.6 Flash identified {chosen[0]} on {symbol} [{timeframe}]. Neutral momentum ({change_24h:+.2f}%). Recommending HOLD in cash."
-        pills = ["Gemini 3.6 Flash (HOLD)", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
+        pills = ["Gemini 3.6 Flash (HOLD)", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     else: # LONG
         pattern_candidates = [
@@ -386,9 +412,6 @@ async def run_stage1_gemini_vision(
             TechnicalPattern(name=chosen[0], type=chosen[1], timeframe=timeframe, reliability=93.2, description=chosen[2]),
             TechnicalPattern(name="Bullish Momentum Convergence", type="momentum", timeframe=timeframe, reliability=88.5, description=f"Positive volume delta (+18.4%) and higher swing lows supporting upside continuation."),
         ]
-        target1 = round(p * 1.078, 4 if p < 1 else 2)
-        target2 = round(p * 1.150, 4 if p < 1 else 2)
-        stopLoss = round(p * 0.966, 4 if p < 1 else 2)
         rsi_status = {"value": rsi_calc, "condition": "Bullish Expansion", "signal": "BUY"}
         volume_analysis = f"Expanding buyer delta (+22.4% net volume) with {vol_str} 24h turnover confirming institutional accumulation."
         initial_thesis = {
@@ -397,11 +420,15 @@ async def run_stage1_gemini_vision(
             "take_profit_1": target1,
             "take_profit_2": target2,
             "stop_loss": stopLoss,
+            "atr_14": atr_plan["atr_14"],
+            "atr_pct": atr_plan["atr_pct"],
+            "volatility_regime": atr_plan["volatility_regime"],
+            "risk_reward_tp1": atr_plan["risk_reward_tp1"],
             "suggested_allocation_pct": 5.0,
-            "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum). Asymmetric R:R 1:2.29 to TP1.",
+            "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum). Dynamic ATR geometry: SL=${stopLoss:,.2f}, TP1=${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R).",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f} (1:2.29 R:R)."
-        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"RSI: {rsi_calc}"]
+        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
+        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     key_levels = [
         SupportResistanceLevel(price=stopLoss, type="support" if direction != "SHORT" else "resistance", strength="major", description=f"Structural Anchor & Hard Invalidation (${stopLoss:,.2f})"),

@@ -2,7 +2,7 @@ import time
 import json
 import asyncio
 import httpx
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from backend.models.schemas import (
     Stage5GeminiArbiterResult,
     Stage1GeminiVisionResult,
@@ -13,6 +13,14 @@ from backend.models.schemas import (
     DebateMessageSchema,
 )
 from backend.config import settings
+
+def _get_mtf_trend_1d(mtf: Any) -> str:
+    if not mtf:
+        return "N/A"
+    screen_1d = getattr(mtf, "screen_1d", None) if not isinstance(mtf, dict) else mtf.get("screen_1d")
+    if not screen_1d:
+        return "N/A"
+    return getattr(screen_1d, "trend", "N/A") if not isinstance(screen_1d, dict) else screen_1d.get("trend", "N/A")
 
 async def run_stage5_gemini_arbiter(
     symbol: str,
@@ -25,15 +33,17 @@ async def run_stage5_gemini_arbiter(
     strategy_preset: str = "Swing Trading",
     api_key: str = "",
     stage_jev: Optional[Any] = None,
+    timeframe: str = "15m",
+    derivatives_data: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.5 Flash Consensus Arbiter & Trade Synthesizer
     - Reconciles System 1 (TypeSafe AI Jev Fast-Twitch Reflex) with System 2 Deliberation:
-      Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 4), and Risk Audit (Stage 5).
+      Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 4), Risk Audit (Stage 5), and Derivatives Microstructure.
     - Synthesizes final actionable consensus verdict, confidence score, and execution plan.
     """
     gemini_key = api_key or settings.GEMINI_API_KEY
-    model_name = settings.GEMINI_MODEL or "gemini-3.5-flash"
+    model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
     
     thesis = stage1.initial_thesis or {}
     direction = str(thesis.get("direction", "LONG")).upper()
@@ -42,34 +52,75 @@ async def run_stage5_gemini_arbiter(
     pat_name = stage1.patterns[0].name if stage1.patterns else "Technical Structure"
     entry = thesis.get("suggested_entry", current_price)
     mtf = getattr(stage1, "multi_timeframe_confluence", None)
-    has_mtf_warning = mtf.counter_trend_warning if mtf else False
-    mtf_align = mtf.alignment_score if mtf else "3/3 FULL CONFLUENCE"
+    has_mtf_warning = getattr(mtf, "counter_trend_warning", False) if not isinstance(mtf, dict) else mtf.get("counter_trend_warning", False)
+    mtf_align = getattr(mtf, "alignment_score", "3/3 FULL CONFLUENCE") if not isinstance(mtf, dict) else mtf.get("alignment_score", "3/3 FULL CONFLUENCE")
+    trend_1d = _get_mtf_trend_1d(mtf)
 
-    if has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+    from backend.services.market_data import market_data_service
+    atr_plan = await market_data_service.calculate_dynamic_atr_targets(
+        symbol=symbol,
+        current_price=current_price,
+        direction=direction,
+        timeframe=timeframe,
+    )
+
+    if hasattr(derivatives_data, "model_dump"):
+        deriv_dict = derivatives_data.model_dump()
+    elif hasattr(derivatives_data, "dict"):
+        deriv_dict = derivatives_data.dict()
+    else:
+        deriv_dict = derivatives_data or {}
+
+    pred_risk = deriv_dict.get("predatory_liquidation_risk", "LOW")
+    veto_active = False
+
+    # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
+    if pred_risk == "HIGH":
+        veto_active = True
+        gemini_score = 55.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = 44.0
+        signal = SignalAction.HOLD
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        invalidation_cond = f"Predatory liquidation trap active in Binance Futures order flow ({deriv_dict.get('cvd_divergence', 'NEUTRAL')}, Funding: {deriv_dict.get('funding_rate_8h_pct', 0):+.4f}%). Standing aside in cash."
+        summary = (
+            f"6-Stage Arbiter Override: STRICT HOLD ({consensus_confidence}% conviction) for {symbol}. "
+            f"Derivatives Microstructure Engine detected HIGH predatory liquidation risk. "
+            f"Funding rate is {deriv_dict.get('funding_regime', 'CROWDED')} with {deriv_dict.get('cvd_divergence', 'divergence')}. "
+            f"Chief Arbiter mandates standing aside in cash to avoid whale liquidity stop-runs."
+        )
+
+    elif has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+        veto_active = True
         gemini_score = 65.0
         news_score = stage2.sentiment_score
         nvidia_score = stage3.stress_test_score
         openai_score = stage4.safety_score
         consensus_confidence = 48.0
         signal = SignalAction.HOLD
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
-        invalidation_cond = f"Multi-timeframe divergence ({mtf_align}). Lower-timeframe trigger opposes 1D Macro Trend ({mtf.screen_1d.trend if mtf else 'N/A'})."
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        invalidation_cond = f"Multi-timeframe divergence ({mtf_align}). Lower-timeframe trigger opposes 1D Macro Trend ({trend_1d})."
         summary = (
             f"5-Stage Arbiter Verdict: STRICT HOLD ({consensus_confidence}% conviction) for {symbol}. "
             f"Triple-Screen Confluence Engine detected '{mtf_align}'. While lower-timeframes flashed {direction}, "
-            f"1D Macro Trend remains {mtf.screen_1d.trend if mtf else 'conflicting'}. Chief Arbiter mandates standing aside in cash."
+            f"1D Macro Trend remains {trend_1d}. Chief Arbiter mandates standing aside in cash."
         )
 
     elif direction in ["SHORT", "BEARISH"]:
         # STRICT ANTI-COUNTER-TREND GUARD: NEVER SHORT in a 1D BULLISH Trend
-        if mtf and mtf.screen_1d.trend == "BULLISH":
+        if trend_1d == "BULLISH":
+            veto_active = True
             signal = SignalAction.HOLD
             consensus_confidence = 48.0
-            tp1 = thesis.get("take_profit_1", round(current_price * 1.020, 2))
-            tp2 = thesis.get("take_profit_2", round(current_price * 1.035, 2))
-            sl = thesis.get("stop_loss", round(current_price * 0.980, 2))
+            tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+            tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+            sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
             invalidation_cond = "SHORT vetoed by Arbiter: 1D Macro Trend is BULLISH. Counter-trend shorting is strictly prohibited."
             summary = (
                 f"5-Stage Arbiter Override: HOLD (Capital Preservation) for {symbol}. "
@@ -95,9 +146,9 @@ async def run_stage5_gemini_arbiter(
             else:
                 signal = SignalAction.HOLD
 
-            tp1 = thesis.get("take_profit_1", round(current_price * 0.922, 2))
-            tp2 = thesis.get("take_profit_2", round(current_price * 0.850, 2))
-            sl = thesis.get("stop_loss", round(current_price * 1.034, 2))
+            tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+            tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+            sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
             invalidation_cond = f"Hourly candle close above supply ceiling ${sl:,.2f} invalidates '{pat_name}' structure and triggers immediate stop-loss."
             summary = (
                 f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
@@ -118,9 +169,9 @@ async def run_stage5_gemini_arbiter(
             1
         )
         signal = SignalAction.HOLD
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.025, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.045, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.975, 2))
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
         invalidation_cond = f"Asset trading inside equilibrium chop zone (${sl:,.2f} - ${tp1:,.2f}). Stand aside until confirmed directional breakout."
         summary = (
             f"5-Stage Arbiter Verdict: HOLD / NEUTRAL ({consensus_confidence}% conviction) for {symbol}. "
@@ -147,9 +198,9 @@ async def run_stage5_gemini_arbiter(
         else:
             signal = SignalAction.HOLD
 
-        tp1 = thesis.get("take_profit_1", round(current_price * 1.078, 2))
-        tp2 = thesis.get("take_profit_2", round(current_price * 1.150, 2))
-        sl = thesis.get("stop_loss", round(current_price * 0.966, 2))
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
         invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
         summary = (
             f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
@@ -201,7 +252,7 @@ async def run_stage5_gemini_arbiter(
             else:
                 parsed = {}
 
-            if "consensus_signal" in parsed:
+            if "consensus_signal" in parsed and not veto_active:
                 sig_str = parsed.get("consensus_signal", signal.value).upper()
                 for sa in SignalAction:
                     if sa.value == sig_str:
@@ -210,6 +261,8 @@ async def run_stage5_gemini_arbiter(
                 consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
                 summary = parsed.get("executive_summary", summary)
                 invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+            elif veto_active:
+                signal = SignalAction.HOLD
         except Exception as e:
             print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
 
@@ -218,7 +271,7 @@ async def run_stage5_gemini_arbiter(
     default_pos_size = max(100.0, round(equity * 0.08, 2))
 
     suggested_pos = default_pos_size if signal != SignalAction.HOLD else 0.0
-    if stage3.adjustments_proposed and isinstance(stage3.adjustments_proposed, dict):
+    if signal != SignalAction.HOLD and stage3.adjustments_proposed and isinstance(stage3.adjustments_proposed, dict):
         suggested_pos = stage3.adjustments_proposed.get("suggested_position_usd", suggested_pos)
 
     exec_plan = {
@@ -226,7 +279,10 @@ async def run_stage5_gemini_arbiter(
         "take_profit_1": tp1,
         "take_profit_2": tp2,
         "stop_loss": sl,
-        "effective_rr": stage3.risk_reward_ratio,
+        "effective_rr": atr_plan.get("risk_reward_tp1", stage3.risk_reward_ratio),
+        "atr_14": atr_plan.get("atr_14"),
+        "atr_pct": atr_plan.get("atr_pct"),
+        "volatility_regime": atr_plan.get("volatility_regime"),
         "suggested_leverage": "3x - 5x Cross" if signal != SignalAction.HOLD else "None (Cash)",
         "recommended_position_usd": suggested_pos,
         "time_horizon": "12h - 48h (Swing)" if signal != SignalAction.HOLD else "Waiting for Catalyst",
@@ -267,6 +323,13 @@ async def run_stage5_gemini_arbiter(
             "system_one_edge_confirmed": jev_edge_confirmed,
             "nvidia_quant_score": nvidia_score,
             "openai_risk_score": openai_score,
+            "atr_14": atr_plan.get("atr_14"),
+            "atr_pct": atr_plan.get("atr_pct"),
+            "volatility_regime": atr_plan.get("volatility_regime"),
+            "derivatives_funding_rate": deriv_dict.get("funding_rate_8h_pct"),
+            "derivatives_funding_regime": deriv_dict.get("funding_regime"),
+            "derivatives_cvd_divergence": deriv_dict.get("cvd_divergence"),
+            "derivatives_predatory_risk": deriv_dict.get("predatory_liquidation_risk"),
             "dual_brain_alignment": "ALIGNED (System 1 + System 2)" if dual_brain_aligned else "DIVERGENT",
             "overall_agreement": f"Confluence ({consensus_confidence}%) - {signal.value}",
         },

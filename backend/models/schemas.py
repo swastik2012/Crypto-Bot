@@ -1,3 +1,4 @@
+import time
 from enum import Enum
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel, Field
@@ -279,6 +280,25 @@ class DebateMessageSchema(BaseModel):
     highlight_pills: Optional[List[str]] = []
     highlightPills: Optional[List[str]] = []
 
+class DerivativesMicrostructureSchema(BaseModel):
+    symbol: str
+    mark_price: float
+    index_price: float
+    basis_spread_pct: float
+    funding_rate_8h_pct: float
+    funding_regime: str  # "CROWDED_LONGS", "CROWDED_SHORTS", "NEUTRAL"
+    open_interest_usd: float
+    open_interest_change_1h_pct: float
+    oi_interpretation: str
+    taker_buy_ratio: float
+    taker_buy_vol_usd: float
+    taker_sell_vol_usd: float
+    cvd_divergence: str
+    predatory_liquidation_risk: str  # "HIGH", "MODERATE", "LOW"
+    liquidation_bias: str
+    summary: str
+    timestamp: float = Field(default_factory=time.time)
+
 class AnalyzeAndTradeRequest(BaseModel):
     symbol: str = "BTC/USDT"
     timeframe: str = "1H"
@@ -303,6 +323,7 @@ class AnalyzeAndTradeResponse(BaseModel):
     stage3: Stage3NvidiaNimResult
     stage4: Stage4OpenAIRiskResult
     stage5: Stage5GeminiArbiterResult
+    derivatives_data: Optional[DerivativesMicrostructureSchema] = None
     debate_stream: List[DebateMessageSchema]
     auto_executed: bool
     executed_position: Optional[PaperPosition] = None
