@@ -25,11 +25,12 @@ async def run_stage3_nvidia_nim(
     current_price: float,
     account_state: Dict[str, Any],
     api_key: str = "",
+    stage_jev: Optional[Any] = None,
 ) -> Tuple[Stage3NvidiaNimResult, DebateMessageSchema]:
     """
-    Stage 3: NVIDIA NIM Quantitative Reasoning & Monte Carlo Engine
-    - Ingests BOTH Stage 1 (Gemini Vision Technicals) AND Stage 2 (NVIDIA NIM News Sentiment Gist).
-    - Executes 10,000 Monte Carlo path simulations weighted by news catalyst scores.
+    Stage 4: NVIDIA NIM Quantitative Reasoning & Monte Carlo Engine
+    - Ingests Stage 1 (Gemini Vision), Stage 2 (News Sentiment), and Stage 3 (TypeSafe Jev System 1 Reflex).
+    - Executes 10,000 Monte Carlo path simulations weighted by news catalyst scores and Jev fast-twitch probabilities.
     - Validates Mathematical Proof of Risk/Reward and liquidity depth.
     """
     nvidia_key = api_key or settings.NVIDIA_NIM_API_KEY
@@ -243,20 +244,36 @@ async def run_stage3_nvidia_nim(
         mathematical_proof=math_proof,
     )
 
+    jev_info = ""
+    if stage_jev:
+        jev_bias = getattr(stage_jev.execution_bias, "value", "NEUTRAL")
+        jev_info = f" + Jev System 1 Reflex ({jev_bias})"
+
     debate_msg = DebateMessageSchema(
-        id="msg_st3_01",
-        stage_number=3,
+        id=f"msg_st4_{int(time.time()*1000)}",
+        stage_number=4,
+        stageNumber=4,
         agent_id="agent_nvidia_nim",
+        agentId="agent_nvidia_nim",
         agent_name="NVIDIA DeepSeek V4 Pro Reasoning",
+        agentName="NVIDIA DeepSeek V4 Pro Reasoning",
         agent_badge="Monte Carlo & Math Proof",
+        agentBadge="Monte Carlo & Math Proof",
         avatar_color="from-[#76B900] to-emerald-500",
+        avatarColor="from-[#76B900] to-emerald-500",
         model=model_name,
-        timestamp="Stage 3 • Quantitative Stress Test",
+        timestamp="Stage 4 • Quantitative Stress Test",
         content=(
-            f"Ingested Stage 1 Vision & Stage 2 News Gist ({stage2.sentiment_score}% Bullish). "
+            f"Ingested Stage 1 Vision, Stage 2 News Gist ({stage2.sentiment_score}% Bullish){jev_info}. "
             f"10,000 Monte Carlo paths confirm {mc_win_rate}% win rate with 1:{calculated_rr} R:R. Verdict: {verdict}."
         ),
         highlight_pills=[
+            f"Monte Carlo: {mc_win_rate}%",
+            f"R:R: 1:{calculated_rr}",
+            f"Stress Score: {stress_score}%",
+            f"Verdict: {verdict}",
+        ],
+        highlightPills=[
             f"Monte Carlo: {mc_win_rate}%",
             f"R:R: 1:{calculated_rr}",
             f"Stress Score: {stress_score}%",
@@ -269,7 +286,7 @@ async def run_stage3_nvidia_nim(
     telemetry_service.record_call(
         provider="NVIDIA NIM (Quant)",
         model=model_name,
-        stage="Stage 3: Quant & Monte Carlo",
+        stage="Stage 4: Quant & Monte Carlo",
         status="SUCCESS" if (nvidia_key and not nvidia_key.startswith("nvapi-***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency_ms,

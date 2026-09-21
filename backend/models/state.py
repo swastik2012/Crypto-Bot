@@ -2,6 +2,7 @@ from typing import TypedDict, List, Dict, Any, Optional
 from backend.models.schemas import (
     Stage1GeminiVisionResult,
     Stage2NewsSentimentResult,
+    StageJevSystemOneResult,
     Stage3NvidiaNimResult,
     Stage4OpenAIRiskResult,
     Stage5GeminiArbiterResult,
@@ -22,10 +23,12 @@ class AgentGraphState(TypedDict):
     gemini_key: Optional[str]
     nvidia_key: Optional[str]
     openai_key: Optional[str]
+    typesafe_key: Optional[str]
     
-    # 5-Stage Outputs
+    # Stage Outputs (System 1 + System 2)
     stage1_output: Optional[Stage1GeminiVisionResult]
     stage2_output: Optional[Stage2NewsSentimentResult]
+    stage_jev_output: Optional[StageJevSystemOneResult]
     stage3_output: Optional[Stage3NvidiaNimResult]
     stage4_output: Optional[Stage4OpenAIRiskResult]
     stage5_output: Optional[Stage5GeminiArbiterResult]

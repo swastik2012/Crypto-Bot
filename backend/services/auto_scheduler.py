@@ -208,14 +208,24 @@ class AutoTradingScheduler:
                 already_open = existing_pos is not None
 
                 # ========================================================
-                # 🤖 AI CONSENSUS DECISION ENGINE:
-                # Pure AI Multi-Agent Decision (NVIDIA NIM Risk Officer + Gemini Arbiter)
+                # 🤖 DUAL-BRAIN AI CONSENSUS DECISION ENGINE:
+                # System 1 Fast-Twitch Reflex (TypeSafe Jev) + System 2 (NVIDIA + OpenAI + Gemini Arbiter)
                 # ========================================================
+                jev_gate_pass = True
+                if response.stage_jev:
+                    if response.stage_jev.toxic_flow_detected.value:
+                        jev_gate_pass = False
+                        print(f"[AutoTrader Jev Gate] {pair} entry blocked: System 1 detected toxic predatory flow.")
+                    elif not response.stage_jev.high_probability_edge.value:
+                        jev_gate_pass = False
+                        print(f"[AutoTrader Jev Gate] {pair} entry blocked: System 1 found no statistically significant edge.")
+
                 can_execute = (
                     confidence >= 78.0 and
                     (is_buy or is_short) and
                     not already_open and
-                    not portfolio_full
+                    not portfolio_full and
+                    jev_gate_pass
                 )
 
                 if can_execute:

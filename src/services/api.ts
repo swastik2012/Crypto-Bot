@@ -181,6 +181,8 @@ export const api = {
     custom_gemini_key?: string;
     custom_nvidia_key?: string;
     custom_openai_key?: string;
+    custom_typesafe_key?: string;
+    custom_jev_key?: string;
   }) {
     try {
       const response = await fetch(`${API_BASE_URL}/api/analyze-and-trade`, {

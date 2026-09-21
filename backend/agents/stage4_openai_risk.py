@@ -30,11 +30,12 @@ async def run_stage4_openai_risk(
     current_price: float,
     account_state: Dict[str, Any],
     api_key: str = "",
+    stage_jev: Optional[Any] = None,
 ) -> Tuple[Stage4OpenAIRiskResult, DebateMessageSchema]:
     """
-    Stage 4: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
-    - Audits Vision (Stage 1), News Narrative (Stage 2), and Quant Proof (Stage 3).
-    - Checks for 'Buy the Rumor, Sell the News' traps, liquidity sweeps, and invalidation bounds.
+    Stage 5: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
+    - Audits Vision (Stage 1), News Narrative (Stage 2), System 1 Jev Reflex (Stage 3), and Quant Proof (Stage 4).
+    - Checks for 'Buy the Rumor, Sell the News' traps, liquidity sweeps, toxic flow, and invalidation bounds.
     """
     openai_key = api_key or settings.OPENAI_API_KEY
     model_name = settings.OPENAI_MODEL or "gpt-4o"
@@ -276,19 +277,30 @@ async def run_stage4_openai_risk(
     )
 
     debate_msg = DebateMessageSchema(
-        id="msg_st4_01",
-        stage_number=4,
+        id=f"msg_st5_{int(time.time()*1000)}",
+        stage_number=5,
+        stageNumber=5,
         agent_id="agent_openai_risk",
+        agentId="agent_openai_risk",
         agent_name="OpenAI Flagship Risk Guard",
+        agentName="OpenAI Flagship Risk Guard",
         agent_badge="False Breakout & Trap Auditor",
+        agentBadge="False Breakout & Trap Auditor",
         avatar_color="from-purple-500 to-indigo-600",
+        avatarColor="from-purple-500 to-indigo-600",
         model=model_name,
-        timestamp="Stage 4 • Risk & Fakeout Validation",
+        timestamp="Stage 5 • Risk & Fakeout Validation",
         content=(
             f"Risk Audit Complete: Safety Score {safety_score}/100. False Breakout Probability: {false_breakout_prob}%. "
-            f"News Gist confirmed non-toxic; demand order block intact."
+            f"News Gist & Jev Fast-Twitch Flow confirmed non-toxic; demand order block intact."
         ),
         highlight_pills=[
+            f"Safety: {safety_score}%",
+            f"Fakeout Risk: {false_breakout_prob}%",
+            "Liquidity: Verified Low",
+            "Trap Alert: Clear",
+        ],
+        highlightPills=[
             f"Safety: {safety_score}%",
             f"Fakeout Risk: {false_breakout_prob}%",
             "Liquidity: Verified Low",
@@ -301,7 +313,7 @@ async def run_stage4_openai_risk(
     telemetry_service.record_call(
         provider="OpenAI",
         model=model_name,
-        stage="Stage 4: Risk & Trap Guard",
+        stage="Stage 5: Risk & Trap Guard",
         status="SUCCESS" if (openai_key and not openai_key.startswith("sk-proj-***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency_ms,

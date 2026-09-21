@@ -3,8 +3,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layers,
   Newspaper,
-  Cpu,
   Zap,
+  Cpu,
+  ShieldAlert,
   Sparkles,
   CheckCircle2,
 } from 'lucide-react';
@@ -12,6 +13,7 @@ import type { FullDebatePipelineData } from '../../types';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { StageCard } from './StageCard';
+import { StageJevCard } from './StageJevCard';
 import { ConsensusSummary } from './ConsensusSummary';
 import { DebateTranscript } from './DebateTranscript';
 
@@ -28,7 +30,7 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
   activeStageNumber,
   isAnalyzing,
 }) => {
-  const [selectedStageTab, setSelectedStageTab] = useState<number>(5);
+  const [selectedStageTab, setSelectedStageTab] = useState<number>(6);
   const [activeViewMode, setActiveViewMode] = useState<'consensus' | 'breakdown' | 'transcript'>('consensus');
 
   const stages = [
@@ -43,7 +45,7 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
     },
     {
       id: 2,
-      title: 'Stage 2: News Ingestion',
+      title: 'Stage 2: News',
       subtitle: 'CoinDesk • Cointelegraph',
       icon: Newspaper,
       color: 'text-amber-600 dark:text-amber-400',
@@ -52,7 +54,16 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
     },
     {
       id: 3,
-      title: 'Stage 3: Quant Proof',
+      title: 'Stage 3: System 1',
+      subtitle: 'TypeSafe Jev Fast Reflex',
+      icon: Zap,
+      color: 'text-indigo-600 dark:text-indigo-400',
+      borderColor: 'border-indigo-500/50 dark:border-indigo-500/30',
+      activeBg: 'bg-indigo-500/15 dark:bg-indigo-500/10',
+    },
+    {
+      id: 4,
+      title: 'Stage 4: Quant Proof',
       subtitle: 'NVIDIA Monte Carlo Stress',
       icon: Cpu,
       color: 'text-[#598c00] dark:text-[#76B900]',
@@ -60,18 +71,18 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
       activeBg: 'bg-[#76B900]/15 dark:bg-[#76B900]/10',
     },
     {
-      id: 4,
-      title: 'Stage 4: Risk Guard',
+      id: 5,
+      title: 'Stage 5: Risk Guard',
       subtitle: 'OpenAI Fakeout Auditor',
-      icon: Zap,
+      icon: ShieldAlert,
       color: 'text-purple-600 dark:text-purple-400',
       borderColor: 'border-purple-500/50 dark:border-purple-500/30',
       activeBg: 'bg-purple-500/15 dark:bg-purple-500/10',
     },
     {
-      id: 5,
-      title: 'Stage 5: Arbiter',
-      subtitle: '5-Node Trade Verdict',
+      id: 6,
+      title: 'Stage 6: Arbiter',
+      subtitle: 'Dual-Brain Trade Verdict',
       icon: Sparkles,
       color: 'text-cyan-700 dark:text-cyan-400',
       borderColor: 'border-cyan-500/50 dark:border-cyan-500/30',
@@ -82,15 +93,15 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
   return (
     <div className="space-y-4 sm:space-y-6">
       
-      {/* 5-Stage Visual Stepper Header */}
+      {/* 6-Stage Visual Stepper Header */}
       <GlassCard className="p-3 sm:p-4 border border-white/80 dark:border-white/10 shadow-glass-md">
         <div className="flex flex-col md:flex-row items-center justify-between gap-3 mb-3 border-b border-slate-300/70 dark:border-white/10 pb-3">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-mono font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400">
-              5-Stage Multi-Agent AI Consensus Pipeline
+              6-Stage Dual-Brain AI Consensus Pipeline
             </span>
-            <Badge variant="cyan" size="sm">
-              Live News Ingestion Active
+            <Badge variant="purple" size="sm">
+              ⚡ System 1 (Jev) + System 2 Active
             </Badge>
           </div>
 
@@ -129,8 +140,8 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
           </div>
         </div>
 
-        {/* 5 Interactive Stage Cards Bar (Horizontal Snap on Mobile, Grid on Desktop) */}
-        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-5 snap-x snap-mandatory">
+        {/* 6 Interactive Stage Cards Bar (Horizontal Snap on Mobile, Grid on Desktop) */}
+        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-6 snap-x snap-mandatory">
           {stages.map((stage) => {
             const Icon = stage.icon;
             const isSelected = selectedStageTab === stage.id;
@@ -143,11 +154,11 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
                 whileTap={{ scale: 0.98 }}
                 onClick={() => {
                   setSelectedStageTab(stage.id);
-                  if (activeViewMode === 'consensus' && stage.id !== 5) {
+                  if (activeViewMode === 'consensus' && stage.id !== 6) {
                     setActiveViewMode('breakdown');
                   }
                 }}
-                className={`min-w-[135px] sm:min-w-0 flex-1 p-2 sm:p-2.5 rounded-2xl text-left border transition-all relative overflow-hidden font-mono cursor-pointer snap-start shrink-0 sm:shrink ${
+                className={`min-w-[130px] sm:min-w-0 flex-1 p-2 sm:p-2.5 rounded-2xl text-left border transition-all relative overflow-hidden font-mono cursor-pointer snap-start shrink-0 sm:shrink ${
                   isSelected
                     ? `${stage.activeBg} ${stage.borderColor} shadow-glass-sm`
                     : 'bg-white/70 dark:bg-dark-900/40 border-slate-200 dark:border-white/5 hover:border-slate-400/40'
@@ -205,14 +216,26 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
             exit={{ opacity: 0, y: -12 }}
             transition={{ duration: 0.2 }}
           >
-            <StageCard
-              stageNumber={selectedStageTab}
-              stage1Data={pipelineData.stage1}
-              stage2Data={pipelineData.stage2}
-              stage3Data={pipelineData.stage3}
-              stage4Data={pipelineData.stage4}
-              stage5Data={pipelineData.stage5}
-            />
+            {selectedStageTab === 3 ? (
+              <StageJevCard data={pipelineData.stageJev} />
+            ) : (
+              <StageCard
+                stageNumber={
+                  selectedStageTab === 4
+                    ? 3
+                    : selectedStageTab === 5
+                    ? 4
+                    : selectedStageTab === 6
+                    ? 5
+                    : selectedStageTab
+                }
+                stage1Data={pipelineData.stage1}
+                stage2Data={pipelineData.stage2}
+                stage3Data={pipelineData.stage3}
+                stage4Data={pipelineData.stage4}
+                stage5Data={pipelineData.stage5}
+              />
+            )}
           </motion.div>
         )}
 

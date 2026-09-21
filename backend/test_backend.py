@@ -60,8 +60,8 @@ async def run_tests():
     print(f"  ✓ Price Tick $191.00 -> TP Triggered! Closed Trades: {len(closed)} | Realized PnL: ${closed[0].realized_pnl:,.2f} (+{closed[0].realized_pnl_pct}%)")
     assert len(closed) >= 1, "Take Profit should have triggered"
 
-    # 3. Test 5-Stage Multi-Agent Consensus Debate Loop
-    print("\n[3/3] Testing 5-Stage LangGraph Consensus Debate Pipeline...")
+    # 3. Test 6-Stage Multi-Agent Dual-Brain Consensus Debate Loop
+    print("\n[3/3] Testing 6-Stage Dual-Brain Consensus Debate Pipeline (System 1 + System 2)...")
     analysis_res = await consensus_pipeline.run(
         symbol="BTC/USDT",
         timeframe="1D",
@@ -72,14 +72,16 @@ async def run_tests():
     )
     print(f"  ✓ Stage 1 (Gemini Vision): {len(analysis_res.stage1.patterns)} patterns, {len(analysis_res.stage1.key_levels)} key S/R levels")
     print(f"  ✓ Stage 2 (NVIDIA News): Sentiment = {analysis_res.stage2.sentiment_label}, Score = {analysis_res.stage2.sentiment_score}%")
-    print(f"  ✓ Stage 3 (NVIDIA Quant): Monte Carlo Win Rate = {analysis_res.stage3.monte_carlo_win_rate}%, Stress Score = {analysis_res.stage3.stress_test_score}/100, R:R = {analysis_res.stage3.risk_reward_ratio}")
-    print(f"  ✓ Stage 4 (Risk Officer): Trap Risk = {analysis_res.stage4.liquidity_sweep_risk}, Safety Score = {analysis_res.stage4.safety_score}/100")
-    print(f"  ✓ Stage 5 (Gemini Arbiter): Verdict = {analysis_res.stage5.consensus_signal.value}, Conviction = {analysis_res.stage5.consensus_confidence}%, TP1 = ${analysis_res.stage5.execution_plan.get('take_profit_1')}")
+    assert analysis_res.stage_jev is not None, "Stage Jev System One must not be None"
+    print(f"  ✓ Stage 3 (TypeSafe AI Jev - System 1): Bias = {analysis_res.stage_jev.execution_bias.value} ({analysis_res.stage_jev.execution_bias.confidence*100:.0f}%), Regime = {analysis_res.stage_jev.market_regime.value}, Edge = {analysis_res.stage_jev.high_probability_edge.value}, Latency = {analysis_res.stage_jev.latency_ms}ms")
+    print(f"  ✓ Stage 4 (NVIDIA Quant): Monte Carlo Win Rate = {analysis_res.stage3.monte_carlo_win_rate}%, Stress Score = {analysis_res.stage3.stress_test_score}/100, R:R = {analysis_res.stage3.risk_reward_ratio}")
+    print(f"  ✓ Stage 5 (Risk Officer): Trap Risk = {analysis_res.stage4.liquidity_sweep_risk}, Safety Score = {analysis_res.stage4.safety_score}/100")
+    print(f"  ✓ Stage 6 (Gemini Arbiter): Verdict = {analysis_res.stage5.consensus_signal.value}, Conviction = {analysis_res.stage5.consensus_confidence}%, TP1 = ${analysis_res.stage5.execution_plan.get('take_profit_1')}")
     print(f"  ✓ Auto-Execution Result: auto_executed={analysis_res.auto_executed} (Position: {analysis_res.executed_position.position_id if analysis_res.executed_position else 'None'})")
-    print(f"  ✓ Debate Messages Exchanged: {len(analysis_res.debate_stream)} messages across 5 stages")
+    print(f"  ✓ Debate Messages Exchanged: {len(analysis_res.debate_stream)} messages across 6 stages")
 
     print("\n==================================================")
-    print("✅ ALL 5-STAGE BACKEND AND AI SYSTEMS PASSED WITH 100% SUCCESS!")
+    print("✅ ALL 6-STAGE DUAL-BRAIN BACKEND SYSTEMS PASSED WITH 100% SUCCESS!")
     print("==================================================")
 
 if __name__ == "__main__":

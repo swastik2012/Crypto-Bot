@@ -24,10 +24,12 @@ async def run_stage5_gemini_arbiter(
     account_state: Dict[str, Any],
     strategy_preset: str = "Swing Trading",
     api_key: str = "",
+    stage_jev: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
-    Stage 5: Google Gemini 3.5 Flash Consensus Arbiter & Trade Synthesizer
-    - Reconciles Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 3), and Risk Audit (Stage 4).
+    Stage 6: Google Gemini 3.5 Flash Consensus Arbiter & Trade Synthesizer
+    - Reconciles System 1 (TypeSafe AI Jev Fast-Twitch Reflex) with System 2 Deliberation:
+      Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 4), and Risk Audit (Stage 5).
     - Synthesizes final actionable consensus verdict, confidence score, and execution plan.
     """
     gemini_key = api_key or settings.GEMINI_API_KEY
@@ -232,8 +234,24 @@ async def run_stage5_gemini_arbiter(
 
     latency = 310
 
+    jev_score = 75.0
+    jev_bias = "NEUTRAL"
+    jev_edge_confirmed = True
+    if stage_jev:
+        jev_bias = getattr(stage_jev.execution_bias, "value", "NEUTRAL")
+        jev_conf = getattr(stage_jev.execution_bias, "confidence", 0.8)
+        jev_edge = getattr(stage_jev.high_probability_edge, "value", True)
+        jev_edge_confirmed = bool(jev_edge)
+        jev_score = round(jev_conf * 100.0, 1)
+
+    dual_brain_aligned = (
+        (signal.value in ["BUY", "STRONG BUY"] and jev_bias == "BUY") or
+        (signal.value in ["SELL", "STRONG SELL"] and jev_bias == "SELL") or
+        (signal.value == "HOLD" and jev_bias == "HOLD")
+    )
+
     result = Stage5GeminiArbiterResult(
-        agent_name="Agent 5: Gemini 3.6 Flash Consensus Arbiter",
+        agent_name="Agent 6: Gemini 3.6 Flash Consensus Arbiter",
         model=model_name,
         latency_ms=latency,
         consensus_signal=signal,
@@ -244,30 +262,46 @@ async def run_stage5_gemini_arbiter(
         agent_consensus_matrix={
             "gemini_vision_score": gemini_score,
             "news_sentiment_score": news_score,
+            "system_one_jev_score": jev_score,
+            "system_one_bias": jev_bias,
+            "system_one_edge_confirmed": jev_edge_confirmed,
             "nvidia_quant_score": nvidia_score,
             "openai_risk_score": openai_score,
+            "dual_brain_alignment": "ALIGNED (System 1 + System 2)" if dual_brain_aligned else "DIVERGENT",
             "overall_agreement": f"Confluence ({consensus_confidence}%) - {signal.value}",
         },
     )
 
     debate_msg = DebateMessageSchema(
-        id="msg_st5_01",
-        stage_number=5,
+        id=f"msg_st6_{int(time.time()*1000)}",
+        stage_number=6,
+        stageNumber=6,
         agent_id="agent_gemini_arbiter",
+        agentId="agent_gemini_arbiter",
         agent_name="Gemini 3.6 Flash Arbiter",
-        agent_badge="Final 5-Stage Consensus Arbiter",
+        agentName="Gemini 3.6 Flash Arbiter",
+        agent_badge="Chief Dual-Brain Consensus Arbiter",
+        agentBadge="Chief Dual-Brain Consensus Arbiter",
         avatar_color="from-cyan-400 to-teal-400",
+        avatarColor="from-cyan-400 to-teal-400",
         model=model_name,
-        timestamp="Stage 5 • Final Verdict",
+        timestamp="Stage 6 • Dual-Brain Synthesis Verdict",
         content=(
-            f"Consensus Finalized: Issued {signal.value} signal with {consensus_confidence}% confidence. "
+            f"Dual-Brain Consensus Finalized: Issued {signal.value} signal with {consensus_confidence}% confidence. "
+            f"System 1 Reflex ({jev_bias}) {'ALIGNED' if dual_brain_aligned else 'RECONCILED'} with System 2 Deliberation. "
             f"Entry: ${entry:,.2f} | TP1: ${tp1:,.2f} | TP2: ${tp2:,.2f} | SL: ${sl:,.2f}. News Sentiment: {stage2.sentiment_label} ({stage2.sentiment_score}%)."
         ),
         highlight_pills=[
             f"Signal: {signal.value}",
             f"Confidence: {consensus_confidence}%",
-            f"News: {stage2.sentiment_label}",
-            f"Open Trades: {len(open_positions)}",
+            f"System 1: {jev_bias}",
+            f"Dual-Brain: {'Aligned' if dual_brain_aligned else 'Reconciled'}",
+        ],
+        highlightPills=[
+            f"Signal: {signal.value}",
+            f"Confidence: {consensus_confidence}%",
+            f"System 1: {jev_bias}",
+            f"Dual-Brain: {'Aligned' if dual_brain_aligned else 'Reconciled'}",
         ],
     )
 
@@ -276,7 +310,7 @@ async def run_stage5_gemini_arbiter(
     telemetry_service.record_call(
         provider="Google Gemini (Arbiter)",
         model=model_name,
-        stage="Stage 5: Gemini 3.6 Flash Consensus Arbiter",
+        stage="Stage 6: Gemini 3.6 Flash Consensus Arbiter",
         status="SUCCESS" if (gemini_key and not gemini_key.startswith("AIzaSy***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency,

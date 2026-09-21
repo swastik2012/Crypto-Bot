@@ -136,8 +136,53 @@ EVALUATION CRITERIA:
 }`,
   },
   {
-    id: 'stage3',
+    id: 'stage_jev',
     stageNumber: 3,
+    name: 'TypeSafe AI Jev (System One)',
+    role: 'Fast-Twitch Probabilistic Reflex & Prior Distribution Gate',
+    provider: 'TypeSafe (Jev)',
+    color: 'from-indigo-500 to-purple-600',
+    icon: Zap,
+    systemPrompt: `You are TypeSafe AI Jev (System One Fast-Twitch Decision Engine).
+Unlike conversational LLMs, you evaluate real-time application market state and answer typed questions (choice, score, noul) with calibrated probabilities in under 200ms.
+
+TYPED QUESTION SCHEMAS:
+1. execution_bias (choice: BUY | HOLD | SELL)
+2. market_regime (choice: trend_continuation | mean_reversion | high_risk_chop | liquidity_sweep)
+3. high_probability_edge (noul: true/false)
+4. execution_urgency (score: Stand Aside / Invalidation Risk | Wait for Pullback to Limit Order | Immediate Market Execution)
+5. toxic_flow_detected (noul: true/false)
+6. fast_twitch_conviction (score: Low Conviction | Moderate Conviction | High Conviction | Extreme Conviction)`,
+    sampleOutput: `{
+  "execution_bias": {
+    "choice": "BUY",
+    "probabilities": { "BUY": 0.84, "HOLD": 0.11, "SELL": 0.05 },
+    "confidence": 0.88
+  },
+  "market_regime": {
+    "choice": "trend_continuation",
+    "probabilities": { "trend_continuation": 0.78, "mean_reversion": 0.12, "high_risk_chop": 0.06, "liquidity_sweep": 0.04 },
+    "confidence": 0.82
+  },
+  "high_probability_edge": {
+    "noul": true,
+    "probability": 0.86,
+    "confidence": 0.86
+  },
+  "execution_urgency": {
+    "score": "Immediate Market Execution",
+    "confidence": 0.81
+  },
+  "toxic_flow_detected": {
+    "noul": false,
+    "probability": 0.12,
+    "confidence": 0.85
+  }
+}`,
+  },
+  {
+    id: 'stage3',
+    stageNumber: 4,
     name: 'NVIDIA NIM DeepSeek V4 Pro',
     role: 'Quantitative Reasoning & 10,000 Monte Carlo Simulations',
     provider: 'NVIDIA NIM (Quant)',
@@ -324,7 +369,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
     });
   }, [logs, selectedProvider, searchQuery]);
 
-  const providers = ['All', 'Gemini', 'NVIDIA', 'OpenAI', 'News', 'Errors'];
+  const providers = ['All', 'Gemini', 'TypeSafe (Jev)', 'NVIDIA', 'OpenAI', 'News', 'Errors'];
 
   return (
     <div className="space-y-4 sm:space-y-6 font-mono pb-12">

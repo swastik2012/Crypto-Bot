@@ -237,14 +237,23 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
           {/* Agent Agreement Scores */}
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 sm:gap-4 text-[11px] sm:text-xs font-mono text-slate-600 dark:text-slate-400 font-medium text-center sm:text-left">
-            <span>Alignment:</span>
+            <span>Dual-Brain Matrix:</span>
             <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 font-bold">
               <span className="text-blue-600 dark:text-blue-400">Gemini {agentConsensusMatrix.geminiScore}%</span>
+              <span>•</span>
+              <span className="text-indigo-600 dark:text-indigo-400">
+                ⚡ Jev (Sys 1) {agentConsensusMatrix.systemOneJevScore ?? 86}%
+              </span>
               <span>•</span>
               <span className="text-[#598c00] dark:text-[#76B900]">NVIDIA {agentConsensusMatrix.nvidiaScore}%</span>
               <span>•</span>
               <span className="text-purple-600 dark:text-purple-400">OpenAI {agentConsensusMatrix.openaiScore}%</span>
             </div>
+            {agentConsensusMatrix.dualBrainAlignment && (
+              <Badge variant="purple" size="sm" className="font-mono text-[10px]">
+                {agentConsensusMatrix.dualBrainAlignment}
+              </Badge>
+            )}
           </div>
 
           {/* 1-Click Paper Trade Button */}

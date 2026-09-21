@@ -196,7 +196,29 @@ class Stage2NewsSentimentResult(BaseModel):
     articles: List[NewsArticleSchema]
     source_sentiment_breakdown: Dict[str, Any]
 
-# Stage 3: NVIDIA NIM Quantitative & Mathematical Stress Engine (Ingests Stage 1 + Stage 2)
+# Stage 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+class JevQuestionResult(BaseModel):
+    type: str  # "choice" | "score" | "noul"
+    value: Any  # choice string, score string, or boolean
+    probabilities: Dict[str, float] = {}
+    confidence: float = 0.0
+    instructions: Optional[str] = None
+
+class StageJevSystemOneResult(BaseModel):
+    status: str = "completed"
+    agent_name: str = "TypeSafe AI Jev (System One)"
+    model: str = "jev-latest"
+    latency_ms: int = 120
+    execution_bias: JevQuestionResult
+    market_regime: JevQuestionResult
+    high_probability_edge: JevQuestionResult
+    execution_urgency: JevQuestionResult
+    toxic_flow_detected: JevQuestionResult
+    fast_twitch_conviction: JevQuestionResult
+    raw_results: Dict[str, Any] = {}
+    summary: str = ""
+
+# Stage 4: NVIDIA NIM Quantitative & Mathematical Stress Engine (Ingests Stage 1 + Stage 2 + Jev System 1)
 class Stage3NvidiaNimResult(BaseModel):
     status: str = "completed"
     agent_name: str
@@ -211,7 +233,7 @@ class Stage3NvidiaNimResult(BaseModel):
     adjustments_proposed: Optional[Dict[str, Any]] = None
     mathematical_proof: str
 
-# Stage 4: OpenAI Flagship Risk & Liquidity Trap Guard
+# Stage 5: OpenAI Flagship Risk & Liquidity Trap Guard
 class Stage4OpenAIRiskResult(BaseModel):
     status: str = "completed"
     agent_name: str
@@ -226,7 +248,7 @@ class Stage4OpenAIRiskResult(BaseModel):
     critique_of_nvidia: str
     safety_score: float
 
-# Stage 5: Gemini 3.5 Flash Consensus Arbiter
+# Stage 6: Gemini 3.5 Flash Consensus Arbiter (Reconciles System 1 & System 2)
 class Stage5GeminiArbiterResult(BaseModel):
     status: str = "completed"
     agent_name: str
@@ -267,6 +289,8 @@ class AnalyzeAndTradeRequest(BaseModel):
     custom_gemini_key: Optional[str] = None
     custom_nvidia_key: Optional[str] = None
     custom_openai_key: Optional[str] = None
+    custom_typesafe_key: Optional[str] = None
+    custom_jev_key: Optional[str] = None
 
 class AnalyzeAndTradeResponse(BaseModel):
     symbol: str
@@ -275,6 +299,7 @@ class AnalyzeAndTradeResponse(BaseModel):
     analyzed_at: str
     stage1: Stage1GeminiVisionResult
     stage2: Stage2NewsSentimentResult
+    stage_jev: Optional[StageJevSystemOneResult] = None
     stage3: Stage3NvidiaNimResult
     stage4: Stage4OpenAIRiskResult
     stage5: Stage5GeminiArbiterResult

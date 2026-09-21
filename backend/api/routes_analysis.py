@@ -35,6 +35,8 @@ async def analyze_and_trade(req: AnalyzeAndTradeRequest):
         gemini_key=req.custom_gemini_key or "",
         nvidia_key=req.custom_nvidia_key or "",
         openai_key=req.custom_openai_key or "",
+        typesafe_key=req.custom_typesafe_key or req.custom_jev_key or "",
+        jev_key=req.custom_jev_key or req.custom_typesafe_key or "",
     )
     analysis_cache.set(req.symbol, response)
     return response

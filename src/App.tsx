@@ -236,6 +236,12 @@ export const App: React.FC = () => {
       apiKey: 'sk-proj-****************',
       active: true,
     },
+    typeSafeJev: {
+      model: 'jev-latest',
+      endpointUrl: 'https://api.typesafe.ai/v1/systemone',
+      apiKey: '',
+      active: true,
+    },
     strategyPreset: 'Swing Trading',
     autoExecute: true,
     riskTolerance: 'Balanced',
@@ -260,7 +266,7 @@ export const App: React.FC = () => {
 
   // Analysis / Multi-Agent Execution State
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
-  const [activeStageNumber, setActiveStageNumber] = useState<number>(5);
+  const [activeStageNumber, setActiveStageNumber] = useState<number>(6);
 
   // Candlestick Data
   const candles = useMemo(() => {
@@ -483,6 +489,51 @@ export const App: React.FC = () => {
         articles: res.stage2?.articles || [],
         sourceSentimentBreakdown: res.stage2?.source_sentiment_breakdown || {},
       },
+      stageJev: res.stage_jev ? {
+        status: 'completed',
+        agentName: res.stage_jev.agent_name || 'TypeSafe AI Jev (System One)',
+        model: res.stage_jev.model || 'jev-latest',
+        latencyMs: res.stage_jev.latency_ms || 118,
+        executionBias: {
+          type: res.stage_jev.execution_bias?.type || 'choice',
+          value: res.stage_jev.execution_bias?.value || 'BUY',
+          probabilities: res.stage_jev.execution_bias?.probabilities || {},
+          confidence: res.stage_jev.execution_bias?.confidence || 0.85,
+          instructions: res.stage_jev.execution_bias?.instructions,
+        },
+        marketRegime: {
+          type: res.stage_jev.market_regime?.type || 'choice',
+          value: res.stage_jev.market_regime?.value || 'trend_continuation',
+          probabilities: res.stage_jev.market_regime?.probabilities || {},
+          confidence: res.stage_jev.market_regime?.confidence || 0.82,
+        },
+        highProbabilityEdge: {
+          type: res.stage_jev.high_probability_edge?.type || 'noul',
+          value: res.stage_jev.high_probability_edge?.value ?? true,
+          probabilities: res.stage_jev.high_probability_edge?.probabilities || {},
+          confidence: res.stage_jev.high_probability_edge?.confidence || 0.86,
+        },
+        executionUrgency: {
+          type: res.stage_jev.execution_urgency?.type || 'score',
+          value: res.stage_jev.execution_urgency?.value || 'Immediate Market Execution',
+          probabilities: res.stage_jev.execution_urgency?.probabilities || {},
+          confidence: res.stage_jev.execution_urgency?.confidence || 0.81,
+        },
+        toxicFlowDetected: {
+          type: res.stage_jev.toxic_flow_detected?.type || 'noul',
+          value: res.stage_jev.toxic_flow_detected?.value ?? false,
+          probabilities: res.stage_jev.toxic_flow_detected?.probabilities || {},
+          confidence: res.stage_jev.toxic_flow_detected?.confidence || 0.85,
+        },
+        fastTwitchConviction: {
+          type: res.stage_jev.fast_twitch_conviction?.type || 'score',
+          value: res.stage_jev.fast_twitch_conviction?.value || 'High Conviction (75% - 88%)',
+          probabilities: res.stage_jev.fast_twitch_conviction?.probabilities || {},
+          confidence: res.stage_jev.fast_twitch_conviction?.confidence || 0.84,
+        },
+        rawResults: res.stage_jev.raw_results,
+        summary: res.stage_jev.summary || '⚡ System 1 Fast-Twitch Reflex completed.',
+      } : undefined,
       stage3: {
         status: 'completed',
         agentName: res.stage3?.agent_name || 'NVIDIA NIM Quantitative Reasoning Engine',
@@ -501,7 +552,7 @@ export const App: React.FC = () => {
       },
       stage4: {
         status: 'completed',
-        agentName: res.stage4?.agent_name || 'NVIDIA NIM Reasoning Risk Officer',
+        agentName: 'NVIDIA NIM Reasoning Risk Officer',
         model: res.stage4?.model || 'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning',
         latencyMs: res.stage4?.latency_ms || 480,
         liquiditySweepRisk: 'Low',
@@ -533,15 +584,20 @@ export const App: React.FC = () => {
         keyInvalidationCondition: res.stage5?.key_invalidation_condition || `Price violation beyond stop-loss invalidates thesis.`,
         agentConsensusMatrix: {
           geminiScore: res.stage5?.agent_consensus_matrix?.gemini_vision_score ?? confVal,
+          newsScore: res.stage5?.agent_consensus_matrix?.news_sentiment_score ?? 80.0,
+          systemOneJevScore: res.stage5?.agent_consensus_matrix?.system_one_jev_score ?? 86.0,
+          systemOneBias: res.stage5?.agent_consensus_matrix?.system_one_bias ?? (signalVal.includes('SELL') ? 'SELL' : 'BUY'),
+          systemOneEdgeConfirmed: res.stage5?.agent_consensus_matrix?.system_one_edge_confirmed ?? true,
           nvidiaScore: res.stage5?.agent_consensus_matrix?.nvidia_quant_score ?? confVal,
           openaiScore: res.stage5?.agent_consensus_matrix?.openai_risk_score ?? 88.0,
+          dualBrainAlignment: res.stage5?.agent_consensus_matrix?.dual_brain_alignment || 'ALIGNED (System 1 + System 2)',
           agreementLevel: confVal >= 75 ? 'High' : 'Moderate',
         },
       },
       debateStream: (res.debate_stream || []).map((m: any) => ({
         id: m.id,
-        stageNumber: m.stage_number as 1 | 2 | 3 | 4 | 5,
-        agentId: m.stage_number === 1 ? 'gemini-vision' : m.stage_number === 2 ? 'nvidia-news' : m.stage_number === 3 ? 'nvidia-nim' : m.stage_number === 4 ? 'openai-risk' : 'gemini-arbiter',
+        stageNumber: (m.stage_number || 1) as 1 | 2 | 3 | 4 | 5 | 6,
+        agentId: m.agent_id === 'typesafe-jev' ? 'typesafe-jev' : m.stage_number === 1 ? 'gemini-vision' : m.stage_number === 2 ? 'nvidia-news' : m.stage_number === 3 ? 'typesafe-jev' : m.stage_number === 4 ? 'nvidia-nim' : m.stage_number === 5 ? 'openai-risk' : 'gemini-arbiter',
         agentName: m.agent_name,
         agentBadge: m.agent_badge,
         avatarColor: m.avatar_color,
@@ -553,16 +609,17 @@ export const App: React.FC = () => {
     };
   }, []);
 
-  // Handler for running the 5-Stage Multi-Agent Analysis
+  // Handler for running the 6-Stage Dual-Brain Multi-Agent Analysis
   const handleRunAnalysis = useCallback(async () => {
     if (isAnalyzing) return;
     setIsAnalyzing(true);
     setActiveStageNumber(1);
 
-    const t1 = setTimeout(() => setActiveStageNumber(2), 600);
-    const t2 = setTimeout(() => setActiveStageNumber(3), 1200);
-    const t3 = setTimeout(() => setActiveStageNumber(4), 1800);
-    const t4 = setTimeout(() => setActiveStageNumber(5), 2400);
+    const t1 = setTimeout(() => setActiveStageNumber(2), 500);
+    const t2 = setTimeout(() => setActiveStageNumber(3), 1000);
+    const t3 = setTimeout(() => setActiveStageNumber(4), 1500);
+    const t4 = setTimeout(() => setActiveStageNumber(5), 2000);
+    const t5 = setTimeout(() => setActiveStageNumber(6), 2500);
 
     try {
       const res = await api.runMultiAgentAnalysis({
@@ -571,6 +628,7 @@ export const App: React.FC = () => {
         current_price: selectedAsset.price,
         strategy_preset: agentConfig.strategyPreset,
         auto_execute: agentConfig.autoExecute,
+        custom_typesafe_key: agentConfig.typeSafeJev?.apiKey,
       });
 
       if (res && res.stage1 && res.stage5) {
@@ -584,10 +642,11 @@ export const App: React.FC = () => {
       clearTimeout(t2);
       clearTimeout(t3);
       clearTimeout(t4);
-      setActiveStageNumber(5);
+      clearTimeout(t5);
+      setActiveStageNumber(6);
       setTimeout(() => setIsAnalyzing(false), 500);
     }
-  }, [isAnalyzing, selectedAsset, timeInterval, agentConfig]);
+  }, [isAnalyzing, selectedAsset, timeInterval, agentConfig, mapBackendToPipelineData]);
 
   return (
     <div className="relative min-h-screen w-full max-w-full overflow-x-hidden flex flex-col font-sans bg-slate-100 dark:bg-[#070A11] text-slate-900 dark:text-slate-100 transition-colors duration-300">

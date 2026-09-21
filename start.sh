@@ -105,7 +105,7 @@ trap cleanup SIGINT SIGTERM
 
 # 8. Start Backend in Background
 echo -e "${BOLD_CYAN}► Starting FastAPI Backend on 0.0.0.0:8000...${NC}"
-"$UVICORN_BIN" backend.main:app --host 0.0.0.0 --port 8000 --reload &
+"$PYTHON_BIN" -m uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload &
 BACKEND_PID=$!
 
 # Wait briefly for backend to initialize

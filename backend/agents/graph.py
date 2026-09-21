@@ -5,6 +5,7 @@ from backend.models.state import AgentGraphState
 from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide
 from backend.agents.stage1_gemini_vision import run_stage1_gemini_vision
 from backend.agents.stage2_news_sentiment import run_stage2_news_sentiment
+from backend.agents.stage_jev_system_one import run_stage_jev_system_one
 from backend.agents.stage3_nvidia_nim import run_stage3_nvidia_nim
 from backend.agents.stage4_openai_risk import run_stage4_openai_risk
 from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
@@ -12,12 +13,13 @@ from backend.services.paper_engine import paper_engine
 
 class MultiAgentConsensusPipeline:
     """
-    5-Stage LangGraph Multi-Agent Consensus Debate Loop:
+    6-Stage Dual-Brain LangGraph Multi-Agent Consensus Debate Loop:
     1. Gemini Vision: Ingests chart image and extracts visual patterns and key levels.
     2. NVIDIA NIM News & Macro Sentiment: Scrapes CoinDesk, Cointelegraph & CryptoSlate, extracts news gist and sentiment score.
-    3. NVIDIA NIM Quantitative Reasoning: Ingests BOTH Stage 1 Vision & Stage 2 News, runs 10k Monte Carlo simulations with news weighting.
-    4. OpenAI Risk Guard: Audits false breakout probability, liquidity sweeps, and news traps.
-    5. Gemini Arbiter: Synthesizes final BUY/HOLD/SELL verdict, confidence score, and triggers paper engine.
+    3. TypeSafe AI Jev (System One): Sub-200ms Fast-Twitch Reflex Gate computing calibrated probabilities for bias, regime, edge, and urgency.
+    4. NVIDIA NIM Quantitative Reasoning: Ingests Stages 1-3, runs 10,000 Monte Carlo simulations with news and System 1 weighting.
+    5. OpenAI Risk Guard: Audits false breakout probability, liquidity sweeps, and toxic flow traps.
+    6. Gemini Arbiter: Reconciles System 1 (Jev Reflex) with System 2 (Consensus Desk) to synthesize final execution order.
     """
     
     async def run(
@@ -31,11 +33,15 @@ class MultiAgentConsensusPipeline:
         gemini_key: str = "",
         nvidia_key: str = "",
         openai_key: str = "",
+        typesafe_key: str = "",
+        jev_key: str = "",
         account_state: Optional[Dict[str, Any]] = None,
     ) -> AnalyzeAndTradeResponse:
         if account_state is None:
             account_state = paper_engine.get_state().dict()
         debate_stream = []
+
+        active_typesafe_key = typesafe_key or jev_key
 
         if not current_price or current_price <= 0:
             from backend.services.symbol_resolver import symbol_resolver
@@ -54,7 +60,7 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg1)
 
-        # STAGE 2 (NEW): NVIDIA NIM News Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
+        # STAGE 2: NVIDIA NIM News Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
         stage2_res, msg2 = await run_stage2_news_sentiment(
             symbol=symbol,
             stage1_res=stage1_res,
@@ -64,7 +70,18 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg2)
 
-        # STAGE 3: NVIDIA NIM Quantitative Stress Test (Ingests Stage 1 + Stage 2)
+        # STAGE 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+        stage_jev_res, msg_jev = await run_stage_jev_system_one(
+            symbol=symbol,
+            stage1_res=stage1_res,
+            stage2_res=stage2_res,
+            current_price=current_price,
+            account_state=account_state,
+            api_key=active_typesafe_key,
+        )
+        debate_stream.append(msg_jev)
+
+        # STAGE 4: NVIDIA NIM Quantitative Stress Test (Ingests Stages 1, 2 & Jev System 1)
         stage3_res, msg3 = await run_stage3_nvidia_nim(
             symbol=symbol,
             stage1=stage1_res,
@@ -72,10 +89,11 @@ class MultiAgentConsensusPipeline:
             current_price=current_price,
             account_state=account_state,
             api_key=nvidia_key,
+            stage_jev=stage_jev_res,
         )
         debate_stream.append(msg3)
 
-        # STAGE 4: OpenAI Risk & Counter-Trend Validator
+        # STAGE 5: OpenAI Risk & Counter-Trend Validator (Ingests Stages 1-4 & Jev)
         stage4_res, msg4 = await run_stage4_openai_risk(
             symbol=symbol,
             stage1=stage1_res,
@@ -84,10 +102,11 @@ class MultiAgentConsensusPipeline:
             current_price=current_price,
             account_state=account_state,
             api_key=openai_key,
+            stage_jev=stage_jev_res,
         )
         debate_stream.append(msg4)
 
-        # STAGE 5: Gemini Consensus Arbiter
+        # STAGE 6: Gemini Consensus Arbiter (Reconciles System 1 & System 2)
         stage5_res, msg5 = await run_stage5_gemini_arbiter(
             symbol=symbol,
             stage1=stage1_res,
@@ -98,6 +117,7 @@ class MultiAgentConsensusPipeline:
             account_state=account_state,
             strategy_preset=strategy_preset,
             api_key=gemini_key,
+            stage_jev=stage_jev_res,
         )
         debate_stream.append(msg5)
 
@@ -143,6 +163,7 @@ class MultiAgentConsensusPipeline:
             ),
             stage1=stage1_res,
             stage2=stage2_res,
+            stage_jev=stage_jev_res,
             stage3=stage3_res,
             stage4=stage4_res,
             stage5=stage5_res,

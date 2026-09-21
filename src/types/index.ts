@@ -130,7 +130,31 @@ export interface Stage2NewsSentimentOutput {
   sourceSentimentBreakdown: Record<string, string>;
 }
 
-// Stage 3: NVIDIA NIM Quantitative Reasoning & Monte Carlo (Ingests Stage 1 + Stage 2)
+// Stage 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+export interface JevQuestionOutput {
+  type: string; // 'choice' | 'score' | 'noul'
+  value: any; // string | boolean | number
+  probabilities?: Record<string, number>;
+  confidence: number;
+  instructions?: string;
+}
+
+export interface StageJevSystemOneOutput {
+  status: 'idle' | 'running' | 'completed';
+  agentName: string;
+  model: string;
+  latencyMs: number;
+  executionBias: JevQuestionOutput;
+  marketRegime: JevQuestionOutput;
+  highProbabilityEdge: JevQuestionOutput;
+  executionUrgency: JevQuestionOutput;
+  toxicFlowDetected: JevQuestionOutput;
+  fastTwitchConviction: JevQuestionOutput;
+  rawResults?: Record<string, any>;
+  summary: string;
+}
+
+// Stage 4: NVIDIA NIM Quantitative Reasoning & Monte Carlo (Ingests Stages 1-3)
 export interface Stage3NvidiaNimOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;
@@ -153,7 +177,7 @@ export interface Stage3NvidiaNimOutput {
   mathematicalProof: string;
 }
 
-// Stage 4: OpenAI Flagship Risk Guard & Liquidity Trap Validator
+// Stage 5: OpenAI Flagship Risk Guard & Liquidity Trap Validator
 export interface Stage4OpenAIOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;
@@ -168,7 +192,7 @@ export interface Stage4OpenAIOutput {
   safetyScore: number;
 }
 
-// Stage 5: Gemini 3.6 Flash Arbiter Final Synthesis
+// Stage 6: Gemini 3.6 Flash Arbiter Final Synthesis (Reconciles System 1 & System 2)
 export interface Stage5GeminiArbiterOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;
@@ -193,8 +217,12 @@ export interface Stage5GeminiArbiterOutput {
   agentConsensusMatrix: {
     geminiScore: number;
     newsScore?: number;
+    systemOneJevScore?: number;
+    systemOneBias?: string;
+    systemOneEdgeConfirmed?: boolean;
     nvidiaScore: number;
     openaiScore: number;
+    dualBrainAlignment?: string;
     agreementLevel?: string;
     overall_agreement?: string;
   };
@@ -202,8 +230,8 @@ export interface Stage5GeminiArbiterOutput {
 
 export interface DebateMessage {
   id: string;
-  stageNumber: 1 | 2 | 3 | 4 | 5;
-  agentId: 'gemini-vision' | 'nvidia-news' | 'nvidia-nim' | 'openai-risk' | 'gemini-arbiter';
+  stageNumber: 1 | 2 | 3 | 4 | 5 | 6;
+  agentId: 'gemini-vision' | 'nvidia-news' | 'typesafe-jev' | 'nvidia-nim' | 'openai-risk' | 'gemini-arbiter';
   agentName: string;
   agentBadge: string;
   avatarColor: string;
@@ -219,6 +247,7 @@ export interface FullDebatePipelineData {
   analyzedAt: string;
   stage1: Stage1GeminiVisionOutput;
   stage2: Stage2NewsSentimentOutput;
+  stageJev?: StageJevSystemOneOutput;
   stage3: Stage3NvidiaNimOutput;
   stage4: Stage4OpenAIOutput;
   stage5: Stage5GeminiArbiterOutput;
@@ -236,6 +265,12 @@ export interface AgentConfigState {
     model: string;
     endpointUrl: string;
     temperature: number;
+    apiKey: string;
+    active: boolean;
+  };
+  typeSafeJev?: {
+    model: string;
+    endpointUrl: string;
     apiKey: string;
     active: boolean;
   };

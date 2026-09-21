@@ -214,7 +214,61 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                   </div>
                 </div>
 
-                {/* 3. OpenAI Risk Validator Config */}
+                {/* 3. TypeSafe AI Jev (System One Fast-Twitch Reflex) Config */}
+                <div className="p-3.5 rounded-2xl bg-slate-100/70 dark:bg-dark-900/60 border border-indigo-500/25 space-y-2.5">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-400">
+                      <Zap className="w-4 h-4" />
+                      <span>Stage 3: TypeSafe AI Jev (System One Fast-Twitch)</span>
+                    </div>
+                    <Badge variant="purple" size="sm">Sub-200ms Decision Gate</Badge>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
+                    <div>
+                      <label className="text-slate-400 block mb-1">Jev Model</label>
+                      <select
+                        value={localConfig.typeSafeJev?.model || 'jev-latest'}
+                        onChange={(e) =>
+                          setLocalConfig({
+                            ...localConfig,
+                            typeSafeJev: {
+                              model: e.target.value,
+                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://api.typesafe.ai/v1/systemone',
+                              apiKey: localConfig.typeSafeJev?.apiKey || '',
+                              active: localConfig.typeSafeJev?.active ?? true,
+                            },
+                          })
+                        }
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold"
+                      >
+                        <option value="jev-latest">jev-latest (TypeSafe System One Flagship)</option>
+                        <option value="jev-1.13.0">jev-1.13.0 (Calibrated Stable)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-slate-400 block mb-1">TypeSafe API Key</label>
+                      <input
+                        type="password"
+                        value={localConfig.typeSafeJev?.apiKey || ''}
+                        onChange={(e) =>
+                          setLocalConfig({
+                            ...localConfig,
+                            typeSafeJev: {
+                              model: localConfig.typeSafeJev?.model || 'jev-latest',
+                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://api.typesafe.ai/v1/systemone',
+                              apiKey: e.target.value,
+                              active: localConfig.typeSafeJev?.active ?? true,
+                            },
+                          })
+                        }
+                        placeholder="ts-..."
+                        className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* 4. OpenAI Risk Validator Config */}
                 <div className="p-3.5 rounded-2xl bg-slate-100/70 dark:bg-dark-900/60 border border-purple-500/20 space-y-2.5">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-purple-400">

@@ -83,6 +83,9 @@ class AgentTelemetryService:
 
         return log_entry
 
+    def log_call(self, *args, **kwargs):
+        return self.record_call(*args, **kwargs)
+
     def get_logs(self, limit: int = 100, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         logs_list = list(self._logs)
         if provider and provider.lower() != "all":
