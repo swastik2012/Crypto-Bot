@@ -40,6 +40,7 @@ async def run_stage4_openai_risk(
     api_key: str = "",
     stage_jev: Optional[Any] = None,
     derivatives_data: Optional[Any] = None,
+    macro_status: Optional[Any] = None,
 ) -> Tuple[Stage4OpenAIRiskResult, DebateMessageSchema]:
     """
     Stage 5: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
@@ -70,8 +71,29 @@ async def run_stage4_openai_risk(
     funding_reg = deriv_dict.get("funding_regime", "NEUTRAL")
     funding_rate = deriv_dict.get("funding_rate_8h_pct", 0.01)
 
-    # Dynamic risk calculations based on Stage 1, MTF, Stage 3, and Derivatives Microstructure
-    if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
+    # Dynamic risk calculations based on Macro Proximity, Stage 1, MTF, Stage 3, and Derivatives
+    if macro_status and getattr(macro_status, "lockout_active", False):
+        ev_name = getattr(macro_status, "active_event_name", "Tier-1 Macro Event")
+        ev_impact = getattr(macro_status, "active_event_impact", "TIER_1_CRITICAL")
+        ev_mins = getattr(macro_status, "minutes_to_event", 0)
+        safety_score = 22.0
+        false_breakout_prob = 94.0
+        ob_floor = round(current_price * 0.960, 2)
+        ob_ceil = round(current_price * 1.040, 2)
+        order_block_status = f"Macro Blackout Hazard Zone: {ev_name} ({ev_impact})"
+        macro_trap_alert = (
+            f"⛔ MACRO CIRCUIT BREAKER LOCKOUT: High-impact release '{ev_name}' in blackout window ({ev_mins}m away). "
+            f"Institutional market makers pull order book depth; violent bi-directional liquidity sweeps render technicals void. Mandatory stand aside."
+        )
+        critique_gemini = (
+            f"Stage 1 technical setup '{pat_name}' invalidated by macro event volatility shock ({ev_name}). "
+            f"Predatory algorithmic stop-hunts will sweep key levels. Veto enforced."
+        )
+        critique_nvidia = (
+            f"Stage 3 Monte Carlo models are uncalibrated for macro binary events. "
+            f"Tail-risk spikes exponentially. Chief Risk Officer enforces mandatory lockout."
+        )
+    elif pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
         safety_score = 38.0
         false_breakout_prob = 84.0
         ob_floor = round(current_price * 0.975, 2)

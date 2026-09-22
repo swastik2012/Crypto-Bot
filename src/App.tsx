@@ -23,6 +23,7 @@ import type {
   TimeInterval,
   AgentConfigState,
   FullDebatePipelineData,
+  MacroCalendarStatus,
 } from './types';
 
 const STORAGE_KEYS = {
@@ -73,6 +74,9 @@ export const App: React.FC = () => {
     active_positions_count: 0,
     recent_logs: [],
   });
+
+  // Macro Calendar Status State (Phase 5)
+  const [macroStatus, setMacroStatus] = useState<MacroCalendarStatus | null>(null);
 
   // Persistent Paper Trading State
   const [cashBalance, setCashBalance] = useState<number>(() => {
@@ -166,6 +170,12 @@ export const App: React.FC = () => {
               setTradeHistory(mappedHistory);
             }
           }
+        }
+
+        // Fetch Macro Calendar Circuit Breaker Status
+        const macro = await api.fetchMacroCalendarStatus();
+        if (macro && isMounted) {
+          setMacroStatus(macro);
         }
       } catch (err) {
         console.warn('[Sync Error]', err);
@@ -631,6 +641,32 @@ export const App: React.FC = () => {
         monteCarloWinRate: res.stage3?.monte_carlo_win_rate ?? 81.5,
         liquidityDepthRating: 'High',
         verdict: 'VERIFIED_PASS',
+        adjustmentsProposed: res.stage3?.adjustments_proposed ? {
+          suggestedPositionUsd: res.stage3.adjustments_proposed.suggested_position_usd,
+          suggestedPositionUSD: res.stage3.adjustments_proposed.suggested_position_usd,
+          recommendedStopLoss: res.stage3.adjustments_proposed.recommended_stop_loss,
+          kellyFractionPct: res.stage3.adjustments_proposed.kelly_fraction_pct,
+          rawKellyPct: res.stage3.adjustments_proposed.raw_kelly_pct,
+          payoffRatioB: res.stage3.adjustments_proposed.payoff_ratio_b,
+          expectedValue: res.stage3.adjustments_proposed.expected_value,
+          maxLossUsd: res.stage3.adjustments_proposed.max_loss_usd,
+          portfolioHeatPct: res.stage3.adjustments_proposed.portfolio_heat_pct,
+          sizingRegime: res.stage3.adjustments_proposed.sizing_regime,
+          riskMultiplier: res.stage3.adjustments_proposed.risk_multiplier,
+        } : undefined,
+        kellySizing: res.stage3?.kelly_sizing ? {
+          recommendedPositionUsd: res.stage3.kelly_sizing.recommended_position_usd,
+          kellyFractionPct: res.stage3.kelly_sizing.kelly_fraction_pct,
+          rawKellyPct: res.stage3.kelly_sizing.raw_kelly_pct,
+          payoffRatioB: res.stage3.kelly_sizing.payoff_ratio_b,
+          winProbability: res.stage3.kelly_sizing.win_probability,
+          expectedValue: res.stage3.kelly_sizing.expected_value,
+          maxLossUsd: res.stage3.kelly_sizing.max_loss_usd,
+          portfolioHeatPct: res.stage3.kelly_sizing.portfolio_heat_pct,
+          sizingRegime: res.stage3.kelly_sizing.sizing_regime,
+          riskMultiplier: res.stage3.kelly_sizing.risk_multiplier,
+          formulaBreakdown: res.stage3.kelly_sizing.formula_breakdown,
+        } : undefined,
         mathematicalProof: res.stage3?.mathematical_proof || 'Expected Value positive with 1:2.20 Risk:Reward.',
       },
       stage4: {
@@ -662,6 +698,11 @@ export const App: React.FC = () => {
           effectiveRR: res.stage5?.execution_plan?.effective_rr || 2.20,
           suggestedLeverage: res.stage5?.execution_plan?.suggested_leverage || '3x - 5x Cross',
           timeHorizon: res.stage5?.execution_plan?.time_horizon || '12h - 48h (Swing)',
+          recommendedPositionUSD: res.stage5?.execution_plan?.recommended_position_usd,
+          recommendedPositionUsd: res.stage5?.execution_plan?.recommended_position_usd,
+          kellyFractionPct: res.stage5?.execution_plan?.kelly_fraction_pct,
+          portfolioHeatPct: res.stage5?.execution_plan?.portfolio_heat_pct,
+          sizingRegime: res.stage5?.execution_plan?.sizing_regime,
         },
         executiveSummary: res.stage5?.executive_summary || `Consensus: ${signalVal} with ${confVal}% conviction across ${asset.symbol}.`,
         keyInvalidationCondition: res.stage5?.key_invalidation_condition || `Price violation beyond stop-loss invalidates thesis.`,
@@ -673,10 +714,24 @@ export const App: React.FC = () => {
           systemOneEdgeConfirmed: res.stage5?.agent_consensus_matrix?.system_one_edge_confirmed ?? true,
           nvidiaScore: res.stage5?.agent_consensus_matrix?.nvidia_quant_score ?? confVal,
           openaiScore: res.stage5?.agent_consensus_matrix?.openai_risk_score ?? 88.0,
+          kellyOptimalAllocationUsd: res.stage5?.agent_consensus_matrix?.kelly_optimal_allocation_usd,
+          kellyFractionPct: res.stage5?.agent_consensus_matrix?.kelly_fraction_pct,
+          portfolioHeatPct: res.stage5?.agent_consensus_matrix?.portfolio_heat_pct,
+          sizingRegime: res.stage5?.agent_consensus_matrix?.sizing_regime,
           dualBrainAlignment: res.stage5?.agent_consensus_matrix?.dual_brain_alignment || 'ALIGNED (System 1 + System 2)',
           agreementLevel: confVal >= 75 ? 'High' : 'Moderate',
         },
       },
+      macroStatus: res.macro_status ? {
+        status: res.macro_status.status || 'CLEAR',
+        lockout_active: Boolean(res.macro_status.lockout_active),
+        tighten_stops_required: Boolean(res.macro_status.tighten_stops_required),
+        active_event_name: res.macro_status.active_event_name || null,
+        active_event_impact: res.macro_status.active_event_impact || null,
+        minutes_to_event: res.macro_status.minutes_to_event ?? null,
+        directive: res.macro_status.directive || 'Macro conditions clear.',
+        upcoming_events: res.macro_status.upcoming_events || [],
+      } : (macroStatus || undefined),
       debateStream: (res.debate_stream || []).map((m: any) => ({
         id: m.id,
         stageNumber: (m.stage_number || 1) as 1 | 2 | 3 | 4 | 5 | 6,
@@ -690,7 +745,7 @@ export const App: React.FC = () => {
         highlightPills: m.highlight_pills || [],
       })),
     };
-  }, []);
+  }, [macroStatus]);
 
   // Handler for running the 6-Stage Dual-Brain Multi-Agent Analysis
   const handleRunAnalysis = useCallback(async () => {
@@ -749,6 +804,7 @@ export const App: React.FC = () => {
         paperBalance={totalEquity}
         paperPnL={overallPnlPct}
         autoTraderStatus={autoTraderStatus}
+        macroStatus={macroStatus}
         onToggleAutoTrader={handleToggleAutoTrader}
         onResetPaperAccount={handleResetAccount}
         onResetAutoTraderTimer={handleResetAutoTraderTimer}
@@ -757,7 +813,7 @@ export const App: React.FC = () => {
       />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2.5 sm:px-6 lg:px-8 py-3 sm:py-6 pb-dock md:pb-8 space-y-4 sm:space-y-6 z-10">
+      <main className="flex-1 max-w-[1920px] w-full mx-auto px-2 sm:px-4 lg:px-6 py-3 sm:py-5 pb-dock md:pb-8 space-y-4 sm:space-y-6 z-10">
         {activeView === 'telemetry' ? (
           /* Dedicated Real-Time Agent Telemetry & API Call Diagnostics Page */
           <section>

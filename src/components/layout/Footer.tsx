@@ -3,7 +3,7 @@ import { Sparkles, GitBranch } from 'lucide-react';
 
 export const Footer: React.FC = () => {
   return (
-    <footer className="w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 mt-8 font-mono text-xs text-slate-500 dark:text-slate-400">
+    <footer className="w-full max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-6 py-6 mt-8 font-mono text-xs text-slate-500 dark:text-slate-400">
       <div className="rounded-2xl liquid-glass px-5 py-4 flex flex-col md:flex-row items-center justify-between gap-4 border border-white/10">
         
         {/* Left: Branding & Status */}

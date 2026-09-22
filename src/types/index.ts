@@ -173,6 +173,27 @@ export interface Stage3NvidiaNimOutput {
     suggestedPositionUsd?: number;
     suggestedPositionUSD?: number;
     recommendedStopLoss?: number;
+    kellyFractionPct?: number;
+    rawKellyPct?: number;
+    payoffRatioB?: number;
+    expectedValue?: number;
+    maxLossUsd?: number;
+    portfolioHeatPct?: number;
+    sizingRegime?: string;
+    riskMultiplier?: number;
+  };
+  kellySizing?: {
+    recommendedPositionUsd: number;
+    kellyFractionPct: number;
+    rawKellyPct: number;
+    payoffRatioB: number;
+    winProbability: number;
+    expectedValue: number;
+    maxLossUsd: number;
+    portfolioHeatPct: number;
+    sizingRegime: string;
+    riskMultiplier: number;
+    formulaBreakdown: string;
   };
   mathematicalProof: string;
 }
@@ -211,6 +232,9 @@ export interface Stage5GeminiArbiterOutput {
     suggestedLeverage?: string;
     recommendedPositionUSD?: number;
     recommendedPositionUsd?: number;
+    kellyFractionPct?: number;
+    portfolioHeatPct?: number;
+    sizingRegime?: string;
   };
   executiveSummary: string;
   keyInvalidationCondition: string;
@@ -222,6 +246,10 @@ export interface Stage5GeminiArbiterOutput {
     systemOneEdgeConfirmed?: boolean;
     nvidiaScore: number;
     openaiScore: number;
+    kellyOptimalAllocationUsd?: number;
+    kellyFractionPct?: number;
+    portfolioHeatPct?: number;
+    sizingRegime?: string;
     dualBrainAlignment?: string;
     agreementLevel?: string;
     overall_agreement?: string;
@@ -241,6 +269,26 @@ export interface DebateMessage {
   highlightPills?: string[];
 }
 
+export interface MacroEventItem {
+  name: string;
+  impact: string;
+  category: string;
+  scheduled_iso: string;
+  relative_time: string;
+  minutes_away: number;
+}
+
+export interface MacroCalendarStatus {
+  status: 'CLEAR' | 'WATCH_ZONE' | 'LOCKOUT_ACTIVE' | 'POST_EVENT_COOLOFF';
+  lockout_active: boolean;
+  tighten_stops_required: boolean;
+  active_event_name?: string | null;
+  active_event_impact?: string | null;
+  minutes_to_event?: number | null;
+  directive: string;
+  upcoming_events: MacroEventItem[];
+}
+
 export interface FullDebatePipelineData {
   asset: CryptoAsset;
   timeframe: TimeInterval;
@@ -251,6 +299,7 @@ export interface FullDebatePipelineData {
   stage3: Stage3NvidiaNimOutput;
   stage4: Stage4OpenAIOutput;
   stage5: Stage5GeminiArbiterOutput;
+  macroStatus?: MacroCalendarStatus;
   debateStream: DebateMessage[];
 }
 

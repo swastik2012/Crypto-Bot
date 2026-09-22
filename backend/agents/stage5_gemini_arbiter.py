@@ -35,6 +35,7 @@ async def run_stage5_gemini_arbiter(
     stage_jev: Optional[Any] = None,
     timeframe: str = "15m",
     derivatives_data: Optional[Any] = None,
+    macro_status: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
@@ -74,8 +75,33 @@ async def run_stage5_gemini_arbiter(
     pred_risk = deriv_dict.get("predatory_liquidation_risk", "LOW")
     veto_active = False
 
+    # MACROECONOMIC EVENT CIRCUIT BREAKER VETO: Phase 5 Institutional Event Lockout
+    if macro_status and getattr(macro_status, "lockout_active", False):
+        ev_name = getattr(macro_status, "active_event_name", "Tier-1 Macro Event")
+        ev_impact = getattr(macro_status, "active_event_impact", "TIER_1_CRITICAL")
+        ev_mins = getattr(macro_status, "minutes_to_event", 0)
+        veto_active = True
+        gemini_score = 30.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = 32.0
+        signal = SignalAction.HOLD
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        invalidation_cond = (
+            f"Macro Circuit Breaker ACTIVE: High-impact event '{ev_name}' ({ev_impact}) in blackout window ({ev_mins}m away). "
+            f"Trading halted to prevent whip-saw / stop-hunt liquidations."
+        )
+        summary = (
+            f"6-Stage Arbiter Override: MACRO CIRCUIT BREAKER ENGAGED for {symbol}. "
+            f"High-impact macro event '{ev_name}' triggers mandatory pre-event lockout ({ev_mins}m away). "
+            f"Algorithmic consensus desk stands aside in cash to preserve fund capital."
+        )
+
     # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
-    if pred_risk == "HIGH":
+    elif pred_risk == "HIGH":
         veto_active = True
         gemini_score = 55.0
         news_score = stage2.sentiment_score
@@ -285,9 +311,12 @@ async def run_stage5_gemini_arbiter(
     equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
     default_pos_size = max(100.0, round(equity * 0.08, 2))
 
-    suggested_pos = default_pos_size if signal != SignalAction.HOLD else 0.0
-    if signal != SignalAction.HOLD and stage3.adjustments_proposed and isinstance(stage3.adjustments_proposed, dict):
-        suggested_pos = stage3.adjustments_proposed.get("suggested_position_usd", suggested_pos)
+    adj = stage3.adjustments_proposed if isinstance(stage3.adjustments_proposed, dict) else {}
+    suggested_pos = adj.get("suggested_position_usd", default_pos_size) if signal != SignalAction.HOLD else 0.0
+    kelly_pct = adj.get("kelly_fraction_pct", round((suggested_pos / equity) * 100, 1)) if signal != SignalAction.HOLD else 0.0
+    portfolio_heat = adj.get("portfolio_heat_pct", 0.0)
+    expected_val = adj.get("expected_value", 0.0)
+    sizing_regime = adj.get("sizing_regime", "BALANCED_HALF_KELLY")
 
     exec_plan = {
         "recommended_entry": entry,
@@ -300,6 +329,9 @@ async def run_stage5_gemini_arbiter(
         "volatility_regime": atr_plan.get("volatility_regime"),
         "suggested_leverage": "3x - 5x Cross" if signal != SignalAction.HOLD else "None (Cash)",
         "recommended_position_usd": suggested_pos,
+        "kelly_fraction_pct": kelly_pct,
+        "portfolio_heat_pct": portfolio_heat,
+        "sizing_regime": sizing_regime,
         "time_horizon": "12h - 48h (Swing)" if signal != SignalAction.HOLD else "Waiting for Catalyst",
     }
 
@@ -341,6 +373,10 @@ async def run_stage5_gemini_arbiter(
             "atr_14": atr_plan.get("atr_14"),
             "atr_pct": atr_plan.get("atr_pct"),
             "volatility_regime": atr_plan.get("volatility_regime"),
+            "kelly_optimal_allocation_usd": suggested_pos,
+            "kelly_fraction_pct": kelly_pct,
+            "portfolio_heat_pct": portfolio_heat,
+            "sizing_regime": sizing_regime,
             "derivatives_funding_rate": deriv_dict.get("funding_rate_8h_pct"),
             "derivatives_funding_regime": deriv_dict.get("funding_regime"),
             "derivatives_cvd_divergence": deriv_dict.get("cvd_divergence"),

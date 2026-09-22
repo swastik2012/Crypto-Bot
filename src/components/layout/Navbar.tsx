@@ -17,8 +17,12 @@ import {
   RotateCcw,
   LineChart,
   Terminal,
+  Calendar,
+  ShieldAlert,
+  AlertTriangle,
+  Info,
 } from 'lucide-react';
-import type { CryptoAsset } from '../../types';
+import type { CryptoAsset, MacroCalendarStatus } from '../../types';
 import { Badge } from '../common/Badge';
 import { api, type AutoTraderStatus } from '../../services/api';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -34,6 +38,7 @@ interface NavbarProps {
   paperBalance?: number;
   paperPnL?: number;
   autoTraderStatus?: AutoTraderStatus | null;
+  macroStatus?: MacroCalendarStatus | null;
   onToggleAutoTrader?: () => void;
   onResetPaperAccount?: () => void;
   onResetAutoTraderTimer?: () => void;
@@ -52,6 +57,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   paperBalance = 10000,
   paperPnL = 4.8,
   autoTraderStatus,
+  macroStatus,
   onToggleAutoTrader,
   onResetPaperAccount,
   onResetAutoTraderTimer,
@@ -60,9 +66,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 }) => {
   const { currency, toggleCurrency, formatPrice, liveInrRate } = useCurrency();
   const [assetDropdownOpen, setAssetDropdownOpen] = useState(false);
+  const [macroDropdownOpen, setMacroDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState(assets);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const macroDropdownRef = useRef<HTMLDivElement>(null);
 
   const intervalSecs = autoTraderStatus?.interval_seconds ?? 1800;
   const intervalMins = Math.round(intervalSecs / 60);
@@ -89,11 +97,14 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => clearInterval(timer);
   }, [autoTraderStatus?.is_running, intervalSecs]);
 
-  // Close dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setAssetDropdownOpen(false);
+      }
+      if (macroDropdownRef.current && !macroDropdownRef.current.contains(event.target as Node)) {
+        setMacroDropdownOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
@@ -158,28 +169,28 @@ export const Navbar: React.FC<NavbarProps> = ({
   };
 
   return (
-    <header className="sticky top-0 z-40 w-full max-w-full overflow-hidden sm:overflow-visible px-2 sm:px-4 lg:px-6 pt-2 sm:pt-3 pb-1.5">
-      <div className="max-w-7xl mx-auto rounded-2xl md:rounded-3xl liquid-glass px-2 sm:px-3.5 py-1.5 sm:py-2 flex items-center justify-between gap-1.5 sm:gap-2.5 border border-white/20 dark:border-white/10 shadow-glass-md relative">
+    <header className="sticky top-0 z-40 w-full max-w-full overflow-hidden sm:overflow-visible px-2 sm:px-3 md:px-4 lg:px-6 pt-2 pb-1.5">
+      <div className="w-full max-w-[1920px] mx-auto rounded-2xl md:rounded-3xl liquid-glass px-2.5 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-1.5 sm:gap-2.5 border border-white/20 dark:border-white/10 shadow-glass-md relative">
         
         {/* Left: Branding & Compact Asset Switcher */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-2 lg:gap-2.5 shrink-0">
           {/* App Branding */}
           <motion.div
             whileHover={{ scale: 1.02 }}
             whileTap={{ scale: 0.98 }}
             className="flex items-center gap-1.5 sm:gap-2 cursor-pointer shrink-0"
           >
-            <div className="relative flex items-center justify-center w-7 h-7 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-purple-600 p-[1px] shadow-glow-cyan shrink-0">
+            <div className="relative flex items-center justify-center w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-gradient-to-tr from-cyan-500 via-blue-600 to-purple-600 p-[1px] shadow-glow-cyan shrink-0">
               <div className="w-full h-full bg-[#0B0F19] rounded-[10px] flex items-center justify-center">
-                <Sparkles className="w-3.5 h-3.5 text-brand-cyan animate-pulse-slow" />
+                <Sparkles className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-cyan animate-pulse-slow" />
               </div>
             </div>
             <div className="hidden sm:block">
               <div className="flex items-center gap-1 leading-tight">
-                <span className="font-black text-xs sm:text-sm tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
+                <span className="font-black text-xs sm:text-sm md:text-base tracking-tight bg-gradient-to-r from-cyan-400 via-blue-400 to-purple-400 bg-clip-text text-transparent">
                   AetherTrade
                 </span>
-                <span className="text-[8px] sm:text-[9px] uppercase font-bold tracking-wider px-1 py-0.2 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                <span className="text-[8px] uppercase font-bold tracking-wider px-1 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 hidden xl:inline">
                   v2.5
                 </span>
               </div>
@@ -196,12 +207,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 setAssetDropdownOpen((prev) => !prev);
                 setSearchQuery('');
               }}
-              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-100 hover:border-cyan-500/40 transition-all shadow-sm shrink-0 cursor-pointer"
+              className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-100 hover:border-cyan-500/40 transition-all shadow-sm shrink-0 cursor-pointer"
             >
               <span className="text-cyan-400">{selectedAsset.icon}</span>
               <span>{selectedAsset.pair}</span>
               <span
-                className={`text-[10px] px-1 py-0.2 rounded hidden sm:inline ${
+                className={`text-[10px] px-1 py-0.2 rounded hidden xl:inline ${
                   selectedAsset.change24h >= 0
                     ? 'text-emerald-500 bg-emerald-500/10'
                     : 'text-rose-500 bg-rose-500/10'
@@ -288,51 +299,53 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={toggleCurrency}
-            className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-100 hover:border-cyan-500/40 transition-all shadow-sm shrink-0 cursor-pointer"
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/10 text-xs font-mono font-bold text-slate-800 dark:text-slate-100 hover:border-cyan-500/40 transition-all shadow-sm shrink-0 cursor-pointer"
             title={`Switch Currency (Currently: ${currency === 'INR' ? `Indian Rupee ₹ (Live: 1 USD = ₹${liveInrRate})` : `US Dollar $ (Live: 1 USD = ₹${liveInrRate})`})`}
           >
             <span className={`text-xs font-black ${currency === 'INR' ? 'text-amber-500 dark:text-amber-400' : 'text-emerald-500 dark:text-emerald-400'}`}>
               {currency === 'INR' ? '₹' : '$'}
             </span>
-            <span className="font-extrabold text-[11px] hidden sm:inline">{currency}</span>
+            <span className="font-extrabold text-[11px] hidden 2xl:inline">{currency}</span>
           </motion.button>
 
           {/* Desktop View Switcher: Terminal vs Live API Logs (hidden on mobile, moved to bottom dock) */}
           {onViewChange && (
-            <div className="hidden md:flex items-center gap-1 p-0.5 rounded-xl bg-slate-200/80 dark:bg-dark-900 border border-slate-300/60 dark:border-white/10 shrink-0 font-mono text-xs font-bold">
+            <div className="hidden md:flex items-center gap-0.5 sm:gap-1 p-0.5 sm:p-1 rounded-xl bg-slate-200/80 dark:bg-dark-900 border border-slate-300/60 dark:border-white/10 shrink-0 font-mono text-xs font-bold">
               <button
                 onClick={() => onViewChange('terminal')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
                   activeView === 'terminal'
                     ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
                 title="View Trading Terminal & Chart Analytics"
               >
-                <span>Live Terminal</span>
+                <span className="hidden 2xl:inline">Live Terminal</span>
+                <span className="2xl:hidden">Terminal</span>
               </button>
               <button
                 onClick={() => onViewChange('telemetry')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
+                className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-lg transition-all cursor-pointer font-bold ${
                   activeView === 'telemetry'
                     ? 'bg-cyan-500/20 text-cyan-800 dark:text-cyan-400 border border-cyan-500/40 shadow-xs'
                     : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
                 }`}
                 title="View AI Prompts, Raw Model Responses & API Call Diagnostics"
               >
-                <span>AI Prompts & Telemetry</span>
+                <span className="hidden 2xl:inline">AI Prompts & Telemetry</span>
+                <span className="2xl:hidden">Telemetry</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
               </button>
             </div>
           )}
         </div>
 
-        {/* Center: Autonomous 30-Minute AI Engine Controller */}
-        <div className="hidden lg:flex items-center gap-1.5 shrink-0">
+        {/* Center: Autonomous 30-Minute AI Engine Controller & Macro Calendar */}
+        <div className="hidden lg:flex items-center gap-1.5 sm:gap-2 shrink-0">
           {onToggleAutoTrader && (
             <motion.div
               whileHover={{ scale: 1.02 }}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-mono font-bold transition-all border ${
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl text-xs font-mono font-bold transition-all border ${
                 isAutoActive
                   ? 'bg-emerald-500/15 text-emerald-800 dark:text-emerald-300 border-emerald-500/40 shadow-glow-emerald'
                   : 'bg-slate-200/60 dark:bg-dark-850 text-slate-500 border-slate-300/60 dark:border-white/5'
@@ -340,27 +353,154 @@ export const Navbar: React.FC<NavbarProps> = ({
             >
               <button
                 onClick={onToggleAutoTrader}
-                className="flex items-center gap-1.5 cursor-pointer"
+                className="flex items-center gap-1 sm:gap-1.5 cursor-pointer"
                 title={`Click to Pause / Resume ${intervalMins}-Minute Auto-Trader`}
               >
-                <Bot className="w-3.5 h-3.5 text-emerald-500" />
-                <span>{intervalMins}m Auto:</span>
+                <Bot className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="hidden 2xl:inline">{intervalMins}m Auto:</span>
+                <span className="2xl:hidden">{intervalMins}m:</span>
                 <span className="font-mono font-black text-cyan-700 dark:text-cyan-300">
                   {isAutoActive ? formatCountdown(localSecondsLeft) : 'PAUSED'}
                 </span>
-                {isAutoActive ? <Play className="w-2.5 h-2.5 text-emerald-500 fill-emerald-500" /> : <Pause className="w-2.5 h-2.5 text-slate-400" />}
+                {isAutoActive ? <Play className="w-2.5 h-2.5 text-emerald-500 fill-emerald-500 shrink-0" /> : <Pause className="w-2.5 h-2.5 text-slate-400 shrink-0" />}
+                <span className="ml-0.5 px-1 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-mono font-bold">
+                  <span className="hidden 2xl:inline">{autoTraderStatus?.active_positions_count ?? 0}/{autoTraderStatus?.max_positions_limit ?? 5} slots</span>
+                  <span className="2xl:hidden">{autoTraderStatus?.active_positions_count ?? 0}/{autoTraderStatus?.max_positions_limit ?? 5}</span>
+                </span>
               </button>
 
               {/* Dedicated Reset Auto-Trader Timer Button */}
               <button
                 onClick={handleResetTimerClick}
-                className="ml-0.5 p-0.5 rounded hover:bg-emerald-500/25 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
+                className="ml-0.5 p-0.5 sm:p-1 rounded hover:bg-emerald-500/25 text-slate-400 hover:text-emerald-400 transition-colors cursor-pointer"
                 title={`Reset ${intervalMins}-Minute Auto-Trader Countdown Timer Back to ${formatCountdown(intervalSecs)}`}
               >
                 <RotateCcw className="w-2.5 h-2.5 hover:rotate-180 transition-transform duration-300" />
               </button>
             </motion.div>
           )}
+
+          {/* Macro Event Calendar & Circuit Breaker Badge (Phase 5) */}
+          <div className="relative shrink-0" ref={macroDropdownRef}>
+            <motion.button
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              onClick={() => setMacroDropdownOpen(!macroDropdownOpen)}
+              className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl border font-mono text-xs font-bold transition-all shadow-xs cursor-pointer ${
+                macroStatus?.status === 'LOCKOUT_ACTIVE'
+                  ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 border-rose-500/50 animate-pulse'
+                  : macroStatus?.status === 'POST_EVENT_COOLOFF'
+                  ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/50'
+                  : macroStatus?.status === 'WATCH_ZONE'
+                  ? 'bg-yellow-500/15 text-yellow-600 dark:text-yellow-400 border-yellow-500/40'
+                  : 'bg-slate-200/50 dark:bg-dark-850/60 text-slate-700 dark:text-slate-300 border-slate-300/40 dark:border-white/5 hover:border-cyan-500/40'
+              }`}
+              title="Phase 5: Real-Time Macro Economic Calendar & Event Circuit Breaker"
+            >
+              {macroStatus?.status === 'LOCKOUT_ACTIVE' ? (
+                <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0" />
+              ) : macroStatus?.status === 'POST_EVENT_COOLOFF' ? (
+                <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0" />
+              ) : (
+                <Calendar className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
+              )}
+              <span className="hidden 2xl:inline">
+                {macroStatus?.status === 'LOCKOUT_ACTIVE'
+                  ? `⛔ Lockout (${macroStatus.minutes_to_event}m)`
+                  : macroStatus?.status === 'POST_EVENT_COOLOFF'
+                  ? `⚠️ Cooloff (${macroStatus.minutes_to_event}m)`
+                  : macroStatus?.status === 'WATCH_ZONE'
+                  ? `🟡 Watch (${macroStatus.minutes_to_event}m)`
+                  : 'Macro Clear'}
+              </span>
+              <span className="2xl:hidden">
+                {macroStatus?.status === 'LOCKOUT_ACTIVE'
+                  ? `⛔ ${macroStatus.minutes_to_event}m`
+                  : macroStatus?.status === 'POST_EVENT_COOLOFF'
+                  ? `⚠️ ${macroStatus.minutes_to_event}m`
+                  : macroStatus?.status === 'WATCH_ZONE'
+                  ? `🟡 ${macroStatus.minutes_to_event}m`
+                  : 'Macro Clear'}
+              </span>
+              <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform duration-200 ${macroDropdownOpen ? 'rotate-180' : ''}`} />
+            </motion.button>
+
+            {/* Macro Calendar Popover Modal */}
+            <AnimatePresence>
+              {macroDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 mt-2 w-80 sm:w-96 rounded-2xl bg-white/95 dark:bg-[#0B0F19]/95 backdrop-blur-xl border border-slate-300/70 dark:border-white/10 shadow-2xl p-4 z-50 font-mono text-xs"
+                >
+                  <div className="flex items-center justify-between pb-2.5 border-b border-slate-200 dark:border-white/10 mb-3">
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-cyan-400" />
+                      <span className="font-bold text-slate-900 dark:text-slate-100">Macro Calendar & Circuit Breaker</span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      macroStatus?.status === 'LOCKOUT_ACTIVE'
+                        ? 'bg-rose-500/20 text-rose-400'
+                        : macroStatus?.status === 'POST_EVENT_COOLOFF'
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-emerald-500/20 text-emerald-400'
+                    }`}>
+                      {macroStatus?.status || 'CLEAR'}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-xl bg-slate-100 dark:bg-dark-900/80 border border-slate-200 dark:border-white/5 mb-3">
+                    <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center gap-1.5">
+                      <Info className="w-3.5 h-3.5 text-cyan-400 shrink-0" /> Directive:
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-400 leading-relaxed">
+                      {macroStatus?.directive || 'Macro conditions clear. Algorithmic trade execution permitted across all timeframes.'}
+                    </p>
+                  </div>
+
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 mb-2">
+                    Upcoming Tier-1 & Tier-2 Releases:
+                  </div>
+
+                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1">
+                    {macroStatus?.upcoming_events && macroStatus.upcoming_events.length > 0 ? (
+                      macroStatus.upcoming_events.slice(0, 4).map((ev, idx) => (
+                        <div
+                          key={idx}
+                          className="flex items-center justify-between p-2 rounded-lg bg-slate-50 dark:bg-dark-850/60 border border-slate-200/50 dark:border-white/5"
+                        >
+                          <div className="truncate mr-2">
+                            <div className="font-bold text-[11px] text-slate-800 dark:text-slate-200 truncate">
+                              {ev.name}
+                            </div>
+                            <div className="text-[9px] text-slate-500">{ev.scheduled_iso}</div>
+                          </div>
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                            ev.impact === 'TIER_1_CRITICAL'
+                              ? 'bg-rose-500/20 text-rose-400'
+                              : 'bg-amber-500/20 text-amber-400'
+                          }`}>
+                            {ev.relative_time}
+                          </span>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-[11px] text-slate-400 text-center py-2">
+                        No high-impact events in immediate window.
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="mt-3 pt-2.5 border-t border-slate-200 dark:border-white/10 text-[10px] text-slate-500 flex justify-between">
+                    <span>Pre-Event Lockout: 45m</span>
+                    <span>Post-Release Cooloff: 20m</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
 
           {/* Model Indicator Pills (Only on 2XL wide screens to prevent crowding) */}
           <div className="hidden 2xl:flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-200/40 dark:bg-dark-850/60 border border-slate-300/40 dark:border-white/5 font-mono text-[11px] text-slate-400">
@@ -375,14 +515,14 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Right: Paper Capital, Reset Account, Config Drawer & Theme Toggle */}
-        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 lg:gap-2 shrink-0">
           
           {/* Paper Capital Portfolio Pill with Integrated 1-Click Reset */}
-          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-slate-200/60 dark:bg-dark-850/90 border border-slate-300/50 dark:border-white/10 font-mono shrink-0">
+          <div className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-slate-200/60 dark:bg-dark-850/90 border border-slate-300/50 dark:border-white/10 font-mono shrink-0">
             <Wallet className="w-3.5 h-3.5 text-cyan-500 shrink-0" />
             <div className="text-xs font-black text-slate-800 dark:text-slate-100 flex items-center gap-1 leading-none">
               {formatPrice(paperBalance, 0)}
-              <span className="text-[10px] text-emerald-500 font-bold hidden sm:inline-flex items-center">
+              <span className="text-[10px] text-emerald-500 font-bold hidden xl:inline-flex items-center">
                 <ArrowUpRight className="w-2.5 h-2.5" />{paperPnL >= 0 ? '+' : ''}{paperPnL}%
               </span>
             </div>
@@ -391,7 +531,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {onResetPaperAccount && (
               <button
                 onClick={onResetPaperAccount}
-                className="hidden sm:inline-flex p-1 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0"
+                className="hidden sm:inline-flex p-0.5 sm:p-1 rounded-lg hover:bg-rose-500/20 text-slate-400 hover:text-rose-400 transition-colors cursor-pointer shrink-0 ml-0.5"
                 title="Reset Paper Account to $10,000 & Clear All Open Positions"
               >
                 <RotateCcw className="w-3 h-3 hover:rotate-180 transition-transform duration-300" />
@@ -401,7 +541,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Pipeline Active Badge */}
           {isAnalyzing && (
-            <Badge variant="cyan" pulse size="sm" className="hidden xl:inline-flex animate-pulse shrink-0">
+            <Badge variant="cyan" pulse size="sm" className="hidden 2xl:inline-flex animate-pulse shrink-0">
               <Activity className="w-3 h-3 animate-spin" />
               Consensus
             </Badge>
@@ -412,11 +552,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             whileHover={{ scale: 1.04 }}
             whileTap={{ scale: 0.96 }}
             onClick={onOpenConfig}
-            className="hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-slate-800 dark:text-slate-100 border border-cyan-500/30 font-mono text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+            className="hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-cyan-500/15 to-blue-500/15 hover:from-cyan-500/25 hover:to-blue-500/25 text-slate-800 dark:text-slate-100 border border-cyan-500/30 font-mono text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
             title="Configure AI Models & Parameters"
           >
             <Sliders className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-            <span className="shrink-0">Agents</span>
+            <span className="shrink-0 hidden xl:inline">Agents</span>
           </motion.button>
 
           {/* Theme Toggle Button (Guaranteed Visible & Shrink-Protected) */}

@@ -81,6 +81,7 @@ export interface AutoTraderStatus {
   next_run_timestamp: number | null;
   cycle_count: number;
   active_positions_count: number;
+  max_positions_limit?: number;
   recent_logs: Array<any>;
 }
 
@@ -347,5 +348,39 @@ export const api = {
       console.warn('[WS] Failed to connect WebSocket:', e);
       return null;
     }
+  },
+
+  // 9. Fetch Real-time Macroeconomic Calendar & Circuit Breaker Status
+  async fetchMacroCalendarStatus(): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/macro-calendar/status`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] Macro calendar fetch error, using fallback:', e);
+    }
+    return {
+      status: 'CLEAR',
+      lockout_active: false,
+      tighten_stops_required: false,
+      active_event_name: null,
+      active_event_impact: null,
+      minutes_to_event: null,
+      directive: 'Macro conditions clear. Standard algorithmic trade execution permitted.',
+      upcoming_events: [],
+    };
+  },
+
+  async fetchMacroCalendarEvents(limit: number = 10): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/macro-calendar/events?limit=${limit}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] Macro calendar events error:', e);
+    }
+    return [];
   },
 };

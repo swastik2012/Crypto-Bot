@@ -80,8 +80,20 @@ async def run_tests():
     print(f"  ✓ Auto-Execution Result: auto_executed={analysis_res.auto_executed} (Position: {analysis_res.executed_position.position_id if analysis_res.executed_position else 'None'})")
     print(f"  ✓ Debate Messages Exchanged: {len(analysis_res.debate_stream)} messages across 6 stages")
 
+    # 4. Test Phase 5 Macro Calendar & Volatility Circuit Breaker Service
+    print("\n[4/4] Testing Macro Calendar & Circuit Breaker Engine (Phase 5)...")
+    from backend.services.macro_calendar_service import macro_calendar_service
+    cb_status = macro_calendar_service.check_circuit_breaker()
+    print(f"  ✓ Macro Circuit Breaker Status: {cb_status.status} | Lockout Active: {cb_status.lockout_active} | Tighten Stops: {cb_status.tighten_stops_required}")
+    print(f"  ✓ Directive: {cb_status.directive}")
+    print(f"  ✓ Upcoming High-Impact Events: {len(cb_status.upcoming_events)} scheduled")
+    for ev in cb_status.upcoming_events[:3]:
+        print(f"    • [{ev.get('impact')}] {ev.get('name')} ({ev.get('relative_time')})")
+    assert analysis_res.macro_status is not None, "Pipeline response must include macro_status schema"
+    print(f"  ✓ Pipeline Macro Schema Output: status={analysis_res.macro_status.status}, events={len(analysis_res.macro_status.upcoming_events)}")
+
     print("\n==================================================")
-    print("✅ ALL 6-STAGE DUAL-BRAIN BACKEND SYSTEMS PASSED WITH 100% SUCCESS!")
+    print("✅ ALL MULTI-AGENT BACKEND & PHASE 5 MACRO SYSTEMS PASSED WITH 100% SUCCESS!")
     print("==================================================")
 
 if __name__ == "__main__":

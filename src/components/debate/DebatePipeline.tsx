@@ -205,6 +205,7 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
               arbiterData={pipelineData.stage5}
               onExecuteTrade={onExecuteTrade}
               mtfConfluence={pipelineData.stage1?.multiTimeframeConfluence}
+              macroStatus={pipelineData.macroStatus}
             />
           </motion.div>
         )}

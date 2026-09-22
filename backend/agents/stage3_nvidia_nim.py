@@ -3,7 +3,8 @@ import json
 import asyncio
 import httpx
 from typing import Dict, Any, Tuple, List, Optional
-from backend.models.schemas import Stage3NvidiaNimResult, Stage1GeminiVisionResult, Stage2NewsSentimentResult, DebateMessageSchema
+from backend.models.schemas import Stage3NvidiaNimResult, Stage1GeminiVisionResult, Stage2NewsSentimentResult, DebateMessageSchema, KellySizingSchema
+from backend.services.risk_engine import risk_engine
 from backend.config import settings
 
 def _format_portfolio_summary(account_state: Dict[str, Any]) -> str:
@@ -26,23 +27,37 @@ async def run_stage3_nvidia_nim(
     account_state: Dict[str, Any],
     api_key: str = "",
     stage_jev: Optional[Any] = None,
+    derivatives_data: Optional[Any] = None,
 ) -> Tuple[Stage3NvidiaNimResult, DebateMessageSchema]:
     """
     Stage 4: NVIDIA NIM Quantitative Reasoning & Monte Carlo Engine
     - Ingests Stage 1 (Gemini Vision), Stage 2 (News Sentiment), and Stage 3 (TypeSafe Jev System 1 Reflex).
     - Executes 10,000 Monte Carlo path simulations weighted by news catalyst scores and Jev fast-twitch probabilities.
+    - Sizes capital dynamically using Fractional Kelly Criterion (Half-Kelly) scaled by volatility regime and portfolio heat.
     - Validates Mathematical Proof of Risk/Reward and liquidity depth.
     """
     nvidia_key = api_key or settings.NVIDIA_NIM_API_KEY
     model_name = settings.NVIDIA_MODEL or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     
     thesis = stage1.initial_thesis or {}
-    target1 = thesis.get("take_profit_1", round(current_price * 1.078, 2))
-    target2 = thesis.get("take_profit_2", round(current_price * 1.150, 2))
-    stop_loss = thesis.get("stop_loss", round(current_price * 0.966, 2))
-    
     direction = str(thesis.get("direction", "LONG")).upper()
     import random
+    from backend.services.market_data import market_data_service
+
+    # Fetch dynamic ATR targets & volatility regime
+    atr_plan = await market_data_service.calculate_dynamic_atr_targets(
+        symbol=symbol,
+        current_price=current_price,
+        direction=direction if direction in ["LONG", "SHORT"] else "LONG",
+    )
+    target1 = thesis.get("take_profit_1") or atr_plan.get("take_profit_1", round(current_price * 1.078, 2))
+    target2 = thesis.get("take_profit_2") or atr_plan.get("take_profit_2", round(current_price * 1.150, 2))
+    stop_loss = thesis.get("stop_loss") or atr_plan.get("stop_loss", round(current_price * 0.966, 2))
+
+    vol_regime = atr_plan.get("volatility_regime", "NORMAL_VOLATILITY")
+    atr_pct_val = atr_plan.get("atr_pct", 2.0)
+    current_open_trades = account_state.get("open_positions", [])
+    equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
 
     # 1. Multi-Timeframe Confluence Ingestion (Triple-Screen Alexander Elder Architecture)
     mtf = getattr(stage1, "multi_timeframe_confluence", None)
@@ -56,14 +71,9 @@ async def run_stage3_nvidia_nim(
             trend_1d = getattr(screen_1d, "trend", "NEUTRAL") if not isinstance(screen_1d, dict) else screen_1d.get("trend", "NEUTRAL")
 
     # Live Monte Carlo Simulation (10,000 Iterations) with MTF Drift Weighting
-    base_sym = symbol.split("/")[0].upper()
     trials = 10000
     news_factor = (stage2.sentiment_score - 50.0) / 100.0
     vol = max(0.018, min(0.055, abs(current_price - stop_loss) / (current_price or 1.0)))
-
-    # Dynamic Risk Allocation based on actual portfolio equity (8% standard size)
-    equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
-    base_pos_size = max(100.0, round(equity * 0.08, 2))
 
     if direction == "SHORT":
         reward = current_price - target1 if current_price > target1 else current_price * 0.078
@@ -78,12 +88,23 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(35.0 + (mc_win_rate * 0.3), 52.0), 1)
             verdict = "REJECT"
-            adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            adjustments = {
+                "suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": 0.0, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": ev,
+                "max_loss_usd": 0.0, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": "COUNTER_TREND_VETO", "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} SHORT - REJECTED):\n"
                 f"1. MTF Counter-Trend Conflict: 1D Macro Tide is BULLISH vs. requested SHORT. Invalidation probability elevated.\n"
                 f"2. Monte Carlo Result (10,000 paths with HTF drag): {mc_win_rate}% win probability fails 65% institutional hurdle rate.\n"
-                f"3. Expected Value: Sub-par negative EV = ${ev:,.2f} per unit. Strict capital preservation enforced."
+                f"3. Dynamic Kelly Sizing: $0.00 allocated. Negative Expectancy EV = ${ev:,.2f}. Strict capital preservation enforced."
             )
         elif "3/3" in mtf_align:
             drift = -0.018 + (news_factor * 0.01)
@@ -92,13 +113,26 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(78.0 + (calculated_rr * 7.5), 98.0), 1)
             verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
-            adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            suggested_usd = kelly_res.recommended_position_usd if verdict == "VERIFIED_PASS" else round(kelly_res.recommended_position_usd * 0.5, 2)
+            suggested_pct = kelly_res.kelly_fraction_pct if verdict == "VERIFIED_PASS" else round(kelly_res.kelly_fraction_pct * 0.5, 2)
+            adjustments = {
+                "suggested_position_usd": suggested_usd, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": suggested_pct, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": kelly_res.expected_value,
+                "max_loss_usd": kelly_res.max_loss_usd, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": kelly_res.sizing_regime, "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} SHORT - 3/3 FULL CONFLUENCE):\n"
                 f"1. Triple-Screen Alignment: 1D Macro Tide, 4H Structure, and 15M Trigger all BEARISH. R:R = 1:{calculated_rr}.\n"
                 f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% short win expectancy with positive EV = +${ev:,.2f}.\n"
-                f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity budget).\n"
-                f"4. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) news weighting confirming distribution."
+                f"3. Dynamic Fractional Kelly Sizing: Suggested allocation ${suggested_usd:,.2f} ({suggested_pct}% equity, {kelly_res.sizing_regime}).\n"
+                f"4. Portfolio Heat Guard: Risk at Stop ${kelly_res.max_loss_usd:,.2f} | Total Portfolio Heat {kelly_res.portfolio_heat_pct}%."
             )
         elif "1/3" in mtf_align:
             drift = 0.002
@@ -107,12 +141,23 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(45.0 + (mc_win_rate * 0.25), 58.0), 1)
             verdict = "REJECT"
-            adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            adjustments = {
+                "suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": 0.0, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": ev,
+                "max_loss_usd": 0.0, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": "MTF_DIVERGENCE_VETO", "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} SHORT - 1/3 DIVERGENCE):\n"
                 f"1. MTF Divergence: Conflicting signals across timeframes. 1:{calculated_rr} R:R.\n"
                 f"2. Monte Carlo Result: {mc_win_rate}% win probability fails hurdle rate. Expected Value = ${ev:,.2f}.\n"
-                f"3. Verdict: REJECT / Capital Preservation."
+                f"3. Kelly Allocation: $0.00. Verdict: REJECT / Capital Preservation."
             )
         else: # 2/3 Partial Confluence
             drift = -0.010 + (news_factor * 0.01)
@@ -121,12 +166,26 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(72.0 + (calculated_rr * 7.5), 92.0), 1)
             verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
-            adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            suggested_usd = kelly_res.recommended_position_usd if verdict == "VERIFIED_PASS" else round(kelly_res.recommended_position_usd * 0.5, 2)
+            suggested_pct = kelly_res.kelly_fraction_pct if verdict == "VERIFIED_PASS" else round(kelly_res.kelly_fraction_pct * 0.5, 2)
+            adjustments = {
+                "suggested_position_usd": suggested_usd, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": suggested_pct, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": kelly_res.expected_value,
+                "max_loss_usd": kelly_res.max_loss_usd, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": kelly_res.sizing_regime, "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} SHORT - 2/3 PARTIAL CONFLUENCE):\n"
                 f"1. Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
                 f"2. Monte Carlo Result (10,000 paths): {mc_win_rate}% short win expectancy with EV = +${ev:,.2f}.\n"
-                f"3. Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f}."
+                f"3. Dynamic Fractional Kelly Sizing: Suggested allocation ${suggested_usd:,.2f} ({suggested_pct}% equity, {kelly_res.sizing_regime}).\n"
+                f"4. Portfolio Heat Guard: Risk at Stop ${kelly_res.max_loss_usd:,.2f} | Total Portfolio Heat {kelly_res.portfolio_heat_pct}%."
             )
 
     elif direction == "NEUTRAL":
@@ -142,12 +201,23 @@ async def run_stage3_nvidia_nim(
         ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
         stress_score = round(min(52.0 + (mc_win_rate * 0.25), 65.0), 1)
         verdict = "REJECT"
-        adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
+        kelly_res = risk_engine.calculate_volatility_adjusted_size(
+            total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+            win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+            mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+        )
+        adjustments = {
+            "suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss,
+            "kelly_fraction_pct": 0.0, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+            "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": ev,
+            "max_loss_usd": 0.0, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+            "sizing_regime": "NEUTRAL_RANGE_VETO", "risk_multiplier": kelly_res.risk_multiplier,
+        }
         math_proof = (
             f"NVIDIA Quantitative Synthesis ({symbol} NEUTRAL / RANGE):\n"
             f"1. Equilibrium Profile: Asset compressed inside range ${stop_loss:,.2f} - ${target1:,.2f} with 1:{calculated_rr} R:R.\n"
             f"2. Monte Carlo Result (10,000 paths): {mc_win_rate}% win probability fails institutional hurdle rate (min 65%).\n"
-            f"3. Expected Value: Sub-par EV = ${ev:,.2f}. Mathematical verdict: REJECT / Capital Preservation."
+            f"3. Kelly Allocation: $0.00. Mathematical verdict: REJECT / Capital Preservation."
         )
 
     else: # LONG
@@ -163,12 +233,23 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(35.0 + (mc_win_rate * 0.3), 52.0), 1)
             verdict = "REJECT"
-            adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            adjustments = {
+                "suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": 0.0, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": ev,
+                "max_loss_usd": 0.0, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": "COUNTER_TREND_VETO", "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} LONG - REJECTED):\n"
                 f"1. MTF Counter-Trend Conflict: 1D Macro Tide is BEARISH vs. requested LONG. Invalidation probability elevated.\n"
                 f"2. Monte Carlo Result (10,000 paths with HTF drag): {mc_win_rate}% win probability fails 65% institutional hurdle rate.\n"
-                f"3. Expected Value: Sub-par negative EV = ${ev:,.2f} per unit. Strict capital preservation enforced."
+                f"3. Dynamic Kelly Sizing: $0.00 allocated. Negative Expectancy EV = ${ev:,.2f}. Strict capital preservation enforced."
             )
         elif "3/3" in mtf_align:
             drift = 0.020 + (news_factor * 0.01)
@@ -177,13 +258,26 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(78.0 + (calculated_rr * 7.8), 98.0), 1)
             verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
-            adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            suggested_usd = kelly_res.recommended_position_usd if verdict == "VERIFIED_PASS" else round(kelly_res.recommended_position_usd * 0.5, 2)
+            suggested_pct = kelly_res.kelly_fraction_pct if verdict == "VERIFIED_PASS" else round(kelly_res.kelly_fraction_pct * 0.5, 2)
+            adjustments = {
+                "suggested_position_usd": suggested_usd, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": suggested_pct, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": kelly_res.expected_value,
+                "max_loss_usd": kelly_res.max_loss_usd, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": kelly_res.sizing_regime, "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} LONG - 3/3 FULL CONFLUENCE):\n"
                 f"1. Triple-Screen Alignment: 1D Macro Tide, 4H Structure, and 15M Trigger all BULLISH. R:R = 1:{calculated_rr}.\n"
                 f"2. Monte Carlo Result (10,000 paths, σ={vol:.3f}): {mc_win_rate}% positive expectancy with asymmetric EV = +${ev:,.2f}.\n"
-                f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f} (8% equity budget).\n"
-                f"4. Macro Factor: Ingested Stage 2 ({stage2.sentiment_score}%) spot accumulation catalyst validating margin deployment."
+                f"3. Dynamic Fractional Kelly Sizing: Suggested allocation ${suggested_usd:,.2f} ({suggested_pct}% equity, {kelly_res.sizing_regime}).\n"
+                f"4. Portfolio Heat Guard: Risk at Stop ${kelly_res.max_loss_usd:,.2f} | Total Portfolio Heat {kelly_res.portfolio_heat_pct}%."
             )
         elif "1/3" in mtf_align:
             drift = -0.002
@@ -192,12 +286,23 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(45.0 + (mc_win_rate * 0.25), 58.0), 1)
             verdict = "REJECT"
-            adjustments = {"suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            adjustments = {
+                "suggested_position_usd": 0.0, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": 0.0, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": ev,
+                "max_loss_usd": 0.0, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": "MTF_DIVERGENCE_VETO", "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} LONG - 1/3 DIVERGENCE):\n"
                 f"1. MTF Divergence: Conflicting signals across timeframes. 1:{calculated_rr} R:R.\n"
                 f"2. Monte Carlo Result: {mc_win_rate}% win probability fails hurdle rate. Expected Value = ${ev:,.2f}.\n"
-                f"3. Verdict: REJECT / Capital Preservation."
+                f"3. Kelly Allocation: $0.00. Verdict: REJECT / Capital Preservation."
             )
         else: # 2/3 Partial Confluence
             drift = 0.012 + (news_factor * 0.01)
@@ -206,12 +311,26 @@ async def run_stage3_nvidia_nim(
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(74.0 + (calculated_rr * 7.8), 94.0), 1)
             verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
-            adjustments = {"suggested_position_usd": base_pos_size if verdict == "VERIFIED_PASS" else round(base_pos_size * 0.5, 2), "recommended_stop_loss": stop_loss}
+            kelly_res = risk_engine.calculate_volatility_adjusted_size(
+                total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
+                win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
+                mtf_alignment=mtf_align, derivatives_data=derivatives_data, current_open_positions=current_open_trades,
+            )
+            suggested_usd = kelly_res.recommended_position_usd if verdict == "VERIFIED_PASS" else round(kelly_res.recommended_position_usd * 0.5, 2)
+            suggested_pct = kelly_res.kelly_fraction_pct if verdict == "VERIFIED_PASS" else round(kelly_res.kelly_fraction_pct * 0.5, 2)
+            adjustments = {
+                "suggested_position_usd": suggested_usd, "recommended_stop_loss": stop_loss,
+                "kelly_fraction_pct": suggested_pct, "raw_kelly_pct": kelly_res.raw_kelly_pct,
+                "payoff_ratio_b": kelly_res.payoff_ratio_b, "expected_value": kelly_res.expected_value,
+                "max_loss_usd": kelly_res.max_loss_usd, "portfolio_heat_pct": kelly_res.portfolio_heat_pct,
+                "sizing_regime": kelly_res.sizing_regime, "risk_multiplier": kelly_res.risk_multiplier,
+            }
             math_proof = (
                 f"NVIDIA Quantitative Synthesis ({symbol} LONG - 2/3 PARTIAL CONFLUENCE):\n"
                 f"1. Profile: Entry ${current_price:,.2f} ➔ TP1 ${target1:,.2f} vs SL ${stop_loss:,.2f} yields 1:{calculated_rr} R:R.\n"
                 f"2. Monte Carlo Result (10,000 paths): {mc_win_rate}% positive expectancy with asymmetric EV = +${ev:,.2f}.\n"
-                f"3. Dynamic Position Sizing: Suggested allocation ${adjustments['suggested_position_usd']:,.2f}."
+                f"3. Dynamic Fractional Kelly Sizing: Suggested allocation ${suggested_usd:,.2f} ({suggested_pct}% equity, {kelly_res.sizing_regime}).\n"
+                f"4. Portfolio Heat Guard: Risk at Stop ${kelly_res.max_loss_usd:,.2f} | Total Portfolio Heat {kelly_res.portfolio_heat_pct}%."
             )
 
     portfolio_ctx = _format_portfolio_summary(account_state)
@@ -339,12 +458,15 @@ async def run_stage3_nvidia_nim(
         verdict=verdict,
         adjustments_proposed=adjustments,
         mathematical_proof=math_proof,
+        kelly_sizing=KellySizingSchema(**kelly_res.to_schema()) if 'kelly_res' in locals() else None,
     )
 
     jev_info = ""
     if stage_jev:
         jev_bias = getattr(stage_jev.execution_bias, "value", "NEUTRAL")
         jev_info = f" + Jev System 1 Reflex ({jev_bias})"
+
+    kelly_pill = f"Kelly: {adjustments.get('kelly_fraction_pct', 0)}% (${adjustments.get('suggested_position_usd', 0):,.0f})"
 
     debate_msg = DebateMessageSchema(
         id=f"msg_st4_{int(time.time()*1000)}",
@@ -362,18 +484,19 @@ async def run_stage3_nvidia_nim(
         timestamp="Stage 4 • Quantitative Stress Test",
         content=(
             f"Ingested Stage 1 Vision, Stage 2 News Gist ({stage2.sentiment_score}% Bullish){jev_info}. "
-            f"10,000 Monte Carlo paths confirm {mc_win_rate}% win rate with 1:{calculated_rr} R:R. Verdict: {verdict}."
+            f"10,000 Monte Carlo paths confirm {mc_win_rate}% win rate with 1:{calculated_rr} R:R (Verdict: {verdict}). "
+            f"Dynamic Half-Kelly Sizing: ${adjustments.get('suggested_position_usd', 0):,.2f} ({adjustments.get('kelly_fraction_pct', 0)}% equity, EV: +${adjustments.get('expected_value', 0):.2f})."
         ),
         highlight_pills=[
             f"Monte Carlo: {mc_win_rate}%",
             f"R:R: 1:{calculated_rr}",
-            f"Stress Score: {stress_score}%",
+            kelly_pill,
             f"Verdict: {verdict}",
         ],
         highlightPills=[
             f"Monte Carlo: {mc_win_rate}%",
             f"R:R: 1:{calculated_rr}",
-            f"Stress Score: {stress_score}%",
+            kelly_pill,
             f"Verdict: {verdict}",
         ],
     )

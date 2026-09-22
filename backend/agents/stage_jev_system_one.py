@@ -21,6 +21,7 @@ async def run_stage_jev_system_one(
     account_state: Dict[str, Any],
     api_key: str = "",
     derivatives_data: Optional[Any] = None,
+    macro_status: Optional[Any] = None,
 ) -> Tuple[StageJevSystemOneResult, DebateMessageSchema]:
     """
     Stage 3: TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
@@ -81,6 +82,10 @@ async def run_stage_jev_system_one(
         "order_flow_imbalance": order_flow_delta,
         "open_positions_count": len(account_state.get("open_positions", [])),
         "available_cash": account_state.get("cash_balance", 10000.0),
+        "macro_calendar_status": getattr(macro_status, "status", "CLEAR") if macro_status else "CLEAR",
+        "macro_lockout_active": getattr(macro_status, "lockout_active", False) if macro_status else False,
+        "active_macro_event": getattr(macro_status, "active_event_name", "None") if macro_status else "None",
+        "minutes_to_macro_event": getattr(macro_status, "minutes_to_event", None) if macro_status else None,
     }
 
     # Enrich state with live derivatives microstructure if available
@@ -242,8 +247,25 @@ async def run_stage_jev_system_one(
         is_counter_trend = has_mtf_warning or (direction == "LONG" and trend_1d == "BEARISH") or (direction == "SHORT" and trend_1d == "BULLISH")
         is_mtf_divergent = "1/3 DIVERGENCE" in mtf_align
 
-        # Predatory Liquidation Override OR MTF Counter-Trend Conflict forces Immediate Reflex Veto
-        if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION") or is_counter_trend or is_mtf_divergent:
+        # Macro Circuit Breaker Lockout Check (Phase 5)
+        macro_lockout = macro_status and getattr(macro_status, "lockout_active", False)
+
+        # Macro Lockout Override OR Predatory Liquidation Override OR MTF Counter-Trend Conflict forces Immediate Reflex Veto
+        if macro_lockout:
+            bias_val = "HOLD"
+            bias_probs = {"BUY": 0.05, "HOLD": 0.90, "SELL": 0.05}
+            regime_val = "liquidity_sweep"
+            regime_probs = {"trend_continuation": 0.04, "mean_reversion": 0.16, "high_risk_chop": 0.35, "liquidity_sweep": 0.45}
+            edge_val = False
+            edge_prob = 0.08
+            urgency_val = "Stand Aside / Invalidation Risk"
+            urgency_probs = {"Stand Aside / Invalidation Risk": 0.94, "Wait for Pullback to Limit Order": 0.04, "Immediate Market Execution": 0.02}
+            toxic_val = True
+            toxic_prob = 0.95
+            conviction_val = "Low Conviction (Under 60%)"
+            conviction_probs = {"Low Conviction (Under 60%)": 0.88, "Moderate Conviction (60% - 75%)": 0.08, "High Conviction (75% - 88%)": 0.03, "Extreme Conviction (Above 88%)": 0.01}
+            bias_conf = 0.95
+        elif pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION") or is_counter_trend or is_mtf_divergent:
             bias_val = "HOLD"
             bias_probs = {"BUY": 0.10, "HOLD": 0.80, "SELL": 0.10}
             regime_val = "liquidity_sweep" if pred_risk == "HIGH" else ("high_risk_chop" if is_mtf_divergent else "mean_reversion")

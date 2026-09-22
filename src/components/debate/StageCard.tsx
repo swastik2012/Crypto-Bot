@@ -11,6 +11,7 @@ import {
   Flame,
   Globe,
   ExternalLink,
+  Coins,
 } from 'lucide-react';
 import type {
   Stage1GeminiVisionOutput,
@@ -374,6 +375,51 @@ export const StageCard: React.FC<StageCardProps> = ({
               <div className="text-[10px] text-slate-500 dark:text-slate-400">Binance / Coinbase</div>
             </div>
           </div>
+
+          {/* Dynamic Fractional Kelly Criterion & Portfolio Heat Banner */}
+          {stage3Data.adjustmentsProposed?.kellyFractionPct !== undefined && (
+            <div className="mt-4 p-3.5 rounded-xl bg-gradient-to-r from-emerald-500/10 via-[#76B900]/10 to-cyan-500/10 border border-[#76B900]/30 font-mono text-xs space-y-2">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-[#598c00] dark:text-[#76B900] font-bold">
+                  <Coins className="w-4 h-4" />
+                  <span>Dynamic Fractional Kelly Capital Allocation (Phase 4)</span>
+                </div>
+                <Badge variant="nvidia" size="sm">
+                  {stage3Data.adjustmentsProposed.sizingRegime || 'Half-Kelly'}
+                </Badge>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Kelly Fraction</span>
+                  <b className="text-slate-900 dark:text-slate-100 text-sm font-black text-[#598c00] dark:text-[#76B900]">
+                    {stage3Data.adjustmentsProposed.kellyFractionPct}% Equity
+                  </b>
+                  <span className="text-[10px] text-slate-500 block">(${stage3Data.adjustmentsProposed.suggestedPositionUsd?.toLocaleString()})</span>
+                </div>
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Payoff Ratio (b)</span>
+                  <b className="text-cyan-600 dark:text-cyan-400 text-sm font-black">
+                    1 : {stage3Data.adjustmentsProposed.payoffRatioB || stage3Data.riskRewardRatio}
+                  </b>
+                  <span className="text-[10px] text-slate-500 block">Risk:Reward</span>
+                </div>
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Expected Value</span>
+                  <b className="text-emerald-600 dark:text-emerald-400 text-sm font-black">
+                    +${stage3Data.adjustmentsProposed.expectedValue?.toFixed(2) || '0.00'}
+                  </b>
+                  <span className="text-[10px] text-slate-500 block">Positive Expectancy</span>
+                </div>
+                <div className="p-2 rounded-lg bg-white/70 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5">
+                  <span className="text-slate-500 dark:text-slate-400 block text-[10px] uppercase">Portfolio Heat</span>
+                  <b className="text-purple-600 dark:text-purple-400 text-sm font-black">
+                    {stage3Data.adjustmentsProposed.portfolioHeatPct || 0}%
+                  </b>
+                  <span className="text-[10px] text-slate-500 block">Cap &le; 6.0%</span>
+                </div>
+              </div>
+            </div>
+          )}
 
           {/* Mathematical Proof Box */}
           <div className="mt-4 p-4 rounded-xl bg-white/90 dark:bg-dark-900/80 border border-slate-200 dark:border-white/5 font-mono text-xs space-y-2 shadow-sm">

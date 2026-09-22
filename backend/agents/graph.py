@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, Any, Tuple, Optional
 from backend.models.state import AgentGraphState
-from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide
+from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema
 from backend.agents.stage1_gemini_vision import run_stage1_gemini_vision
 from backend.agents.stage2_news_sentiment import run_stage2_news_sentiment
 from backend.agents.stage_jev_system_one import run_stage_jev_system_one
@@ -10,6 +10,7 @@ from backend.agents.stage3_nvidia_nim import run_stage3_nvidia_nim
 from backend.agents.stage4_openai_risk import run_stage4_openai_risk
 from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
 from backend.services.paper_engine import paper_engine
+from backend.services.macro_calendar_service import macro_calendar_service
 
 class MultiAgentConsensusPipeline:
     """
@@ -50,6 +51,9 @@ class MultiAgentConsensusPipeline:
             match_info = symbol_resolver.resolve(base_sym, limit=1)
             current_price = match_info.best_match.current_price if match_info.best_match else 78150.0
 
+        # MACROECONOMIC EVENT CIRCUIT BREAKER ENGINE (Phase 5: CPI, PPI, FOMC, NFP Lockouts)
+        macro_status = macro_calendar_service.check_circuit_breaker()
+
         # DERIVATIVES MICROSTRUCTURE ENGINE (Binance Futures: Funding Rate, OI Delta, CVD)
         from backend.services.derivatives_service import derivatives_service
         derivatives_data = await derivatives_service.get_derivatives_microstructure(
@@ -76,6 +80,7 @@ class MultiAgentConsensusPipeline:
             current_price=current_price,
             account_state=account_state,
             api_key=nvidia_key,
+            macro_status=macro_status,
         )
         debate_stream.append(msg2)
 
@@ -88,6 +93,7 @@ class MultiAgentConsensusPipeline:
             account_state=account_state,
             api_key=active_typesafe_key,
             derivatives_data=derivatives_data,
+            macro_status=macro_status,
         )
         debate_stream.append(msg_jev)
 
@@ -100,6 +106,7 @@ class MultiAgentConsensusPipeline:
             account_state=account_state,
             api_key=nvidia_key,
             stage_jev=stage_jev_res,
+            derivatives_data=derivatives_data,
         )
         debate_stream.append(msg3)
 
@@ -114,6 +121,7 @@ class MultiAgentConsensusPipeline:
             api_key=openai_key,
             stage_jev=stage_jev_res,
             derivatives_data=derivatives_data,
+            macro_status=macro_status,
         )
         debate_stream.append(msg4)
 
@@ -131,14 +139,15 @@ class MultiAgentConsensusPipeline:
             stage_jev=stage_jev_res,
             timeframe=timeframe,
             derivatives_data=derivatives_data,
+            macro_status=macro_status,
         )
         debate_stream.append(msg5)
 
-        # Execution Hook: If auto_execute is requested and consensus score >= 80%
+        # Execution Hook: If auto_execute is requested, consensus score >= 80%, AND macro lockout is NOT active
         executed_position: Optional[PaperPosition] = None
         auto_executed = False
 
-        if auto_execute and stage5_res.consensus_confidence >= 80.0:
+        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active:
             plan = stage5_res.execution_plan
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
             default_fallback_size = max(100.0, round(account_eq * 0.08, 2))
@@ -184,6 +193,7 @@ class MultiAgentConsensusPipeline:
             stage4=stage4_res,
             stage5=stage5_res,
             derivatives_data=derivatives_data,
+            macro_status=MacroCalendarStatusSchema(**macro_status.to_schema()),
             debate_stream=debate_stream,
             auto_executed=auto_executed,
             executed_position=executed_position,

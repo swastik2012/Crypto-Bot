@@ -6,6 +6,7 @@ from backend.services.paper_engine import paper_engine
 from backend.agents.graph import consensus_pipeline
 from backend.models.schemas import PlacePaperOrderRequest, PositionSide
 from backend.services.analysis_cache import analysis_cache
+from backend.services.macro_calendar_service import macro_calendar_service
 
 class AutoTradingScheduler:
     """
@@ -72,6 +73,7 @@ class AutoTradingScheduler:
             "next_run_timestamp": self.next_run_timestamp,
             "cycle_count": self.cycle_count,
             "active_positions_count": len(paper_engine.open_positions),
+            "max_positions_limit": getattr(paper_engine, "max_concurrent_positions", 5),
             "recent_logs": self.execution_logs[-15:],
         }
 
@@ -137,12 +139,52 @@ class AutoTradingScheduler:
                 if (time.time() - t.closed_at) < 3600: # 1 hour
                     self.asset_cooldowns[t.symbol] = max(self.asset_cooldowns.get(t.symbol, 0), t.closed_at + 3600)
 
+        # Macro Proximity Check (Phase 5)
+        macro_status = macro_calendar_service.check_circuit_breaker()
+
+        # ========================================================
+        # 🛡️ ACTIVE RUNNER PROTECTION: Ratchet Stops on Imminent Macro Event
+        # ========================================================
+        if macro_status.tighten_stops_required:
+            print(f"[AutoTrader Macro Guard] Imminent high-impact macro event ({macro_status.active_event_name}). Reviewing runners to lock in breakeven stops...")
+            for pos_id, pos in list(paper_engine.open_positions.items()):
+                if pos.unrealized_pnl > 0:
+                    is_long = pos.side == PositionSide.LONG
+                    if is_long and (pos.stop_loss is None or pos.stop_loss < pos.entry_price):
+                        pos.stop_loss = pos.entry_price
+                        print(f"[AutoTrader Macro Ratchet] Ratcheted {pos.symbol} LONG stop-loss to breakeven ${pos.entry_price:,.2f} ahead of {macro_status.active_event_name}.")
+                    elif not is_long and (pos.stop_loss is None or pos.stop_loss > pos.entry_price):
+                        pos.stop_loss = pos.entry_price
+                        print(f"[AutoTrader Macro Ratchet] Ratcheted {pos.symbol} SHORT stop-loss to breakeven ${pos.entry_price:,.2f} ahead of {macro_status.active_event_name}.")
+
         for pair in self.monitored_pairs:
             try:
                 base_sym = pair.split("/")[0]
                 match_res = symbol_resolver.resolve(base_sym, limit=1)
                 current_price = match_res.best_match.current_price if match_res.best_match else 78150.0
                 change_24h = match_res.best_match.change_24h if match_res.best_match else 0.0
+
+                # ========================================================
+                # 🛑 RISK GUARD 4: Macroeconomic Event Circuit Breaker
+                # ========================================================
+                if macro_status.lockout_active:
+                    print(f"[AutoTrader Macro Guard] {macro_status.directive}. Skipping new entry for {pair}.")
+                    report_entry = {
+                        "cycle": self.cycle_count,
+                        "timestamp": time.time(),
+                        "pair": pair,
+                        "price": current_price,
+                        "signal": "MACRO_LOCKOUT",
+                        "confidence": 0.0,
+                        "executed": False,
+                        "position": None,
+                        "already_open": False,
+                        "event_name": macro_status.active_event_name,
+                        "directive": macro_status.directive,
+                    }
+                    cycle_results.append(report_entry)
+                    self.execution_logs.append(report_entry)
+                    continue
 
                 # ========================================================
                 # 🛑 RISK GUARD 2: Asset Stop-Loss Cooldown Guard
@@ -171,7 +213,8 @@ class AutoTradingScheduler:
                 # 🛑 RISK GUARD 3: Strict Single-Position & Trend Inversion
                 # ========================================================
                 existing_pos = next((p for p in paper_engine.open_positions.values() if p.symbol.upper() == pair.upper()), None)
-                portfolio_full = len(paper_engine.open_positions) >= 3
+                max_slots = getattr(paper_engine, "max_concurrent_positions", 5)
+                portfolio_full = len(paper_engine.open_positions) >= max_slots
 
                 # Run the 5-Stage LangGraph multi-agent debate
                 pair_start_time = time.time()
@@ -235,6 +278,9 @@ class AutoTradingScheduler:
                     default_auto_size = max(100.0, round(eq * 0.08, 2))
                     pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
+                    kelly_pct = plan.get("kelly_fraction_pct") if isinstance(plan, dict) else getattr(plan, "kelly_fraction_pct", None)
+                    sizing_regime = plan.get("sizing_regime", "BALANCED_HALF_KELLY") if isinstance(plan, dict) else getattr(plan, "sizing_regime", "BALANCED_HALF_KELLY")
+                    print(f"[AutoTrader Kelly Sizing] {pair} allocated ${pos_size:,.2f} ({kelly_pct}% equity) via {sizing_regime}.")
                     
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG
@@ -278,6 +324,25 @@ class AutoTradingScheduler:
                     executed = True
                     pos_info = pos.dict()
                     print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
+                else:
+                    skip_reason = None
+                    if already_open:
+                        skip_reason = "POSITION_ALREADY_OPEN"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Position already active in portfolio.")
+                    elif portfolio_full:
+                        max_slots = getattr(paper_engine, "max_concurrent_positions", 5)
+                        skip_reason = f"PORTFOLIO_FULL ({len(paper_engine.open_positions)}/{max_slots} active positions occupied)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Portfolio full ({len(paper_engine.open_positions)}/{max_slots} maximum concurrent slots occupied).")
+                    elif not jev_gate_pass:
+                        skip_reason = "JEV_SYSTEM_ONE_VETO (toxic flow or no statistical edge)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Blocked by System 1 Jev reflex gate.")
+                    elif confidence < 78.0:
+                        skip_reason = f"LOW_CONFIDENCE ({confidence:.1f}% < 78.0%)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Confidence {confidence:.1f}% below minimum 78.0% threshold.")
+                    elif not (is_buy or is_short):
+                        skip_reason = f"NEUTRAL_SIGNAL ({signal.value})"
+                    else:
+                        skip_reason = "RISK_VETO"
 
                 exec_time_total = round((time.time() - pair_start_time) * 1000, 1)
                 report_entry = {
@@ -291,6 +356,7 @@ class AutoTradingScheduler:
                     "executed": executed,
                     "position": pos_info,
                     "already_open": already_open,
+                    "skip_reason": None if executed else skip_reason,
                 }
                 cycle_results.append(report_entry)
                 self.execution_logs.append(report_entry)

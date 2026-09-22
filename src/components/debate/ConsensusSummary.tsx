@@ -11,8 +11,10 @@ import {
   DollarSign,
   ArrowRight,
   Layers,
+  ShieldAlert,
+  AlertTriangle,
 } from 'lucide-react';
-import type { Stage5GeminiArbiterOutput, MultiTimeframeConfluence } from '../../types';
+import type { Stage5GeminiArbiterOutput, MultiTimeframeConfluence, MacroCalendarStatus } from '../../types';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -21,12 +23,14 @@ interface ConsensusSummaryProps {
   arbiterData: Stage5GeminiArbiterOutput;
   onExecuteTrade: () => void;
   mtfConfluence?: MultiTimeframeConfluence;
+  macroStatus?: MacroCalendarStatus;
 }
 
 export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
   arbiterData,
   onExecuteTrade,
   mtfConfluence,
+  macroStatus,
 }) => {
   const { formatPrice } = useCurrency();
   const { consensusSignal, consensusConfidence, executionPlan, executiveSummary, keyInvalidationCondition, agentConsensusMatrix } = arbiterData;
@@ -151,6 +155,69 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
           </div>
         </div>
 
+        {/* Macroeconomic Circuit Breaker Alert Banner (Phase 5) */}
+        {macroStatus && macroStatus.status !== 'CLEAR' && (
+          <motion.div
+            initial={{ opacity: 0, y: -6 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-3.5 sm:p-4 rounded-2xl border flex items-start gap-3 sm:gap-4 shadow-sm ${
+              macroStatus.status === 'LOCKOUT_ACTIVE'
+                ? 'bg-rose-500/10 border-rose-500/40 text-rose-700 dark:text-rose-300'
+                : macroStatus.status === 'POST_EVENT_COOLOFF'
+                ? 'bg-amber-500/10 border-amber-500/40 text-amber-700 dark:text-amber-300'
+                : 'bg-yellow-500/10 border-yellow-500/30 text-yellow-700 dark:text-yellow-300'
+            }`}
+          >
+            <div className={`p-2 rounded-xl shrink-0 ${
+              macroStatus.status === 'LOCKOUT_ACTIVE'
+                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 animate-pulse'
+                : macroStatus.status === 'POST_EVENT_COOLOFF'
+                ? 'bg-amber-500/20 text-amber-600 dark:text-amber-400'
+                : 'bg-yellow-500/20 text-yellow-600 dark:text-yellow-400'
+            }`}>
+              {macroStatus.status === 'LOCKOUT_ACTIVE' ? (
+                <ShieldAlert className="w-5 h-5" />
+              ) : (
+                <AlertTriangle className="w-5 h-5" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-bold text-xs uppercase tracking-wider text-slate-900 dark:text-white">
+                  {macroStatus.status === 'LOCKOUT_ACTIVE'
+                    ? '⛔ Mandatory Macro Event Circuit Breaker Active'
+                    : macroStatus.status === 'POST_EVENT_COOLOFF'
+                    ? '⚠️ Post-Release Volatility Cooloff'
+                    : '🟡 Macro High-Volatility Watch Zone'}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black ${
+                  macroStatus.status === 'LOCKOUT_ACTIVE'
+                    ? 'bg-rose-500/25 text-rose-700 dark:text-rose-200'
+                    : 'bg-amber-500/25 text-amber-700 dark:text-amber-200'
+                }`}>
+                  {macroStatus.minutes_to_event !== null ? `${macroStatus.minutes_to_event}m ${macroStatus.status === 'POST_EVENT_COOLOFF' ? 'post-release' : 'away'}` : 'Scheduled'}
+                </span>
+                {macroStatus.active_event_impact && (
+                  <span className="px-1.5 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-white/80 font-mono text-[9px] font-bold">
+                    {macroStatus.active_event_impact}
+                  </span>
+                )}
+              </div>
+              <div className="font-bold text-sm text-slate-800 dark:text-slate-100 mt-1">
+                {macroStatus.active_event_name || 'High-Impact Macro Economic Event'}
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-0.5 leading-relaxed">
+                {macroStatus.directive}
+              </p>
+              {macroStatus.tighten_stops_required && (
+                <div className="mt-2 text-[11px] font-mono font-bold text-cyan-600 dark:text-cyan-300 flex items-center gap-1.5">
+                  <span>🛡️ Active Runner Action:</span> Open position stop-losses ratcheted to Breakeven to lock in profits.
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* Target Price Execution Matrix (Entry, TP1, TP2, Stop Loss, RR) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
           
@@ -239,6 +306,26 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
             </div>
           </div>
 
+          {/* Dynamic Kelly Position Size & Portfolio Heat */}
+          {executionPlan.recommendedPositionUSD && (
+            <div className="col-span-2 sm:col-span-4 lg:col-span-5 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 via-[#76B900]/10 to-cyan-500/10 border border-[#76B900]/30 font-mono text-xs flex flex-wrap items-center justify-between gap-2 shadow-sm">
+              <div className="flex items-center gap-2">
+                <Badge variant="nvidia" size="sm">
+                  {executionPlan.sizingRegime || 'Half-Kelly Sizing'}
+                </Badge>
+                <span className="text-slate-800 dark:text-slate-200 font-bold">
+                  Recommended Allocation: <span className="text-[#598c00] dark:text-[#76B900]">${executionPlan.recommendedPositionUSD.toLocaleString()}</span>
+                  {executionPlan.kellyFractionPct ? ` (${executionPlan.kellyFractionPct}% equity)` : ''}
+                </span>
+              </div>
+              <div className="flex items-center gap-3 text-[11px] text-slate-600 dark:text-slate-400">
+                {executionPlan.portfolioHeatPct !== undefined && (
+                  <span>Portfolio Heat: <b className="text-purple-600 dark:text-purple-400">{executionPlan.portfolioHeatPct}%</b> (&le; 6% Cap)</span>
+                )}
+                <span>Leverage: <b className="text-slate-900 dark:text-slate-100">{executionPlan.suggestedLeverage}</b></span>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Executive Arbiter Summary & Invalidation Rule */}

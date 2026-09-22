@@ -112,6 +112,26 @@ async def get_forex_rates():
         "timestamp": time.time(),
     }
 
+@app.get("/api/macro-calendar/status")
+async def get_macro_calendar_status():
+    """
+    Real-Time Macroeconomic Event Circuit Breaker Status.
+    Returns whether lockout is active, upcoming high-impact events (CPI, FOMC, NFP),
+    and risk directives for automated trading.
+    """
+    from backend.services.macro_calendar_service import macro_calendar_service
+    status = macro_calendar_service.check_circuit_breaker()
+    return status.to_schema()
+
+@app.get("/api/macro-calendar/events")
+async def get_macro_calendar_events(limit: int = 10):
+    """
+    Upcoming institutional macroeconomic schedule.
+    """
+    from backend.services.macro_calendar_service import macro_calendar_service
+    events = macro_calendar_service.get_upcoming_events(limit=limit)
+    return [e.model_dump() if hasattr(e, "model_dump") else e.dict() for e in events]
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "service": settings.APP_NAME}

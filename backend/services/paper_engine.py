@@ -41,6 +41,7 @@ class VirtualPaperEngine:
         quote_currency: str = "USDT",
         default_allocation_pct: float = 5.0,
         max_leverage: int = 20,
+        max_concurrent_positions: int = 5,
         storage_file: Optional[Path] = None,
     ):
         self.account_id = account_id
@@ -49,6 +50,7 @@ class VirtualPaperEngine:
         self.cash_balance = initial_balance
         self.default_allocation_pct = default_allocation_pct
         self.max_leverage = max_leverage
+        self.max_concurrent_positions = max_concurrent_positions
         self.storage_file = storage_file or STORAGE_FILE
         
         self.open_positions: Dict[str, PaperPosition] = {}
@@ -198,9 +200,9 @@ class VirtualPaperEngine:
                 print(f"[PaperEngine Guard] Position in {order.symbol} already exists ({existing_id}). Preventing duplicate stacking.")
                 return existing_pos
 
-        # 2. Protection Guard: Max 3 total concurrent positions across portfolio
-        if len(self.open_positions) >= 3:
-            print(f"[PaperEngine Guard] Max concurrent positions limit (3) reached. Skipping order on {order.symbol}.")
+        # 2. Protection Guard: Max concurrent positions limit across portfolio (5 slots)
+        if len(self.open_positions) >= self.max_concurrent_positions:
+            print(f"[PaperEngine Guard] Max concurrent positions limit ({self.max_concurrent_positions}) reached. Skipping order on {order.symbol}.")
             # Return first existing position as fallback
             return list(self.open_positions.values())[0]
 

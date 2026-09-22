@@ -2,7 +2,7 @@ import time
 import json
 import asyncio
 import httpx
-from typing import Dict, Any, Tuple, List
+from typing import Dict, Any, Tuple, List, Optional
 from backend.models.schemas import Stage2NewsSentimentResult, NewsArticleSchema, DebateMessageSchema
 from backend.services.news_scraper import news_scraper
 from backend.config import settings
@@ -13,6 +13,7 @@ async def run_stage2_news_sentiment(
     current_price: float,
     account_state: Dict[str, Any],
     api_key: str = "",
+    macro_status: Optional[Any] = None,
 ) -> Tuple[Stage2NewsSentimentResult, DebateMessageSchema]:
     """
     Stage 2: NVIDIA NIM Live Crypto News & Sentiment Analyzer
@@ -29,10 +30,13 @@ async def run_stage2_news_sentiment(
     articles_list = [NewsArticleSchema(**a) for a in articles_raw]
 
     # Format news text for NVIDIA NIM prompt
-    news_text_block = "\n".join([
+    news_lines = [
         f"- [{a.source}] {a.title} ({a.published_at}): {a.description}"
         for a in articles_list
-    ])
+    ]
+    if macro_status and getattr(macro_status, "lockout_active", False):
+        news_lines.insert(0, f"- [MACRO ALERT] ⛔ IMMINENT HIGH-IMPACT EVENT: {getattr(macro_status, 'active_event_name', 'Macro Release')} ({getattr(macro_status, 'active_event_impact', 'TIER_1_CRITICAL')}) in blackout window ({getattr(macro_status, 'minutes_to_event', 0)}m). Extreme volatility hazard.")
+    news_text_block = "\n".join(news_lines)
 
     system_prompt = (
         "You are the Senior Crypto Macro & News Intelligence Node for an institutional AI trading hedge fund. "
@@ -138,6 +142,27 @@ async def run_stage2_news_sentiment(
             "CoinDesk": "Bullish (Institutional Inflows)",
             "Cointelegraph": "Bullish (Supply Compression)",
             "CryptoSlate": "Bullish (Derivatives Reset)",
+        }
+
+    if macro_status and getattr(macro_status, "lockout_active", False):
+        ev_name = getattr(macro_status, "active_event_name", "Tier-1 Macro Release")
+        ev_mins = getattr(macro_status, "minutes_to_event", 0)
+        sentiment_label = "NEUTRAL"
+        sentiment_score = 50.0
+        news_gist = (
+            f"MACRO CIRCUIT BREAKER LOCKOUT: High-impact event '{ev_name}' is in blackout window ({ev_mins}m). "
+            f"Directional news signals are suppressed as institutional liquidity pulls back ahead of high-volatility release."
+        )
+        key_catalysts = [
+            f"TIER-1 CATALYST: {ev_name} scheduled release in {ev_mins}m",
+            "Institutional market makers pulling bid/ask liquidity depth ahead of announcement",
+            "Derivatives de-risking and skew normalization in effect",
+        ]
+        macro_narrative = f"Macro Event Blackout: Capital Preservation Mode ({ev_name})"
+        source_breakdown = {
+            "CoinDesk": "Neutral (Macro Blackout)",
+            "Cointelegraph": "Neutral (High Volatility Pre-Event)",
+            "CryptoSlate": "Neutral (Liquidity Drainage)",
         }
 
     start_time = time.time()

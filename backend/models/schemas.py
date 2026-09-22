@@ -229,6 +229,19 @@ class StageJevSystemOneResult(BaseModel):
     raw_results: Dict[str, Any] = {}
     summary: str = ""
 
+class KellySizingSchema(BaseModel):
+    recommended_position_usd: float
+    kelly_fraction_pct: float
+    raw_kelly_pct: float
+    payoff_ratio_b: float
+    win_probability: float
+    expected_value: float
+    max_loss_usd: float
+    portfolio_heat_pct: float
+    sizing_regime: str
+    risk_multiplier: float
+    formula_breakdown: str
+
 # Stage 4: NVIDIA NIM Quantitative & Mathematical Stress Engine (Ingests Stage 1 + Stage 2 + Jev System 1)
 class Stage3NvidiaNimResult(BaseModel):
     status: str = "completed"
@@ -243,6 +256,7 @@ class Stage3NvidiaNimResult(BaseModel):
     verdict: str
     adjustments_proposed: Optional[Dict[str, Any]] = None
     mathematical_proof: str
+    kelly_sizing: Optional[KellySizingSchema] = None
 
 # Stage 5: OpenAI Flagship Risk & Liquidity Trap Guard
 class Stage4OpenAIRiskResult(BaseModel):
@@ -309,6 +323,16 @@ class DerivativesMicrostructureSchema(BaseModel):
     summary: str
     timestamp: float = Field(default_factory=time.time)
 
+class MacroCalendarStatusSchema(BaseModel):
+    status: str                         # "CLEAR", "WATCH_ZONE", "LOCKOUT_ACTIVE", "POST_EVENT_COOLOFF"
+    lockout_active: bool
+    tighten_stops_required: bool
+    active_event_name: Optional[str] = None
+    active_event_impact: Optional[str] = None
+    minutes_to_event: Optional[int] = None
+    directive: str
+    upcoming_events: List[Dict[str, Any]] = Field(default_factory=list)
+
 class AnalyzeAndTradeRequest(BaseModel):
     symbol: str = "BTC/USDT"
     timeframe: str = "1H"
@@ -334,6 +358,7 @@ class AnalyzeAndTradeResponse(BaseModel):
     stage4: Stage4OpenAIRiskResult
     stage5: Stage5GeminiArbiterResult
     derivatives_data: Optional[DerivativesMicrostructureSchema] = None
+    macro_status: Optional[MacroCalendarStatusSchema] = None
     debate_stream: List[DebateMessageSchema]
     auto_executed: bool
     executed_position: Optional[PaperPosition] = None

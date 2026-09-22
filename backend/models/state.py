@@ -33,6 +33,7 @@ class AgentGraphState(TypedDict):
     stage4_output: Optional[Stage4OpenAIRiskResult]
     stage5_output: Optional[Stage5GeminiArbiterResult]
     derivatives_data: Optional[Any]
+    macro_status: Optional[Any]
     
     # Inter-Agent Dialogue Stream
     debate_messages: List[DebateMessageSchema]
