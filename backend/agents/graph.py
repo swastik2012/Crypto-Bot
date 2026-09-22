@@ -39,6 +39,7 @@ class MultiAgentConsensusPipeline:
     ) -> AnalyzeAndTradeResponse:
         if account_state is None:
             account_state = paper_engine.get_state().dict()
+        pipeline_start = time.time()
         debate_stream = []
 
         active_typesafe_key = typesafe_key or jev_key
@@ -147,6 +148,7 @@ class MultiAgentConsensusPipeline:
             tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
             sl = plan.get("stop_loss") if isinstance(plan, dict) else getattr(plan, "stop_loss", None)
 
+            exec_latency_ms = round((time.time() - pipeline_start) * 1000, 1)
             order_req = PlacePaperOrderRequest(
                 symbol=symbol,
                 side=PositionSide.LONG if "BUY" in stage5_res.consensus_signal.value else PositionSide.SHORT,
@@ -157,6 +159,8 @@ class MultiAgentConsensusPipeline:
                 take_profit_2=tp2,
                 stop_loss=sl,
                 agent_rationale=stage5_res.executive_summary,
+                execution_time_ms=exec_latency_ms,
+                opened_by="AutoTrader",
             )
             executed_position = paper_engine.execute_order(order_req, current_price)
             auto_executed = True

@@ -81,7 +81,7 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                       AI Agent & Consensus Parameters
                     </h2>
                     <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-                      Configure Gemini 3.5 Flash, DeepSeek V4 Pro & OpenAI Flagship
+                      Configure Gemini 3.7 Flash, DeepSeek V4 Pro & OpenAI Flagship
                     </p>
                   </div>
                 </div>
@@ -124,7 +124,7 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2 text-xs font-bold text-blue-400">
                       <Layers className="w-4 h-4" />
-                      <span>Stage 1: Google Gemini 3.5 Flash Vision</span>
+                      <span>Stage 1: Google Gemini 3.7 Flash Vision</span>
                     </div>
                     <Badge variant="cyan" size="sm">Vision Ingestion</Badge>
                   </div>
@@ -141,7 +141,8 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                         }
                         className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold"
                       >
-                        <option value="gemini-3.5-flash">gemini-3.5-flash (Ultra-Fast Flagship)</option>
+                        <option value="gemini-3.7-flash">gemini-3.7-flash (Ultra-Fast Flagship)</option>
+                        <option value="gemini-2.5-flash">gemini-2.5-flash</option>
                         <option value="gemini-2.0-flash-exp">gemini-2.0-flash-exp</option>
                         <option value="gemini-1.5-pro">gemini-1.5-pro</option>
                       </select>

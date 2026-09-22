@@ -31,13 +31,13 @@ class Settings(BaseSettings):
     JEV_API_KEY: Optional[str] = os.getenv("TYPESAFE_API_KEY", os.getenv("JEV_API_KEY", ""))
     NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
     JEV_MODEL: str = os.getenv("JEV_MODEL", "jev-latest")
     JEV_ENDPOINT: str = os.getenv("JEV_ENDPOINT", "https://api.typesafe.ai/v1/systemone")
 
     # Model Defaults
-    DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+    DEFAULT_GEMINI_MODEL: str = "gemini-3.7-flash"
     DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"

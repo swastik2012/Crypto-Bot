@@ -20,7 +20,7 @@ export const ScanOverlay: React.FC<ScanOverlayProps> = ({
   const stageDescriptions: Record<number, { title: string; subtitle: string }> = {
     1: {
       title: 'Stage 1/5: Vision Technical Pattern Scan',
-      subtitle: 'Ingesting chart viewport to Gemini 3.5 Flash Vision for candlestick & pattern detection...',
+      subtitle: 'Ingesting chart viewport to Gemini 3.7 Flash Vision for candlestick & pattern detection...',
     },
     2: {
       title: 'Stage 2/5: Macro & Real-Time News Ingestion',

@@ -181,12 +181,12 @@ async def run_stage2_news_sentiment(
         except Exception:
             pass
 
-    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.6 Flash on the live news stream
+    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash on the live news stream
     if not parsed_successfully and settings.GEMINI_API_KEY:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            gemini_model = settings.GEMINI_MODEL or "gemini-2.5-flash"
+            gemini_model = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
             resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
             raw_text = resp.content

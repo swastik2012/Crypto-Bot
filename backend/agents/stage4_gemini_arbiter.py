@@ -65,14 +65,14 @@ async def run_stage4_gemini_arbiter(
     
     summary = (
         f"Consensus synthesis verified across all 3 AI nodes with {consensus_confidence}% conviction for {symbol}. "
-        f"Gemini 3.5 Flash's visual ascending triangle breakout is mathematically supported by NVIDIA DeepSeek V4 Pro's {stage2.monte_carlo_win_rate}% "
+        f"Gemini 3.7 Flash's visual ascending triangle breakout is mathematically supported by NVIDIA DeepSeek V4 Pro's {stage2.monte_carlo_win_rate}% "
         f"Monte Carlo win rate across {len(open_positions)} active portfolio trades and approved by OpenAI. Executing LONG setup."
     )
 
     latency = 280
 
     result = Stage4GeminiArbiterResult(
-        agent_name="Agent 4: Gemini 3.5 Flash Consensus Arbiter",
+        agent_name="Agent 4: Gemini 3.7 Flash Consensus Arbiter",
         model=model_name,
         latency_ms=latency,
         consensus_signal=signal,
@@ -92,7 +92,7 @@ async def run_stage4_gemini_arbiter(
         id="msg_st4_01",
         stage_number=4,
         agent_id="agent_gemini_arbiter",
-        agent_name="Gemini 3.5 Flash Arbiter",
+        agent_name="Gemini 3.7 Flash Arbiter",
         agent_badge="Final Consensus Arbiter",
         avatar_color="from-cyan-400 to-teal-400",
         model=model_name,

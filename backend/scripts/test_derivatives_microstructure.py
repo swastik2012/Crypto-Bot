@@ -77,7 +77,7 @@ async def test_derivatives_engine():
 
     mock_stage1 = Stage1GeminiVisionResult(
         agent_name="Stage 1 Vision",
-        model="gemini-2.5-flash",
+        model="gemini-3.7-flash",
         latency_ms=100,
         patterns=[TechnicalPattern(name="Ascending Triangle Breakout", type="bullish_continuation", timeframe="1H", reliability=88.0, description="Bullish breakout")],
         key_levels=[],
@@ -88,7 +88,7 @@ async def test_derivatives_engine():
 
     mock_stage2 = Stage2NewsSentimentResult(
         agent_name="Stage 2 News",
-        model="gemini-2.5-flash",
+        model="gemini-3.7-flash",
         latency_ms=120,
         sentiment_score=75.0,
         sentiment_label="BULLISH",

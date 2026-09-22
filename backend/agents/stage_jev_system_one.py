@@ -49,6 +49,20 @@ async def run_stage_jev_system_one(
     else:
         order_flow_delta = 0.02
 
+    # Extract Multi-Timeframe Confluence from Stage 1
+    mtf = getattr(stage1_res, "multi_timeframe_confluence", None)
+    has_mtf_warning = getattr(mtf, "counter_trend_warning", False) if not isinstance(mtf, dict) else mtf.get("counter_trend_warning", False)
+    mtf_align = getattr(mtf, "alignment_score", "3/3 FULL CONFLUENCE") if not isinstance(mtf, dict) else mtf.get("alignment_score", "3/3 FULL CONFLUENCE")
+    trend_1d = "NEUTRAL"
+    trend_4h = "NEUTRAL"
+    if mtf:
+        screen_1d = getattr(mtf, "screen_1d", None) if not isinstance(mtf, dict) else mtf.get("screen_1d")
+        if screen_1d:
+            trend_1d = getattr(screen_1d, "trend", "NEUTRAL") if not isinstance(screen_1d, dict) else screen_1d.get("trend", "NEUTRAL")
+        screen_4h = getattr(mtf, "screen_4h", None) if not isinstance(mtf, dict) else mtf.get("screen_4h")
+        if screen_4h:
+            trend_4h = getattr(screen_4h, "trend", "NEUTRAL") if not isinstance(screen_4h, dict) else screen_4h.get("trend", "NEUTRAL")
+
     jev_state = {
         "symbol": symbol,
         "base_asset": base_sym,
@@ -58,6 +72,10 @@ async def run_stage_jev_system_one(
         "stage1_pattern": stage1_res.patterns[0].name if stage1_res.patterns else "None",
         "stage1_pattern_type": stage1_res.patterns[0].type if stage1_res.patterns else "neutral",
         "stage1_proposed_direction": direction,
+        "stage1_mtf_alignment": mtf_align,
+        "stage1_mtf_1d_trend": trend_1d,
+        "stage1_mtf_4h_trend": trend_4h,
+        "stage1_mtf_counter_trend_warning": has_mtf_warning,
         "stage2_news_sentiment_score": news_sentiment_score,
         "stage2_sentiment_label": stage2_res.sentiment_label,
         "order_flow_imbalance": order_flow_delta,
@@ -139,6 +157,7 @@ async def run_stage_jev_system_one(
     call_success = False
     raw_results: Dict[str, Any] = {}
     error_msg: Optional[str] = None
+    active_provider = "TypeSafe (Jev)"
 
     # 3. Attempt live HTTP call to TypeSafe AI Jev System One API if key provided
     if typesafe_key and typesafe_key.strip():
@@ -156,10 +175,60 @@ async def run_stage_jev_system_one(
                     data = res.json()
                     raw_results = data.get("results", data)
                     call_success = True
+                    active_provider = "TypeSafe (Jev)"
                 else:
-                    error_msg = f"HTTP {res.status_code}: {res.text[:200]}"
+                    error_msg = f"TypeSafe API HTTP {res.status_code}: {res.text[:200]}"
         except Exception as e:
-            error_msg = str(e)
+            error_msg = f"TypeSafe Connection Error: {str(e)}"
+    else:
+        error_msg = "No TYPESAFE_API_KEY configured in backend/.env or settings modal (get key at https://typesafe.ai)."
+
+    # 3b. Live AI Fast-Twitch Reflex Surrogate using Gemini 3.7 Flash if TypeSafe key is missing/failed
+    if not call_success and settings.GEMINI_API_KEY:
+        try:
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            from langchain_core.messages import HumanMessage
+            gemini_model = settings.GEMINI_MODEL or "gemini-3.7-flash"
+            llm = ChatGoogleGenerativeAI(
+                model=gemini_model,
+                google_api_key=settings.GEMINI_API_KEY,
+                temperature=0.1,
+                max_retries=0,
+            )
+            jev_prompt = (
+                "You are TypeSafe AI Jev (System One Fast-Twitch Decision Engine). "
+                "Evaluate the immediate market state and answer all 6 typed questions with calibrated probabilities in sub-200ms reflex speed.\n\n"
+                f"MARKET STATE:\n{json.dumps(jev_state, indent=2)}\n\n"
+                "QUESTIONS AND SCHEMAS TO EVALUATE:\n"
+                f"{json.dumps(jev_questions, indent=2)}\n\n"
+                "Return ONLY a valid JSON object where keys are the question names and values match:\n"
+                '{\n'
+                '  "execution_bias": {"choice": "BUY"|"HOLD"|"SELL", "probabilities": {"BUY": float, "HOLD": float, "SELL": float}, "confidence": float},\n'
+                '  "market_regime": {"choice": "trend_continuation"|"mean_reversion"|"high_risk_chop"|"liquidity_sweep", "probabilities": {...}, "confidence": float},\n'
+                '  "high_probability_edge": {"noul": true|false, "probability": float, "confidence": float},\n'
+                '  "execution_urgency": {"score": "Stand Aside / Invalidation Risk"|"Wait for Pullback to Limit Order"|"Immediate Market Execution", "probabilities": {...}, "confidence": float},\n'
+                '  "toxic_flow_detected": {"noul": true|false, "probability": float, "confidence": float},\n'
+                '  "fast_twitch_conviction": {"score": "Low Conviction (Under 60%)"|"Moderate Conviction (60% - 75%)"|"High Conviction (75% - 88%)"|"Extreme Conviction (Above 88%)", "probabilities": {...}, "confidence": float}\n'
+                '}'
+            )
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=jev_prompt)]), timeout=5.0)
+            raw_text = resp.content
+            if "```json" in raw_text:
+                json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                parsed = json.loads(json_str)
+            elif "{" in raw_text:
+                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                parsed = json.loads(json_str)
+            else:
+                parsed = {}
+            if parsed and "execution_bias" in parsed and "market_regime" in parsed:
+                raw_results = parsed
+                call_success = True
+                active_provider = "TypeSafe Jev (Gemini 3.7 Flash Reflex Surrogate)"
+                model_name = f"{model_name} (via Gemini 3.7 Flash)"
+                error_msg = None
+        except Exception as e:
+            error_msg = f"{error_msg} | Gemini 3.7 Flash Surrogate notice: {str(e)}"
 
     # 4. Deterministic Fast-Twitch Calculation Fallback if not successful
     if not call_success:
@@ -169,49 +238,55 @@ async def run_stage_jev_system_one(
         cvd_div = deriv_dict.get("cvd_divergence", "NEUTRAL")
         funding_reg = deriv_dict.get("funding_regime", "NEUTRAL")
 
-        # Predatory Liquidation Override: High risk or severe CVD exhaustion forces Stand Aside
-        if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
+        # MTF Counter-Trend & Divergence Check (Alexander Elder Triple-Screen Mandate)
+        is_counter_trend = has_mtf_warning or (direction == "LONG" and trend_1d == "BEARISH") or (direction == "SHORT" and trend_1d == "BULLISH")
+        is_mtf_divergent = "1/3 DIVERGENCE" in mtf_align
+
+        # Predatory Liquidation Override OR MTF Counter-Trend Conflict forces Immediate Reflex Veto
+        if pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION") or is_counter_trend or is_mtf_divergent:
             bias_val = "HOLD"
-            bias_probs = {"BUY": 0.15, "HOLD": 0.72, "SELL": 0.13}
-            regime_val = "liquidity_sweep"
-            regime_probs = {"trend_continuation": 0.08, "mean_reversion": 0.22, "high_risk_chop": 0.15, "liquidity_sweep": 0.55}
+            bias_probs = {"BUY": 0.10, "HOLD": 0.80, "SELL": 0.10}
+            regime_val = "liquidity_sweep" if pred_risk == "HIGH" else ("high_risk_chop" if is_mtf_divergent else "mean_reversion")
+            regime_probs = {"trend_continuation": 0.05, "mean_reversion": 0.25, "high_risk_chop": 0.35, "liquidity_sweep": 0.35}
             edge_val = False
-            edge_prob = 0.22
+            edge_prob = 0.18
             urgency_val = "Stand Aside / Invalidation Risk"
-            urgency_probs = {"Stand Aside / Invalidation Risk": 0.78, "Wait for Pullback to Limit Order": 0.16, "Immediate Market Execution": 0.06}
-            toxic_val = True
-            toxic_prob = 0.88
+            urgency_probs = {"Stand Aside / Invalidation Risk": 0.84, "Wait for Pullback to Limit Order": 0.12, "Immediate Market Execution": 0.04}
+            toxic_val = True if (pred_risk == "HIGH" or is_counter_trend) else False
+            toxic_prob = 0.88 if is_counter_trend else 0.72
             conviction_val = "Low Conviction (Under 60%)"
-            conviction_probs = {"Low Conviction (Under 60%)": 0.68, "Moderate Conviction (60% - 75%)": 0.20, "High Conviction (75% - 88%)": 0.10, "Extreme Conviction (Above 88%)": 0.02}
-            bias_conf = 0.78
+            conviction_probs = {"Low Conviction (Under 60%)": 0.76, "Moderate Conviction (60% - 75%)": 0.16, "High Conviction (75% - 88%)": 0.06, "Extreme Conviction (Above 88%)": 0.02}
+            bias_conf = 0.82
         elif direction == "LONG" and news_sentiment_score >= 55.0:
             bias_val = "BUY"
-            bias_probs = {"BUY": 0.84, "HOLD": 0.11, "SELL": 0.05}
+            is_full_confluence = "3/3" in mtf_align
+            bias_probs = {"BUY": 0.90 if is_full_confluence else 0.84, "HOLD": 0.07 if is_full_confluence else 0.11, "SELL": 0.03 if is_full_confluence else 0.05}
             regime_val = "trend_continuation"
-            regime_probs = {"trend_continuation": 0.78, "mean_reversion": 0.12, "high_risk_chop": 0.06, "liquidity_sweep": 0.04}
+            regime_probs = {"trend_continuation": 0.85 if is_full_confluence else 0.78, "mean_reversion": 0.08, "high_risk_chop": 0.04, "liquidity_sweep": 0.03}
             edge_val = True
-            edge_prob = 0.86
+            edge_prob = 0.92 if is_full_confluence else 0.86
             urgency_val = "Immediate Market Execution"
-            urgency_probs = {"Stand Aside / Invalidation Risk": 0.06, "Wait for Pullback to Limit Order": 0.22, "Immediate Market Execution": 0.72}
+            urgency_probs = {"Stand Aside / Invalidation Risk": 0.04, "Wait for Pullback to Limit Order": 0.18, "Immediate Market Execution": 0.78 if is_full_confluence else 0.72}
             toxic_val = False
-            toxic_prob = 0.12
-            conviction_val = "High Conviction (75% - 88%)"
-            conviction_probs = {"Low Conviction (Under 60%)": 0.04, "Moderate Conviction (60% - 75%)": 0.14, "High Conviction (75% - 88%)": 0.74, "Extreme Conviction (Above 88%)": 0.08}
-            bias_conf = 0.88
+            toxic_prob = 0.08 if is_full_confluence else 0.12
+            conviction_val = "Extreme Conviction (Above 88%)" if is_full_confluence else "High Conviction (75% - 88%)"
+            conviction_probs = {"Low Conviction (Under 60%)": 0.02, "Moderate Conviction (60% - 75%)": 0.10, "High Conviction (75% - 88%)": 0.70, "Extreme Conviction (Above 88%)": 0.18 if is_full_confluence else 0.08}
+            bias_conf = 0.92 if is_full_confluence else 0.88
         elif direction == "SHORT" and news_sentiment_score <= 48.0:
             bias_val = "SELL"
-            bias_probs = {"BUY": 0.06, "HOLD": 0.12, "SELL": 0.82}
+            is_full_confluence = "3/3" in mtf_align
+            bias_probs = {"BUY": 0.03 if is_full_confluence else 0.06, "HOLD": 0.07 if is_full_confluence else 0.12, "SELL": 0.90 if is_full_confluence else 0.82}
             regime_val = "trend_continuation"
-            regime_probs = {"trend_continuation": 0.81, "mean_reversion": 0.09, "high_risk_chop": 0.05, "liquidity_sweep": 0.05}
+            regime_probs = {"trend_continuation": 0.86 if is_full_confluence else 0.81, "mean_reversion": 0.07, "high_risk_chop": 0.04, "liquidity_sweep": 0.03}
             edge_val = True
-            edge_prob = 0.84
+            edge_prob = 0.91 if is_full_confluence else 0.84
             urgency_val = "Immediate Market Execution"
-            urgency_probs = {"Stand Aside / Invalidation Risk": 0.08, "Wait for Pullback to Limit Order": 0.24, "Immediate Market Execution": 0.68}
+            urgency_probs = {"Stand Aside / Invalidation Risk": 0.05, "Wait for Pullback to Limit Order": 0.19, "Immediate Market Execution": 0.76 if is_full_confluence else 0.68}
             toxic_val = False
-            toxic_prob = 0.15
-            conviction_val = "High Conviction (75% - 88%)"
-            conviction_probs = {"Low Conviction (Under 60%)": 0.05, "Moderate Conviction (60% - 75%)": 0.15, "High Conviction (75% - 88%)": 0.72, "Extreme Conviction (Above 88%)": 0.08}
-            bias_conf = 0.86
+            toxic_prob = 0.10 if is_full_confluence else 0.15
+            conviction_val = "Extreme Conviction (Above 88%)" if is_full_confluence else "High Conviction (75% - 88%)"
+            conviction_probs = {"Low Conviction (Under 60%)": 0.03, "Moderate Conviction (60% - 75%)": 0.11, "High Conviction (75% - 88%)": 0.68, "Extreme Conviction (Above 88%)": 0.18 if is_full_confluence else 0.08}
+            bias_conf = 0.90 if is_full_confluence else 0.86
         else:
             bias_val = "HOLD"
             bias_probs = {"BUY": 0.18, "HOLD": 0.68, "SELL": 0.14}
@@ -317,7 +392,7 @@ async def run_stage_jev_system_one(
     # Log to Telemetry
     try:
         telemetry_service.log_call(
-            provider="TypeSafe (Jev)",
+            provider=active_provider,
             model=model_name,
             stage="Stage 3: Jev System One Reflex",
             status="SUCCESS" if call_success else "FALLBACK",

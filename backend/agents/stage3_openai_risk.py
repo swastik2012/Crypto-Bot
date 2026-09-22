@@ -42,7 +42,7 @@ async def run_stage3_openai_risk(
             client = AsyncOpenAI(api_key=effective_key)
             prompt = f"""You are Agent 3 (OpenAI Flagship Risk & Liquidity Auditor).
 Review this crypto trade setup on {symbol}:
-- Gemini 3.5 Flash Thesis: {stage1.initial_thesis}
+- Gemini 3.7 Flash Thesis: {stage1.initial_thesis}
 - NVIDIA DeepSeek V4 Pro Score: {stage2.stress_test_score}/100, MC Win Rate: {stage2.monte_carlo_win_rate}%
 
 Portfolio Risk & Previous Trades Context:
@@ -65,7 +65,7 @@ Analyze correlation risk with currently open positions, liquidity sweep traps, a
 
     if not gemini_critique:
         gemini_critique = (
-            f"Gemini 3.5 Flash's Ascending Triangle ceiling at ${stage1.initial_thesis.get('take_profit_1', current_price * 1.042):,.2f} is valid. "
+            f"Gemini 3.7 Flash's Ascending Triangle ceiling at ${stage1.initial_thesis.get('take_profit_1', current_price * 1.042):,.2f} is valid. "
             f"Cross-checked against {len(open_positions)} active open trades with minimal correlation drag. Recommend scaling into entry."
         )
     if not nvidia_critique:

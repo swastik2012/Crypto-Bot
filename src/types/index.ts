@@ -192,7 +192,7 @@ export interface Stage4OpenAIOutput {
   safetyScore: number;
 }
 
-// Stage 6: Gemini 3.6 Flash Arbiter Final Synthesis (Reconciles System 1 & System 2)
+// Stage 6: Gemini 3.7 Flash Arbiter Final Synthesis (Reconciles System 1 & System 2)
 export interface Stage5GeminiArbiterOutput {
   status: 'idle' | 'running' | 'completed';
   agentName: string;

@@ -62,7 +62,7 @@ const STAGE_TEMPLATES = [
   {
     id: 'stage1',
     stageNumber: 1,
-    name: 'Google Gemini 3.6 Flash Vision',
+    name: 'Google Gemini 3.7 Flash Vision',
     role: 'Visual Technical Analyst & Chart Ingestion',
     provider: 'Google Gemini (Vision)',
     color: 'from-blue-500 to-cyan-400',
@@ -237,7 +237,7 @@ MANDATORY RISK AUDIT CHECKLIST:
   {
     id: 'stage5',
     stageNumber: 5,
-    name: 'Google Gemini 3.6 Flash Consensus Arbiter',
+    name: 'Google Gemini 3.7 Flash Consensus Arbiter',
     role: 'Multi-Agent Consensus Synthesizer & Execution Planner',
     provider: 'Google Gemini (Arbiter)',
     color: 'from-cyan-400 to-teal-400',
@@ -387,7 +387,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
                   AI Prompts, Returned Decisions & API Telemetry
                 </h1>
                 <Badge variant="cyan" pulse size="sm">
-                  Google Gemini 3.6 Flash Active
+                  Google Gemini 3.7 Flash Active
                 </Badge>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-400">

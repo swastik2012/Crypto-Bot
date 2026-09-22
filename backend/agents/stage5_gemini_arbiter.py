@@ -37,13 +37,13 @@ async def run_stage5_gemini_arbiter(
     derivatives_data: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
-    Stage 6: Google Gemini 3.5 Flash Consensus Arbiter & Trade Synthesizer
+    Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
     - Reconciles System 1 (TypeSafe AI Jev Fast-Twitch Reflex) with System 2 Deliberation:
       Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 4), Risk Audit (Stage 5), and Derivatives Microstructure.
     - Synthesizes final actionable consensus verdict, confidence score, and execution plan.
     """
     gemini_key = api_key or settings.GEMINI_API_KEY
-    model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
+    model_name = settings.GEMINI_MODEL or "gemini-3.7-flash"
     
     thesis = stage1.initial_thesis or {}
     direction = str(thesis.get("direction", "LONG")).upper()
@@ -180,33 +180,48 @@ async def run_stage5_gemini_arbiter(
         )
 
     else: # LONG / BULLISH
-        gemini_score = 94.5
-        news_score = stage2.sentiment_score
-        nvidia_score = stage3.stress_test_score
-        openai_score = stage4.safety_score
-        consensus_confidence = round(
-            (gemini_score * 0.25) +
-            (news_score * 0.20) +
-            (nvidia_score * 0.30) +
-            (openai_score * 0.25),
-            1
-        )
-        if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
-            signal = SignalAction.STRONG_BUY
-        elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
-            signal = SignalAction.BUY
-        else:
+        # STRICT ANTI-COUNTER-TREND GUARD: NEVER LONG in a 1D BEARISH Trend
+        if trend_1d == "BEARISH":
+            veto_active = True
             signal = SignalAction.HOLD
+            consensus_confidence = 48.0
+            tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+            tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+            sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+            invalidation_cond = "LONG vetoed by Arbiter: 1D Macro Trend is BEARISH. Counter-trend longing into macro downtrend is strictly prohibited."
+            summary = (
+                f"6-Stage Arbiter Override: HOLD (Capital Preservation) for {symbol}. "
+                f"While low-timeframe noise showed temporary buying bounce, 1D Macro Tide is BEARISH. "
+                f"Anti-Counter-Trend Risk Rule suppresses longing into a macro bear trend. Waiting for short-on-rebound setup."
+            )
+        else:
+            gemini_score = 94.5
+            news_score = stage2.sentiment_score
+            nvidia_score = stage3.stress_test_score
+            openai_score = stage4.safety_score
+            consensus_confidence = round(
+                (gemini_score * 0.25) +
+                (news_score * 0.20) +
+                (nvidia_score * 0.30) +
+                (openai_score * 0.25),
+                1
+            )
+            if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+                signal = SignalAction.STRONG_BUY
+            elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+                signal = SignalAction.BUY
+            else:
+                signal = SignalAction.HOLD
 
-        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
-        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
-        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
-        invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
-        summary = (
-            f"5-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
-            f"Triple-Screen MTF ({mtf_align}) validates 1D/4H demand accumulation, Stage 2 news macro sentiment ({stage2.sentiment_score}%) confirms ETF/spot inflows, "
-            f"mathematically proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
-        )
+            tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+            tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+            sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+            invalidation_cond = f"Hourly candle close below support base ${sl:,.2f} invalidates '{pat_name}' and triggers immediate stop-loss."
+            summary = (
+                f"6-Stage Arbiter Consensus Reconciled: Issued {signal.value} ({consensus_confidence}% conviction) on {symbol}. "
+                f"Triple-Screen MTF ({mtf_align}) validates 1D/4H demand accumulation, Stage 2 news macro sentiment ({stage2.sentiment_score}%) confirms ETF/spot inflows, "
+                f"mathematically proven by Stage 3 Monte Carlo ({stage3.monte_carlo_win_rate}% win expectancy, 1:{stage3.risk_reward_ratio} R:R), and cleared by Stage 4 Risk Guard ({stage4.safety_score}% safety)."
+            )
 
     system_prompt = (
         "You are Agent 5 (Chief Consensus Arbiter & Trade Synthesizer powered by Google Gemini). "
@@ -239,7 +254,7 @@ async def run_stage5_gemini_arbiter(
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            target_engine = settings.GEMINI_MODEL or "gemini-2.5-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
             resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
             raw_text = resp.content
@@ -307,7 +322,7 @@ async def run_stage5_gemini_arbiter(
     )
 
     result = Stage5GeminiArbiterResult(
-        agent_name="Agent 6: Gemini 3.6 Flash Consensus Arbiter",
+        agent_name="Agent 6: Gemini 3.7 Flash Consensus Arbiter",
         model=model_name,
         latency_ms=latency,
         consensus_signal=signal,
@@ -341,8 +356,8 @@ async def run_stage5_gemini_arbiter(
         stageNumber=6,
         agent_id="agent_gemini_arbiter",
         agentId="agent_gemini_arbiter",
-        agent_name="Gemini 3.6 Flash Arbiter",
-        agentName="Gemini 3.6 Flash Arbiter",
+        agent_name="Gemini 3.7 Flash Arbiter",
+        agentName="Gemini 3.7 Flash Arbiter",
         agent_badge="Chief Dual-Brain Consensus Arbiter",
         agentBadge="Chief Dual-Brain Consensus Arbiter",
         avatar_color="from-cyan-400 to-teal-400",
@@ -373,7 +388,7 @@ async def run_stage5_gemini_arbiter(
     telemetry_service.record_call(
         provider="Google Gemini (Arbiter)",
         model=model_name,
-        stage="Stage 6: Gemini 3.6 Flash Consensus Arbiter",
+        stage="Stage 6: Gemini 3.7 Flash Consensus Arbiter",
         status="SUCCESS" if (gemini_key and not gemini_key.startswith("AIzaSy***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency,

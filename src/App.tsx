@@ -132,6 +132,9 @@ export const App: React.FC = () => {
                 entry_fee_paid: p.entry_fee_paid || 0,
                 exchange_model: p.exchange_model || 'Binance (USD: 0.10%)',
                 opened_at: typeof p.opened_at === 'number' ? p.opened_at : Math.floor(Date.now() / 1000),
+                opened_at_iso: p.opened_at_iso,
+                execution_time_ms: p.execution_time_ms,
+                opened_by: p.opened_by || 'AutoTrader',
               }));
               setOpenPositions(mappedPositions);
             }
@@ -154,6 +157,11 @@ export const App: React.FC = () => {
                 exit_reason: t.exit_reason || 'TAKE_PROFIT_HIT',
                 opened_at: typeof t.opened_at === 'number' ? t.opened_at : Math.floor(Date.now() / 1000) - 3600,
                 closed_at: typeof t.closed_at === 'number' ? t.closed_at : Math.floor(Date.now() / 1000),
+                opened_at_iso: t.opened_at_iso,
+                closed_at_iso: t.closed_at_iso,
+                duration_seconds: t.duration_seconds,
+                execution_time_ms: t.execution_time_ms,
+                opened_by: t.opened_by || 'AutoTrader',
               }));
               setTradeHistory(mappedHistory);
             }
@@ -218,7 +226,7 @@ export const App: React.FC = () => {
   // Agent Config State
   const [agentConfig, setAgentConfig] = useState<AgentConfigState>({
     geminiVision: {
-      model: 'gemini-3.5-flash',
+      model: 'gemini-3.7-flash',
       temperature: 0.2,
       apiKey: 'AIzaSy********************',
       active: true,
@@ -369,6 +377,16 @@ export const App: React.FC = () => {
       unrealized_pnl: 0,
       unrealized_pnl_pct: 0,
       opened_at: Math.floor(Date.now() / 1000),
+      opened_at_iso: new Date().toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true,
+      }),
+      execution_time_ms: 110,
+      opened_by: 'Manual Trader',
     };
 
     setOpenPositions((prev) => [newPosition, ...prev]);
@@ -383,6 +401,8 @@ export const App: React.FC = () => {
       const returnedCash = Math.max(0, pos.margin_used + pos.unrealized_pnl);
       setCashBalance((prev) => Math.round((prev + returnedCash) * 100) / 100);
 
+      const closeTs = Math.floor(Date.now() / 1000);
+      const openTs = pos.opened_at > 1e11 ? Math.floor(pos.opened_at / 1000) : pos.opened_at;
       const closedRecord: TradeHistoryItem = {
         trade_id: `tr_${Date.now().toString(36)}`,
         symbol: pos.symbol,
@@ -395,7 +415,12 @@ export const App: React.FC = () => {
         realized_pnl_pct: pos.unrealized_pnl_pct,
         exit_reason: 'MANUAL_MARKET_CLOSE',
         opened_at: pos.opened_at,
-        closed_at: Math.floor(Date.now() / 1000),
+        closed_at: closeTs,
+        opened_at_iso: pos.opened_at_iso,
+        closed_at_iso: new Date().toLocaleString(),
+        duration_seconds: Math.max(0, closeTs - openTs),
+        execution_time_ms: pos.execution_time_ms,
+        opened_by: pos.opened_by || 'AutoTrader',
       };
 
       setTradeHistory((prevHistory) => [closedRecord, ...prevHistory]);
@@ -445,8 +470,8 @@ export const App: React.FC = () => {
       analyzedAt: res.analyzed_at || 'Just now',
       stage1: {
         status: 'completed',
-        agentName: res.stage1?.agent_name || 'Gemini 3.5 Flash Vision',
-        model: res.stage1?.model || 'gemini-2.5-flash',
+        agentName: res.stage1?.agent_name || 'Gemini 3.7 Flash Vision',
+        model: res.stage1?.model || 'gemini-3.7-flash',
         latencyMs: res.stage1?.latency_ms || 350,
         patterns: (res.stage1?.patterns || []).map((p: any) => ({
           name: p.name,
@@ -475,6 +500,64 @@ export const App: React.FC = () => {
           confidence: res.stage1?.initial_thesis?.confidence ?? confVal,
           rationale: res.stage1?.initial_thesis?.rationale || 'Multi-timeframe structural breakout conviction.',
         },
+        multiTimeframeConfluence: res.stage1?.multi_timeframe_confluence ? {
+          symbol: res.stage1.multi_timeframe_confluence.symbol,
+          currentPrice: res.stage1.multi_timeframe_confluence.current_price,
+          screen1d: {
+            timeframe: res.stage1.multi_timeframe_confluence.screen_1d?.timeframe || '1d',
+            trend: res.stage1.multi_timeframe_confluence.screen_1d?.trend || 'NEUTRAL',
+            trendDescription: res.stage1.multi_timeframe_confluence.screen_1d?.summary || '',
+            rsi14: res.stage1.multi_timeframe_confluence.screen_1d?.rsi_14 || 50,
+            rsiCondition: res.stage1.multi_timeframe_confluence.screen_1d?.structure_signal || '',
+            ema20: res.stage1.multi_timeframe_confluence.screen_1d?.ema_20 || 0,
+            ema50: res.stage1.multi_timeframe_confluence.screen_1d?.ema_50 || 0,
+            ema200: null,
+            emaAlignment: '',
+            keyDemandZone: res.stage1.multi_timeframe_confluence.screen_1d?.key_demand_zone || [0, 0],
+            keySupplyZone: res.stage1.multi_timeframe_confluence.screen_1d?.key_supply_zone || [0, 0],
+            structureSignal: res.stage1.multi_timeframe_confluence.screen_1d?.structure_signal || '',
+            volatilityAtr: res.stage1.multi_timeframe_confluence.screen_1d?.volatility_atr || 0,
+            summary: res.stage1.multi_timeframe_confluence.screen_1d?.summary || '',
+          },
+          screen4h: {
+            timeframe: res.stage1.multi_timeframe_confluence.screen_4h?.timeframe || '4h',
+            trend: res.stage1.multi_timeframe_confluence.screen_4h?.trend || 'NEUTRAL',
+            trendDescription: res.stage1.multi_timeframe_confluence.screen_4h?.summary || '',
+            rsi14: res.stage1.multi_timeframe_confluence.screen_4h?.rsi_14 || 50,
+            rsiCondition: res.stage1.multi_timeframe_confluence.screen_4h?.structure_signal || '',
+            ema20: res.stage1.multi_timeframe_confluence.screen_4h?.ema_20 || 0,
+            ema50: res.stage1.multi_timeframe_confluence.screen_4h?.ema_50 || 0,
+            ema200: null,
+            emaAlignment: '',
+            keyDemandZone: res.stage1.multi_timeframe_confluence.screen_4h?.key_demand_zone || [0, 0],
+            keySupplyZone: res.stage1.multi_timeframe_confluence.screen_4h?.key_supply_zone || [0, 0],
+            structureSignal: res.stage1.multi_timeframe_confluence.screen_4h?.structure_signal || '',
+            volatilityAtr: res.stage1.multi_timeframe_confluence.screen_4h?.volatility_atr || 0,
+            summary: res.stage1.multi_timeframe_confluence.screen_4h?.summary || '',
+          },
+          screen15m: {
+            timeframe: res.stage1.multi_timeframe_confluence.screen_15m?.timeframe || '15m',
+            trend: res.stage1.multi_timeframe_confluence.screen_15m?.trend || 'NEUTRAL',
+            trendDescription: res.stage1.multi_timeframe_confluence.screen_15m?.summary || '',
+            rsi14: res.stage1.multi_timeframe_confluence.screen_15m?.rsi_14 || 50,
+            rsiCondition: res.stage1.multi_timeframe_confluence.screen_15m?.structure_signal || '',
+            ema20: res.stage1.multi_timeframe_confluence.screen_15m?.ema_20 || 0,
+            ema50: res.stage1.multi_timeframe_confluence.screen_15m?.ema_50 || 0,
+            ema200: null,
+            emaAlignment: '',
+            keyDemandZone: res.stage1.multi_timeframe_confluence.screen_15m?.key_demand_zone || [0, 0],
+            keySupplyZone: res.stage1.multi_timeframe_confluence.screen_15m?.key_supply_zone || [0, 0],
+            structureSignal: res.stage1.multi_timeframe_confluence.screen_15m?.structure_signal || '',
+            volatilityAtr: res.stage1.multi_timeframe_confluence.screen_15m?.volatility_atr || 0,
+            summary: res.stage1.multi_timeframe_confluence.screen_15m?.summary || '',
+          },
+          alignmentScore: res.stage1.multi_timeframe_confluence.alignment_score || '3/3 FULL CONFLUENCE',
+          confluenceDirection: res.stage1.multi_timeframe_confluence.confluence_direction || 'LONG',
+          confluenceConfidence: res.stage1.multi_timeframe_confluence.confluence_confidence || 85.0,
+          counterTrendWarning: !!res.stage1.multi_timeframe_confluence.counter_trend_warning,
+          recommendedAction: res.stage1.multi_timeframe_confluence.recommended_action || '',
+          timestamp: res.stage1.multi_timeframe_confluence.timestamp || Date.now(),
+        } : undefined,
       },
       stage2: {
         status: 'completed',
@@ -565,8 +648,8 @@ export const App: React.FC = () => {
       },
       stage5: {
         status: 'completed',
-        agentName: res.stage5?.agent_name || 'Gemini 3.5 Flash Arbiter',
-        model: res.stage5?.model || 'gemini-2.5-flash',
+        agentName: res.stage5?.agent_name || 'Gemini 3.7 Flash Arbiter',
+        model: res.stage5?.model || 'gemini-3.7-flash',
         latencyMs: res.stage5?.latency_ms || 320,
         consensusSignal: signalVal as any,
         consensusConfidence: confVal,

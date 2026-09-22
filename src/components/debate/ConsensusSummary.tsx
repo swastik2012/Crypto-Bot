@@ -10,8 +10,9 @@ import {
   CheckCircle2,
   DollarSign,
   ArrowRight,
+  Layers,
 } from 'lucide-react';
-import type { Stage5GeminiArbiterOutput } from '../../types';
+import type { Stage5GeminiArbiterOutput, MultiTimeframeConfluence } from '../../types';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -19,11 +20,13 @@ import { useCurrency } from '../../context/CurrencyContext';
 interface ConsensusSummaryProps {
   arbiterData: Stage5GeminiArbiterOutput;
   onExecuteTrade: () => void;
+  mtfConfluence?: MultiTimeframeConfluence;
 }
 
 export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
   arbiterData,
   onExecuteTrade,
+  mtfConfluence,
 }) => {
   const { formatPrice } = useCurrency();
   const { consensusSignal, consensusConfidence, executionPlan, executiveSummary, keyInvalidationCondition, agentConsensusMatrix } = arbiterData;
@@ -83,6 +86,22 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
                 <Badge signal={consensusSignal} pulse size="sm">
                   <CheckCircle2 className="w-3 h-3" /> {isBullish ? 'Bullish' : isNeutral ? 'Neutral' : 'Bearish Short'}
                 </Badge>
+                {mtfConfluence && (
+                  <Badge
+                    variant={
+                      mtfConfluence.alignmentScore.includes('3/3')
+                        ? 'emerald'
+                        : mtfConfluence.alignmentScore.includes('2/3')
+                        ? 'cyan'
+                        : 'rose'
+                    }
+                    size="sm"
+                    className="font-mono text-[10px] flex items-center gap-1 shadow-sm"
+                  >
+                    <Layers className="w-3 h-3 text-cyan-500" />
+                    <span>MTF: {mtfConfluence.alignmentScore} (1D {mtfConfluence.screen1d.trend})</span>
+                  </Badge>
+                )}
               </div>
               <div className="flex items-center gap-2 sm:gap-3">
                 <h2 className={`text-xl sm:text-3xl font-black font-mono tracking-tight ${

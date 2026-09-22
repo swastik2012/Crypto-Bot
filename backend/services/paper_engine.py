@@ -232,6 +232,13 @@ class VirtualPaperEngine:
             liquidation_price = entry_price * (1.0 + (0.9 / leverage))
 
         pos_id = f"pos_{uuid.uuid4().hex[:8]}"
+        opened_ts = time.time()
+        import datetime
+        opened_iso = datetime.datetime.fromtimestamp(
+            opened_ts,
+            tz=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        ).strftime("%Y-%m-%d %I:%M:%S %p IST")
+
         position = PaperPosition(
             position_id=pos_id,
             symbol=order.symbol,
@@ -250,7 +257,10 @@ class VirtualPaperEngine:
             unrealized_pnl_pct=0.0,
             entry_fee_paid=round(entry_fee, 4),
             exchange_model=entry_fee_info["exchange"],
-            opened_at=time.time(),
+            opened_at=opened_ts,
+            opened_at_iso=opened_iso,
+            execution_time_ms=order.execution_time_ms,
+            opened_by=order.opened_by or "AutoTrader",
             status=OrderStatus.OPEN,
         )
 
@@ -454,6 +464,14 @@ class VirtualPaperEngine:
         else:
             self.losing_trades += 1
 
+        closed_ts = time.time()
+        import datetime
+        closed_iso = datetime.datetime.fromtimestamp(
+            closed_ts,
+            tz=datetime.timezone(datetime.timedelta(hours=5, minutes=30))
+        ).strftime("%Y-%m-%d %I:%M:%S %p IST")
+        duration_sec = round(max(0.0, closed_ts - pos.opened_at), 1)
+
         record = PaperTradeRecord(
             trade_id=f"tr_{uuid.uuid4().hex[:8]}",
             symbol=pos.symbol,
@@ -471,7 +489,12 @@ class VirtualPaperEngine:
             exchange_name=exit_fee_info["exchange"],
             exit_reason=reason,
             opened_at=pos.opened_at,
-            closed_at=time.time(),
+            closed_at=closed_ts,
+            opened_at_iso=getattr(pos, "opened_at_iso", None),
+            closed_at_iso=closed_iso,
+            duration_seconds=duration_sec,
+            execution_time_ms=getattr(pos, "execution_time_ms", None),
+            opened_by=getattr(pos, "opened_by", "AutoTrader"),
         )
 
         self.trade_history.append(record)

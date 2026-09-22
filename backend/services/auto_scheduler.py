@@ -13,7 +13,7 @@ class AutoTradingScheduler:
     - Runs every 30 minutes (1800 seconds).
     - Iterates across monitored high-liquidity crypto pairs (BTC/USDT, ETH/USDT, SOL/USDT).
     - Automatically injects persistent open positions & previous trade history context into LangGraph.
-    - Evaluates consensus conviction (Gemini 3.5, NVIDIA DeepSeek V4 Pro, OpenAI).
+    - Evaluates consensus conviction (Gemini 3.7 Flash, NVIDIA DeepSeek V4 Pro, OpenAI).
     - If conviction >= 80% and not already exposed, auto-executes virtual paper trade and persists to disk.
     """
 
@@ -174,6 +174,7 @@ class AutoTradingScheduler:
                 portfolio_full = len(paper_engine.open_positions) >= 3
 
                 # Run the 5-Stage LangGraph multi-agent debate
+                pair_start_time = time.time()
                 response = await consensus_pipeline.run(
                     symbol=pair,
                     timeframe="1H",
@@ -259,6 +260,7 @@ class AutoTradingScheduler:
                     elif not is_short and sl >= entry_p:
                         sl = default_sl
 
+                    exec_time_ms = round((time.time() - pair_start_time) * 1000, 1)
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
                         side=order_side,
@@ -269,15 +271,19 @@ class AutoTradingScheduler:
                         take_profit_2=tp2,
                         stop_loss=sl,
                         agent_rationale=response.stage5.executive_summary,
+                        execution_time_ms=exec_time_ms,
+                        opened_by="AutoTrader",
                     )
                     pos = paper_engine.execute_order(order_req, current_price)
                     executed = True
                     pos_info = pos.dict()
-                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
+                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
 
+                exec_time_total = round((time.time() - pair_start_time) * 1000, 1)
                 report_entry = {
                     "cycle": self.cycle_count,
                     "timestamp": time.time(),
+                    "execution_time_ms": exec_time_total,
                     "pair": pair,
                     "price": current_price,
                     "signal": signal.value,

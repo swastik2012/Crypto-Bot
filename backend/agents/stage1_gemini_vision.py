@@ -174,13 +174,13 @@ async def run_stage1_gemini_vision(
         timeframe=timeframe,
     )
 
-    # If API key is present, invoke Google Gemini 3.6 Flash model dynamically
+    # If API key is present, invoke Google Gemini 3.7 Flash model dynamically
     if effective_key:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             
-            target_engine = settings.GEMINI_MODEL or "gemini-2.5-flash"
+            target_engine = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(
                 model=target_engine,
                 google_api_key=effective_key,
@@ -237,7 +237,7 @@ async def run_stage1_gemini_vision(
                 dir_val = thesis.get("direction", "NEUTRAL")
                 
                 result = Stage1GeminiVisionResult(
-                    agent_name="Agent 1: Gemini 3.6 Flash Vision Analyzer",
+                    agent_name="Agent 1: Gemini 3.7 Flash Vision Analyzer",
                     model=model_name,
                     latency_ms=latency,
                     patterns=patterns,
@@ -251,13 +251,13 @@ async def run_stage1_gemini_vision(
                     id="msg_st1_01",
                     stage_number=1,
                     agent_id="agent_gemini_vision",
-                    agent_name="Gemini 3.6 Flash Vision",
+                    agent_name="Gemini 3.7 Flash Vision",
                     agent_badge="Visual Technical Analyzer",
                     avatar_color="from-blue-500 to-cyan-400",
                     model=model_name,
                     timestamp="Stage 1 • Visual Ingestion",
-                    content=f"Gemini 3.6 Flash verified {mtf_raw.alignment_score} for {symbol} [{timeframe}]. 1D Macro Tide is {mtf_raw.screen_1d.trend}, 4H Structure at ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, 15M Trigger: {mtf_raw.screen_15m.structure_signal}. Proposing {dir_val} setup.",
-                    highlightPills=[f"Gemini 3.6 Flash ({dir_val})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
+                    content=f"Gemini 3.7 Flash verified {mtf_raw.alignment_score} for {symbol} [{timeframe}]. 1D Macro Tide is {mtf_raw.screen_1d.trend}, 4H Structure at ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, 15M Trigger: {mtf_raw.screen_15m.structure_signal}. Proposing {dir_val} setup.",
+                    highlightPills=[f"Gemini 3.7 Flash ({dir_val})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
                 )
 
                 # Record Telemetry Call with complete Prompt & Return payload
@@ -265,7 +265,7 @@ async def run_stage1_gemini_vision(
                 telemetry_service.record_call(
                     provider="Google Gemini (Vision)",
                     model=model_name,
-                    stage="Stage 1: Gemini 3.6 Flash Vision",
+                    stage="Stage 1: Gemini 3.7 Flash Vision",
                     status="SUCCESS",
                     status_code=200,
                     latency_ms=latency,
@@ -369,8 +369,8 @@ async def run_stage1_gemini_vision(
             "suggested_allocation_pct": 5.0,
             "rationale": f"High-conviction visual breakdown on {symbol} aligned with 1D/4H Bearish structure ({change_24h:+.2f}% 24h momentum). Dynamic ATR geometry: SL=${stopLoss:,.2f}, TP1=${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R).",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
-        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
+        debate_content = f"Gemini 3.7 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Supply ceiling at ${stopLoss:,.2f}. Proposing SHORT position targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
+        pills = ["Gemini 3.7 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     elif direction == "NEUTRAL":
         pattern_candidates = [
@@ -398,8 +398,8 @@ async def run_stage1_gemini_vision(
             "suggested_allocation_pct": 0.0,
             "rationale": f"{symbol} trading in equilibrium consolidation ({change_24h:+.2f}%). Stand aside until confirmed breakout above ${target1:,.2f} or below ${stopLoss:,.2f}.",
         }
-        debate_content = f"Gemini 3.6 Flash identified {chosen[0]} on {symbol} [{timeframe}]. Neutral momentum ({change_24h:+.2f}%). Recommending HOLD in cash."
-        pills = ["Gemini 3.6 Flash (HOLD)", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
+        debate_content = f"Gemini 3.7 Flash identified {chosen[0]} on {symbol} [{timeframe}]. Neutral momentum ({change_24h:+.2f}%). Recommending HOLD in cash."
+        pills = ["Gemini 3.7 Flash (HOLD)", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     else: # LONG
         pattern_candidates = [
@@ -427,8 +427,8 @@ async def run_stage1_gemini_vision(
             "suggested_allocation_pct": 5.0,
             "rationale": f"High-conviction ascending breakout structure on {symbol} aligned with 1D Macro Tide ({change_24h:+.2f}% 24h momentum). Dynamic ATR geometry: SL=${stopLoss:,.2f}, TP1=${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R).",
         }
-        debate_content = f"Gemini 3.6 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
-        pills = ["Gemini 3.6 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
+        debate_content = f"Gemini 3.7 Flash detected {chosen[0]} on {symbol} [{timeframe}]. Solid support floor at ${stopLoss:,.2f}. Proposing LONG targeting ${target1:,.2f} (1:{atr_plan['risk_reward_tp1']} R:R, ATR: ${atr_plan['atr_14']:,.2f})."
+        pills = ["Gemini 3.7 Flash", chosen[0], f"24h: {change_24h:+.2f}%", f"ATR: ${atr_plan['atr_14']:,.2f}"]
 
     key_levels = [
         SupportResistanceLevel(price=stopLoss, type="support" if direction != "SHORT" else "resistance", strength="major", description=f"Structural Anchor & Hard Invalidation (${stopLoss:,.2f})"),
@@ -437,7 +437,7 @@ async def run_stage1_gemini_vision(
     ]
 
     result = Stage1GeminiVisionResult(
-        agent_name="Agent 1: Gemini 3.6 Flash Vision Analyzer",
+        agent_name="Agent 1: Gemini 3.7 Flash Vision Analyzer",
         model=model_name,
         latency_ms=latency,
         patterns=patterns,
@@ -451,13 +451,13 @@ async def run_stage1_gemini_vision(
         id="msg_st1_01",
         stage_number=1,
         agent_id="agent_gemini_vision",
-        agent_name="Gemini 3.6 Flash Vision",
+        agent_name="Gemini 3.7 Flash Vision",
         agent_badge="Visual Technical Analyzer",
         avatar_color="from-blue-500 to-cyan-400",
         model=model_name,
         timestamp="Stage 1 • Visual Ingestion",
         content=f"{debate_content} (Triple-Screen Alignment: {mtf_raw.alignment_score})",
-        highlight_pills=[f"Gemini 3.6 Flash ({direction})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
+        highlight_pills=[f"Gemini 3.7 Flash ({direction})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
     )
 
     # Record Telemetry Call with complete Prompt & Return payload
@@ -465,7 +465,7 @@ async def run_stage1_gemini_vision(
     telemetry_service.record_call(
         provider="Google Gemini (Vision)",
         model=model_name,
-        stage="Stage 1: Gemini 3.6 Flash Vision",
+        stage="Stage 1: Gemini 3.7 Flash Vision",
         status="SUCCESS" if (effective_key and not effective_key.startswith("AIzaSy***")) else "FALLBACK",
         status_code=200,
         latency_ms=latency,

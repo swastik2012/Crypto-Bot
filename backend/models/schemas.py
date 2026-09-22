@@ -56,6 +56,8 @@ class PlacePaperOrderRequest(BaseModel):
     take_profit_2: Optional[float] = None
     stop_loss: Optional[float] = None
     agent_rationale: Optional[str] = None
+    execution_time_ms: Optional[float] = None
+    opened_by: Optional[str] = "AutoTrader"
 
 class PaperPosition(BaseModel):
     position_id: str
@@ -76,6 +78,9 @@ class PaperPosition(BaseModel):
     entry_fee_paid: float = 0.0
     exchange_model: str = "Binance (USD: 0.10%)"
     opened_at: float
+    opened_at_iso: Optional[str] = None
+    execution_time_ms: Optional[float] = None
+    opened_by: Optional[str] = "AutoTrader"
     status: OrderStatus = OrderStatus.OPEN
 
 class PaperTradeRecord(BaseModel):
@@ -96,6 +101,11 @@ class PaperTradeRecord(BaseModel):
     exit_reason: str
     opened_at: float
     closed_at: float
+    opened_at_iso: Optional[str] = None
+    closed_at_iso: Optional[str] = None
+    duration_seconds: Optional[float] = None
+    execution_time_ms: Optional[float] = None
+    opened_by: Optional[str] = "AutoTrader"
     agent_rationale: Optional[str] = None
 
 class PaperAccountState(BaseModel):
@@ -170,7 +180,7 @@ class MultiTimeframeConfluenceSchema(BaseModel):
     recommended_action: str
     timestamp: float
 
-# Stage 1: Google Gemini 3.6 Flash Vision & Multi-Timeframe Analyzer
+# Stage 1: Google Gemini 3.7 Flash Vision & Multi-Timeframe Analyzer
 class Stage1GeminiVisionResult(BaseModel):
     status: str = "completed"
     agent_name: str
@@ -249,7 +259,7 @@ class Stage4OpenAIRiskResult(BaseModel):
     critique_of_nvidia: str
     safety_score: float
 
-# Stage 6: Gemini 3.5 Flash Consensus Arbiter (Reconciles System 1 & System 2)
+# Stage 6: Gemini 3.7 Flash Consensus Arbiter (Reconciles System 1 & System 2)
 class Stage5GeminiArbiterResult(BaseModel):
     status: str = "completed"
     agent_name: str
