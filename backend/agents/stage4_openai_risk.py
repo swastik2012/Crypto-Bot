@@ -41,6 +41,7 @@ async def run_stage4_openai_risk(
     stage_jev: Optional[Any] = None,
     derivatives_data: Optional[Any] = None,
     macro_status: Optional[Any] = None,
+    btc_gatekeeper: Optional[Any] = None,
 ) -> Tuple[Stage4OpenAIRiskResult, DebateMessageSchema]:
     """
     Stage 5: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
@@ -72,6 +73,14 @@ async def run_stage4_openai_risk(
     funding_rate = deriv_dict.get("funding_rate_8h_pct", 0.01)
 
     # Dynamic risk calculations based on Macro Proximity, Stage 1, MTF, Stage 3, and Derivatives
+    playbook_veto = learning_memory_service.evaluate_setup_against_playbook(
+        symbol=symbol,
+        direction=direction,
+        current_price=current_price,
+        derivatives_data=derivatives_data,
+        mtf_data=mtf,
+    )
+
     if macro_status and getattr(macro_status, "lockout_active", False):
         ev_name = getattr(macro_status, "active_event_name", "Tier-1 Macro Event")
         ev_impact = getattr(macro_status, "active_event_impact", "TIER_1_CRITICAL")
@@ -92,6 +101,39 @@ async def run_stage4_openai_risk(
         critique_nvidia = (
             f"Stage 3 Monte Carlo models are uncalibrated for macro binary events. "
             f"Tail-risk spikes exponentially. Chief Risk Officer enforces mandatory lockout."
+        )
+    # PHASE 2: BTC MASTER GATEKEEPER LOCKOUT FOR ALTCOINS
+    elif not symbol.upper().startswith("BTC") and btc_gatekeeper and not getattr(btc_gatekeeper, "altcoin_long_allowed", True) and direction == "LONG":
+        reason = getattr(btc_gatekeeper, "gatekeeper_reason", "BTC is in a bearish breakdown")
+        safety_score = 24.0
+        false_breakout_prob = 92.5
+        ob_floor = round(current_price * 0.970, 2)
+        ob_ceil = round(current_price * 1.030, 2)
+        order_block_status = "BTC Flash-Crash Contagion Zone"
+        macro_trap_alert = f"⛔ BTC MASTER GATEKEEPER VETO: {reason}. Correlated liquidation cascade hazard."
+        critique_gemini = (
+            f"Stage 1 proposed {direction} on {symbol} is invalidated by market leader weakness. "
+            f"Bitcoin is dumping below 1H EMA50; altcoins cannot sustain isolated pumps. Veto enforced."
+        )
+        critique_nvidia = (
+            f"Stage 3 Quant assumptions fail to price in Bitcoin beta contagion. "
+            f"Chief Risk Officer mandate: Stand aside in cash."
+        )
+    # PHASE 6: AI PLAYBOOK NEGATIVE RULE VETO
+    elif playbook_veto.is_vetoed:
+        safety_score = 26.0
+        false_breakout_prob = 89.0
+        ob_floor = round(current_price * 0.970, 2)
+        ob_ceil = round(current_price * 1.030, 2)
+        order_block_status = f"AI Playbook Veto Zone: {playbook_veto.rule_id} ({playbook_veto.rule_type})"
+        macro_trap_alert = playbook_veto.veto_reason
+        critique_gemini = (
+            f"Stage 1 technical setup '{pat_name}' matches historical AI loss pattern [{playbook_veto.rule_id}]. "
+            f"{playbook_veto.veto_reason} Mandate: {playbook_veto.actionable_directive}"
+        )
+        critique_nvidia = (
+            f"AI Trade Learner Flag: Setup violated evolving playbook rule [{playbook_veto.rule_id}]. "
+            f"Chief Risk Officer mandate: Stand aside in cash."
         )
     elif pred_risk == "HIGH" or (direction == "LONG" and cvd_div == "BEARISH_EXHAUSTION") or (direction == "SHORT" and cvd_div == "BULLISH_ABSORPTION"):
         safety_score = 38.0
@@ -377,6 +419,24 @@ async def run_stage4_openai_risk(
         safety_score = min(safety_score, 32.0)
         critique_gemini = "VETO: Shorting in a 1D Macro Bullish trend has a >80% historical failure rate in crypto. Mandating HOLD."
 
+    # Phase 4: Funding Carry Audit
+    try:
+        from backend.services.derivatives_service import derivatives_service
+        carry_eval = derivatives_service.evaluate_funding_carry(
+            symbol=symbol,
+            funding_rate_8h_pct=funding_rate,
+            direction=proposed_dir,
+        )
+        if carry_eval["carry_regime"] == "HEAVY_NEGATIVE_CARRY_PENALTY":
+            if not macro_trap_alert:
+                macro_trap_alert = carry_eval["carry_rationale"]
+            safety_score = max(10.0, safety_score - 8.0)
+            print(f"[Stage 4 Carry Audit] {carry_eval['carry_rationale']}")
+        elif carry_eval["carry_regime"] == "POSITIVE_CARRY_ADVANTAGE":
+            safety_score = min(98.0, safety_score + 4.0)
+    except Exception as e:
+        print(f"[Stage 4 Carry Notice]: {e}")
+
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:
         latency_ms = 420
@@ -390,6 +450,7 @@ async def run_stage4_openai_risk(
         orderBlockStatus=order_block_status,
         order_block_status=order_block_status,
         macro_trap_alert=macro_trap_alert,
+        playbook_veto_alert=playbook_veto.veto_reason if playbook_veto.is_vetoed else None,
         critique_of_gemini=critique_gemini,
         critique_of_nvidia=critique_nvidia,
         safety_score=safety_score,

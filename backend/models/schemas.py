@@ -55,6 +55,11 @@ class PlacePaperOrderRequest(BaseModel):
     take_profit_1: Optional[float] = None
     take_profit_2: Optional[float] = None
     stop_loss: Optional[float] = None
+    chandelier_atr: Optional[float] = None
+    chandelier_multiplier: Optional[float] = 2.5
+    order_type: str = "MARKET"  # "MARKET" or "LIMIT"
+    wholesale_limit_price: Optional[float] = None
+    spread_discount_pct: Optional[float] = None
     agent_rationale: Optional[str] = None
     execution_time_ms: Optional[float] = None
     opened_by: Optional[str] = "AutoTrader"
@@ -73,6 +78,16 @@ class PaperPosition(BaseModel):
     take_profit_1: Optional[float] = None
     take_profit_2: Optional[float] = None
     stop_loss: Optional[float] = None
+    highest_price_seen: Optional[float] = None
+    lowest_price_seen: Optional[float] = None
+    trailing_stop_active: bool = False
+    chandelier_atr: Optional[float] = None
+    chandelier_multiplier: float = 2.5
+    order_type: str = "MARKET"
+    wholesale_entry_sniper: bool = False
+    spread_savings_usd: float = 0.0
+    accrued_funding_usd: float = 0.0
+    funding_carry_apr: float = 0.0
     unrealized_pnl: float = 0.0
     unrealized_pnl_pct: float = 0.0
     entry_fee_paid: float = 0.0
@@ -99,6 +114,11 @@ class PaperTradeRecord(BaseModel):
     net_realized_pnl: float = 0.0
     exchange_name: str = "Binance (USD)"
     exit_reason: str
+    order_type: str = "MARKET"
+    wholesale_entry_sniper: bool = False
+    spread_savings_usd: float = 0.0
+    accrued_funding_usd: float = 0.0
+    funding_carry_apr: float = 0.0
     opened_at: float
     closed_at: float
     opened_at_iso: Optional[str] = None
@@ -287,6 +307,9 @@ class KellySizingSchema(BaseModel):
     portfolio_heat_pct: float
     sizing_regime: str
     risk_multiplier: float
+    trade_grade: Optional[str] = "A"
+    trade_grade_badge: Optional[str] = None
+    kappa_used: Optional[float] = 0.50
     formula_breakdown: str
 
 # Stage 4: NVIDIA NIM Quantitative & Mathematical Stress Engine (Ingests Stage 1 + Stage 2 + Jev System 1)
@@ -316,9 +339,20 @@ class Stage4OpenAIRiskResult(BaseModel):
     orderBlockStatus: Optional[str] = None
     order_block_status: str
     macro_trap_alert: Optional[str] = None
+    playbook_veto_alert: Optional[str] = None
     critique_of_gemini: str
     critique_of_nvidia: str
     safety_score: float
+
+class PlaybookVetoSchema(BaseModel):
+    is_vetoed: bool = False
+    rule_id: Optional[str] = None
+    rule_type: Optional[str] = None
+    rule_text: Optional[str] = None
+    target_asset: Optional[str] = None
+    veto_reason: Optional[str] = None
+    confidence_penalty: float = 0.0
+    actionable_directive: Optional[str] = None
 
 # Stage 6: Gemini 3.7 Flash Consensus Arbiter (Reconciles System 1 & System 2)
 class Stage5GeminiArbiterResult(BaseModel):
@@ -332,6 +366,7 @@ class Stage5GeminiArbiterResult(BaseModel):
     executive_summary: str
     key_invalidation_condition: str
     agent_consensus_matrix: Dict[str, Any]
+    playbook_veto: Optional[PlaybookVetoSchema] = None
 
 class DebateMessageSchema(BaseModel):
     id: str
@@ -367,6 +402,16 @@ class DerivativesMicrostructureSchema(BaseModel):
     cvd_divergence: str
     predatory_liquidation_risk: str  # "HIGH", "MODERATE", "LOW"
     liquidation_bias: str
+    liquidation_sweep_entry: Optional[float] = None
+    recommended_order_type: str = "LIMIT"  # "LIMIT" or "MARKET"
+    sweep_discount_pct: float = 0.0
+    sweep_zone_low: Optional[float] = None
+    sweep_zone_high: Optional[float] = None
+    sniping_rationale: Optional[str] = None
+    annualized_carry_apr: float = 0.0
+    carry_regime: str = "NEUTRAL_CARRY"
+    carry_cashflow_8h_usd: float = 0.0
+    carry_rationale: Optional[str] = None
     summary: str
     timestamp: float = Field(default_factory=time.time)
 
@@ -394,6 +439,27 @@ class AnalyzeAndTradeRequest(BaseModel):
     custom_typesafe_key: Optional[str] = None
     custom_jev_key: Optional[str] = None
 
+class BTCGatekeeperStatusSchema(BaseModel):
+    btc_price: float
+    btc_1h_trend: str
+    btc_trend_1h: Optional[str] = None
+    btc_4h_trend: str
+    btc_trend_4h: Optional[str] = None
+    btc_ema_50_1h: float
+    btc_rsi_14_1h: float
+    altcoin_long_allowed: bool
+    altcoin_short_allowed: bool
+    gatekeeper_reason: str
+    directive: str
+    timestamp: float
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.btc_trend_1h:
+            self.btc_trend_1h = self.btc_1h_trend
+        if not self.btc_trend_4h:
+            self.btc_trend_4h = self.btc_4h_trend
+
 class AnalyzeAndTradeResponse(BaseModel):
     symbol: str
     timeframe: str
@@ -408,6 +474,8 @@ class AnalyzeAndTradeResponse(BaseModel):
     stage5: Stage5GeminiArbiterResult
     derivatives_data: Optional[DerivativesMicrostructureSchema] = None
     macro_status: Optional[MacroCalendarStatusSchema] = None
+    btc_gatekeeper: Optional[BTCGatekeeperStatusSchema] = None
+    playbook_veto: Optional[PlaybookVetoSchema] = None
     debate_stream: List[DebateMessageSchema]
     auto_executed: bool
     executed_position: Optional[PaperPosition] = None

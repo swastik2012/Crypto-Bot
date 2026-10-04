@@ -291,6 +291,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
   const [selectedStageTab, setSelectedStageTab] = useState<string>('stage1');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [tradeLearnings, setTradeLearnings] = useState<any[]>([]);
+  const [isLearningsExpanded, setIsLearningsExpanded] = useState<boolean>(false);
 
   const fetchLogs = async () => {
     try {
@@ -601,10 +602,13 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
       {/* ========================================================================= */}
       {/* 🧠 AI SELF-LEARNING ADAPTIVE MEMORY & POST-MORTEM FEEDBACK LOOP */}
       {/* ========================================================================= */}
-      <GlassCard className="p-4 sm:p-6 border border-purple-500/30 shadow-glass-lg">
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 pb-4 border-b border-slate-200 dark:border-white/10">
+      <GlassCard className="p-4 sm:p-5 border border-purple-500/30 shadow-glass-lg transition-all">
+        <div
+          onClick={() => setIsLearningsExpanded((prev) => !prev)}
+          className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 cursor-pointer select-none group"
+        >
           <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30">
+            <div className="p-2 rounded-xl bg-purple-500/20 text-purple-400 border border-purple-500/30 group-hover:scale-105 transition-transform">
               <Brain className="w-4 h-4" />
             </div>
             <div>
@@ -615,52 +619,79 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
                 </Badge>
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Closed trades undergo automated post-mortems. These historical lessons are injected into Stage 1 & Stage 4 prompts to eliminate repeating mistakes.
+                Closed trades undergo automated post-mortems. Click to {isLearningsExpanded ? 'collapse' : 'expand and review'} {tradeLearnings.length} active historical lessons & failure dissections.
               </p>
             </div>
           </div>
-          <Badge variant="purple" size="sm">
-            {tradeLearnings.length} Historical Rules Active
-          </Badge>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-4">
-          {tradeLearnings.map((learn, idx) => (
-            <div
-              key={learn.id || idx}
-              className="p-4 rounded-xl bg-white/90 dark:bg-dark-900/80 border border-purple-500/20 space-y-2.5 shadow-sm flex flex-col justify-between"
-            >
-              <div className="flex items-center justify-between border-b border-purple-500/10 pb-2">
-                <div className="flex items-center gap-1.5">
-                  <span className="font-black text-xs text-slate-900 dark:text-slate-100">{learn.symbol}</span>
-                  <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">({learn.side})</span>
-                </div>
-                <Badge
-                  variant={learn.outcome === 'WIN' ? 'emerald' : learn.outcome === 'LOSS' ? 'rose' : 'cyan'}
-                  size="sm"
-                >
-                  {learn.outcome} ({learn.pnl_usd >= 0 ? `+$${learn.pnl_usd}` : `-$${Math.abs(learn.pnl_usd)}`})
-                </Badge>
-              </div>
-
-              <div className="space-y-1.5 text-[11px]">
-                <div>
-                  <span className="font-bold text-slate-500">Root Cause: </span>
-                  <span className="text-slate-700 dark:text-slate-300">{learn.root_cause_analysis}</span>
-                </div>
-                <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200">
-                  <span className="font-bold uppercase text-purple-700 dark:text-purple-300">Active Rule: </span>
-                  {learn.actionable_lesson}
-                </div>
-              </div>
-
-              <div className="text-[9px] text-slate-500 flex items-center justify-between pt-1 border-t border-purple-500/10">
-                <span>Exit: {learn.exit_reason}</span>
-                <span>{learn.timestamp ? new Date(learn.timestamp * 1000).toLocaleDateString() : 'Recent'}</span>
-              </div>
+          <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
+            <Badge variant="purple" size="sm" className="font-mono">
+              {isLearningsExpanded ? 'Click to Hide' : `${tradeLearnings.length} Rules • Click to View`}
+            </Badge>
+            <div className="p-1.5 rounded-lg bg-slate-200/80 dark:bg-white/10 text-slate-600 dark:text-slate-300 group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
+              <motion.div animate={{ rotate: isLearningsExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>
+                <ChevronDown className="w-4 h-4" />
+              </motion.div>
             </div>
-          ))}
+          </div>
         </div>
+
+        <AnimatePresence>
+          {isLearningsExpanded && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.25, ease: 'easeInOut' }}
+              className="overflow-hidden"
+            >
+              <div className="pt-4 mt-4 border-t border-slate-200 dark:border-white/10">
+                {tradeLearnings.length === 0 ? (
+                  <div className="p-6 text-center text-xs text-slate-400">
+                    No trade post-mortems recorded yet. Closed paper trades will be automatically audited here.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-[520px] overflow-y-auto pr-1">
+                    {tradeLearnings.map((learn, idx) => (
+                      <div
+                        key={learn.id || idx}
+                        className="p-4 rounded-xl bg-white/90 dark:bg-dark-900/80 border border-purple-500/20 space-y-2.5 shadow-sm flex flex-col justify-between"
+                      >
+                        <div className="flex items-center justify-between border-b border-purple-500/10 pb-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-black text-xs text-slate-900 dark:text-slate-100">{learn.symbol}</span>
+                            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold">({learn.side})</span>
+                          </div>
+                          <Badge
+                            variant={learn.outcome === 'WIN' ? 'emerald' : learn.outcome === 'LOSS' ? 'rose' : 'cyan'}
+                            size="sm"
+                          >
+                            {learn.outcome} ({learn.pnl_usd >= 0 ? `+$${learn.pnl_usd}` : `-$${Math.abs(learn.pnl_usd)}`})
+                          </Badge>
+                        </div>
+
+                        <div className="space-y-1.5 text-[11px]">
+                          <div>
+                            <span className="font-bold text-slate-500">Root Cause: </span>
+                            <span className="text-slate-700 dark:text-slate-300">{learn.root_cause_analysis}</span>
+                          </div>
+                          <div className="p-2 rounded-lg bg-purple-500/10 border border-purple-500/20 text-purple-900 dark:text-purple-200">
+                            <span className="font-bold uppercase text-purple-700 dark:text-purple-300">Active Rule: </span>
+                            {learn.actionable_lesson}
+                          </div>
+                        </div>
+
+                        <div className="text-[9px] text-slate-500 flex items-center justify-between pt-1 border-t border-purple-500/10">
+                          <span>Exit: {learn.exit_reason}</span>
+                          <span>{learn.timestamp ? new Date(learn.timestamp * 1000).toLocaleDateString() : 'Recent'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </GlassCard>
 
       {/* ========================================================================= */}

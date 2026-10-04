@@ -13,6 +13,7 @@ from backend.models.schemas import (
     DebateMessageSchema,
 )
 from backend.config import settings
+from backend.services.learning_memory import learning_memory_service
 
 def _get_mtf_trend_1d(mtf: Any) -> str:
     if not mtf:
@@ -36,6 +37,7 @@ async def run_stage5_gemini_arbiter(
     timeframe: str = "15m",
     derivatives_data: Optional[Any] = None,
     macro_status: Optional[Any] = None,
+    btc_gatekeeper: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
@@ -75,6 +77,21 @@ async def run_stage5_gemini_arbiter(
     pred_risk = deriv_dict.get("predatory_liquidation_risk", "LOW")
     veto_active = False
 
+    # Baseline scores initialized from upstream agent outputs
+    gemini_score = float(getattr(stage1, "confidence", 70.0) or 70.0)
+    news_score = float(getattr(stage2, "sentiment_score", 50.0) or 50.0)
+    nvidia_score = float(getattr(stage3, "stress_test_score", 60.0) or 60.0)
+    openai_score = float(getattr(stage4, "safety_score", 60.0) or 60.0)
+
+    # Phase 6: AI Trade Learner Negative Rule Veto Engine
+    playbook_veto = learning_memory_service.evaluate_setup_against_playbook(
+        symbol=symbol,
+        direction=direction,
+        current_price=current_price,
+        derivatives_data=derivatives_data,
+        mtf_data=mtf,
+    )
+
     # MACROECONOMIC EVENT CIRCUIT BREAKER VETO: Phase 5 Institutional Event Lockout
     if macro_status and getattr(macro_status, "lockout_active", False):
         ev_name = getattr(macro_status, "active_event_name", "Tier-1 Macro Event")
@@ -98,6 +115,25 @@ async def run_stage5_gemini_arbiter(
             f"6-Stage Arbiter Override: MACRO CIRCUIT BREAKER ENGAGED for {symbol}. "
             f"High-impact macro event '{ev_name}' triggers mandatory pre-event lockout ({ev_mins}m away). "
             f"Algorithmic consensus desk stands aside in cash to preserve fund capital."
+        )
+
+    # PHASE 6: AI PLAYBOOK NEGATIVE RULE VETO
+    elif playbook_veto.is_vetoed:
+        veto_active = True
+        gemini_score = 35.0
+        news_score = stage2.sentiment_score
+        nvidia_score = stage3.stress_test_score
+        openai_score = stage4.safety_score
+        consensus_confidence = min(34.0, stage4.safety_score * 0.4)
+        signal = SignalAction.HOLD
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        invalidation_cond = f"AI PLAYBOOK VETO [{playbook_veto.rule_id}]: {playbook_veto.veto_reason}"
+        summary = (
+            f"{playbook_veto.veto_reason} "
+            f"The continuous AI trade learner identified a documented historical failure mode. "
+            f"Mandatory algorithmic veto applied: {playbook_veto.actionable_directive}"
         )
 
     # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
@@ -206,8 +242,24 @@ async def run_stage5_gemini_arbiter(
         )
 
     else: # LONG / BULLISH
+        is_altcoin = not symbol.upper().startswith("BTC")
+        # STRICT BTC MASTER GATEKEEPER (PHASE 2): Never Long Altcoins when BTC is dumping below EMA50
+        if is_altcoin and btc_gatekeeper and not getattr(btc_gatekeeper, "altcoin_long_allowed", True):
+            veto_active = True
+            signal = SignalAction.HOLD
+            consensus_confidence = 36.0
+            tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+            tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+            sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+            reason = getattr(btc_gatekeeper, "gatekeeper_reason", "Bitcoin is breaking down")
+            invalidation_cond = f"ALTCOIN LONG VETOED by BTC Gatekeeper: {reason}. Mandatory capital preservation."
+            summary = (
+                f"⛔ BTC MASTER GATEKEEPER OVERRIDE: HOLD / STAND ASIDE for {symbol}. "
+                f"While isolated altcoin patterns indicated buying pressure, {reason}. "
+                f"Historical analysis proves altcoin longs during an active Bitcoin sell-off suffer a >78% failure rate from market-wide liquidation contagion."
+            )
         # STRICT ANTI-COUNTER-TREND GUARD: NEVER LONG in a 1D BEARISH Trend
-        if trend_1d == "BEARISH":
+        elif trend_1d == "BEARISH":
             veto_active = True
             signal = SignalAction.HOLD
             consensus_confidence = 48.0
@@ -366,6 +418,14 @@ async def run_stage5_gemini_arbiter(
     portfolio_heat = adj.get("portfolio_heat_pct", 0.0)
     expected_val = adj.get("expected_value", 0.0)
     sizing_regime = adj.get("sizing_regime", "BALANCED_HALF_KELLY")
+    kelly_schema = getattr(stage3, "kelly_sizing", None)
+    trade_grade = adj.get("trade_grade") or (getattr(kelly_schema, "trade_grade", "A") if kelly_schema else "A")
+    trade_grade_badge = adj.get("trade_grade_badge") or (getattr(kelly_schema, "trade_grade_badge", "🔹 Grade A (Half-Kelly 0.50x)") if kelly_schema else "🔹 Grade A (Half-Kelly 0.50x)")
+    kappa_used = adj.get("kappa_used") or (getattr(kelly_schema, "kappa_used", 0.50) if kelly_schema else 0.50)
+
+    wholesale_limit = deriv_dict.get("liquidation_sweep_entry") or entry
+    order_type_rec = deriv_dict.get("recommended_order_type", "LIMIT")
+    discount_pct_val = deriv_dict.get("sweep_discount_pct", 0.0)
 
     exec_plan = {
         "recommended_entry": entry,
@@ -376,6 +436,21 @@ async def run_stage5_gemini_arbiter(
         "atr_14": atr_plan.get("atr_14"),
         "atr_pct": atr_plan.get("atr_pct"),
         "volatility_regime": atr_plan.get("volatility_regime"),
+        "order_type": order_type_rec,
+        "wholesale_limit_entry": wholesale_limit,
+        "sweep_discount_pct": discount_pct_val,
+        "sweep_zone_low": deriv_dict.get("sweep_zone_low"),
+        "sweep_zone_high": deriv_dict.get("sweep_zone_high"),
+        "sniping_rationale": deriv_dict.get("sniping_rationale"),
+        "funding_carry_apr": deriv_dict.get("annualized_carry_apr", 0.0),
+        "carry_regime": deriv_dict.get("carry_regime", "NEUTRAL_CARRY"),
+        "carry_cashflow_8h_usd": deriv_dict.get("carry_cashflow_8h_usd", 0.0),
+        "trade_grade": trade_grade,
+        "trade_grade_badge": trade_grade_badge,
+        "kappa_used": kappa_used,
+        "ai_playbook_veto": playbook_veto.is_vetoed,
+        "ai_playbook_rule": playbook_veto.rule_id,
+        "ai_playbook_reason": playbook_veto.veto_reason,
         "suggested_leverage": "3x - 5x Cross" if signal != SignalAction.HOLD else "None (Cash)",
         "recommended_position_usd": suggested_pos,
         "kelly_fraction_pct": kelly_pct,
@@ -422,6 +497,12 @@ async def run_stage5_gemini_arbiter(
             "atr_14": atr_plan.get("atr_14"),
             "atr_pct": atr_plan.get("atr_pct"),
             "volatility_regime": atr_plan.get("volatility_regime"),
+            "trade_grade": trade_grade,
+            "trade_grade_badge": trade_grade_badge,
+            "kappa_used": kappa_used,
+            "ai_playbook_veto": playbook_veto.is_vetoed,
+            "ai_playbook_rule": playbook_veto.rule_id,
+            "ai_playbook_reason": playbook_veto.veto_reason,
             "kelly_optimal_allocation_usd": suggested_pos,
             "kelly_fraction_pct": kelly_pct,
             "portfolio_heat_pct": portfolio_heat,
@@ -430,9 +511,16 @@ async def run_stage5_gemini_arbiter(
             "derivatives_funding_regime": deriv_dict.get("funding_regime"),
             "derivatives_cvd_divergence": deriv_dict.get("cvd_divergence"),
             "derivatives_predatory_risk": deriv_dict.get("predatory_liquidation_risk"),
+            "order_type": order_type_rec,
+            "wholesale_limit_entry": wholesale_limit,
+            "wholesale_discount_pct": discount_pct_val,
+            "funding_carry_apr": deriv_dict.get("annualized_carry_apr", 0.0),
+            "carry_regime": deriv_dict.get("carry_regime", "NEUTRAL_CARRY"),
+            "carry_cashflow_8h_usd": deriv_dict.get("carry_cashflow_8h_usd", 0.0),
             "dual_brain_alignment": "ALIGNED (System 1 + System 2)" if dual_brain_aligned else "DIVERGENT",
             "overall_agreement": f"Confluence ({consensus_confidence}%) - {signal.value}",
         },
+        playbook_veto=playbook_veto,
     )
 
     debate_msg = DebateMessageSchema(

@@ -367,5 +367,101 @@ class MarketDataService:
             "direction": dir_upper,
         }
 
+    async def check_btc_gatekeeper(self) -> "BTCGatekeeperStatus":
+        """
+        BTC Master Gatekeeper (Altcoin Protection Shield - Phase 2).
+        Inspects real-time Binance BTC 1H and 4H klines, 50-period EMA, and RSI.
+        If Bitcoin is actively dumping or breaking below key EMA50 levels,
+        enforces an automated veto against Altcoin LONGs to prevent market-wide flash-crash liquidations.
+        """
+        cache_key = "btc_gatekeeper"
+        now = time.time()
+        if cache_key in self._cache:
+            entry = self._cache[cache_key]
+            if now - entry["timestamp"] < 30:
+                return entry["data"]
+
+        klines_1h = await self.fetch_klines("BTC/USDT", "1h", limit=55)
+        klines_4h = await self.fetch_klines("BTC/USDT", "4h", limit=40)
+
+        btc_p = 85000.0
+        btc_1h_trend = "BULLISH"
+        btc_4h_trend = "BULLISH"
+        ema_50 = 84000.0
+        rsi_1h = 52.0
+
+        if klines_1h and len(klines_1h) >= 20:
+            closes_1h = [float(k[4]) for k in klines_1h]
+            btc_p = closes_1h[-1]
+            ema_50 = self._calculate_ema(closes_1h, min(50, len(closes_1h)))
+            rsi_1h = self._calculate_rsi(closes_1h, 14)
+            if btc_p < (ema_50 * 0.995):
+                btc_1h_trend = "BEARISH"
+            elif btc_p > (ema_50 * 1.005):
+                btc_1h_trend = "BULLISH"
+            else:
+                btc_1h_trend = "NEUTRAL"
+
+        if klines_4h and len(klines_4h) >= 15:
+            closes_4h = [float(k[4]) for k in klines_4h]
+            ema_20_4h = self._calculate_ema(closes_4h, 20)
+            if closes_4h[-1] < (ema_20_4h * 0.99):
+                btc_4h_trend = "BEARISH"
+            elif closes_4h[-1] > (ema_20_4h * 1.01):
+                btc_4h_trend = "BULLISH"
+            else:
+                btc_4h_trend = "NEUTRAL"
+
+        # Determine Altcoin Permission Matrix
+        is_dumping = (btc_1h_trend == "BEARISH" and btc_p < ema_50) or (btc_4h_trend == "BEARISH" and rsi_1h < 42.0)
+        if is_dumping:
+            altcoin_long_allowed = False
+            altcoin_short_allowed = True
+            gatekeeper_reason = f"BTC 1H Trend is BEARISH (${btc_p:,.2f} < EMA50 ${ema_50:,.2f}) with 1H RSI {rsi_1h:.1f}. Altcoin long setups are vetoed to prevent flash-crash liquidation."
+            directive = "⛔ BTC GATEKEEPER LOCKOUT: Market-wide risk-off in progress. Suppressing altcoin LONG exposure."
+        else:
+            altcoin_long_allowed = True
+            altcoin_short_allowed = True
+            gatekeeper_reason = f"BTC Macro Tide is healthy (${btc_p:,.2f} >= EMA50 ${ema_50:,.2f}, RSI {rsi_1h:.1f}). Altcoin directional setups permitted."
+            directive = "✅ BTC GATEKEEPER CLEAR: Normal altcoin trade execution permitted."
+
+        status = BTCGatekeeperStatus(
+            btc_price=btc_p,
+            btc_1h_trend=btc_1h_trend,
+            btc_trend_1h=btc_1h_trend,
+            btc_4h_trend=btc_4h_trend,
+            btc_trend_4h=btc_4h_trend,
+            btc_ema_50_1h=ema_50,
+            btc_rsi_14_1h=rsi_1h,
+            altcoin_long_allowed=altcoin_long_allowed,
+            altcoin_short_allowed=altcoin_short_allowed,
+            gatekeeper_reason=gatekeeper_reason,
+            directive=directive,
+            timestamp=now,
+        )
+        self._cache[cache_key] = {"data": status, "timestamp": now}
+        return status
+
+class BTCGatekeeperStatus(BaseModel):
+    btc_price: float
+    btc_1h_trend: str  # "BULLISH", "BEARISH", "NEUTRAL"
+    btc_trend_1h: Optional[str] = None
+    btc_4h_trend: str  # "BULLISH", "BEARISH", "NEUTRAL"
+    btc_trend_4h: Optional[str] = None
+    btc_ema_50_1h: float
+    btc_rsi_14_1h: float
+    altcoin_long_allowed: bool
+    altcoin_short_allowed: bool
+    gatekeeper_reason: str
+    directive: str
+    timestamp: float = Field(default_factory=time.time)
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        if not self.btc_trend_1h:
+            self.btc_trend_1h = self.btc_1h_trend
+        if not self.btc_trend_4h:
+            self.btc_trend_4h = self.btc_4h_trend
+
 market_data_service = MarketDataService()
 

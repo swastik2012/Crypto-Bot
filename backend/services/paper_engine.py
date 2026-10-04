@@ -209,6 +209,17 @@ class VirtualPaperEngine:
         leverage = min(max(1, order.leverage), self.max_leverage)
         entry_price = order.entry_price or current_market_price
         
+        is_wholesale_sniper = False
+        spread_savings_usd = 0.0
+
+        # Phase 3: Wholesale Limit Sniping Engine
+        if getattr(order, "order_type", "MARKET") == "LIMIT" and getattr(order, "wholesale_limit_price", None):
+            entry_price = float(order.wholesale_limit_price)
+            is_wholesale_sniper = True
+            spread_diff = abs(current_market_price - entry_price)
+            spread_savings_usd = round(spread_diff * (order.size_usd / entry_price), 2)
+            print(f"[PaperEngine Sniper] 🎯 WHOLESALE LIMIT SNIPER FILLED: {order.symbol} @ ${entry_price:,.2f} (Saved ${spread_savings_usd:,.2f} vs retail market chase @ ${current_market_price:,.2f})")
+        
         size_usd = order.size_usd
         margin_required = size_usd / leverage
         
@@ -255,6 +266,14 @@ class VirtualPaperEngine:
             take_profit_1=order.take_profit_1,
             take_profit_2=order.take_profit_2,
             stop_loss=order.stop_loss,
+            highest_price_seen=round(entry_price, 4 if entry_price < 1 else 2),
+            lowest_price_seen=round(entry_price, 4 if entry_price < 1 else 2),
+            trailing_stop_active=False,
+            chandelier_atr=order.chandelier_atr,
+            chandelier_multiplier=order.chandelier_multiplier or 2.5,
+            order_type=getattr(order, "order_type", "MARKET"),
+            wholesale_entry_sniper=is_wholesale_sniper,
+            spread_savings_usd=spread_savings_usd,
             unrealized_pnl=0.0,
             unrealized_pnl_pct=0.0,
             entry_fee_paid=round(entry_fee, 4),
@@ -290,9 +309,12 @@ class VirtualPaperEngine:
 
             pos.current_price = current_price
 
+            # Update High-Water and Low-Water Marks for Adaptive Chandelier Trailing
             if pos.side == PositionSide.LONG:
+                pos.highest_price_seen = max(pos.highest_price_seen or current_price, current_price)
                 price_delta_pct = (current_price - pos.entry_price) / pos.entry_price
             else:
+                pos.lowest_price_seen = min(pos.lowest_price_seen or current_price, current_price)
                 price_delta_pct = (pos.entry_price - current_price) / pos.entry_price
 
             pos.unrealized_pnl_pct = round(price_delta_pct * pos.leverage * 100.0, 2)
@@ -353,7 +375,7 @@ class VirtualPaperEngine:
                         exit_reason="TP1_SCALE_OUT_50%",
                         opened_at=pos.opened_at,
                         closed_at=time.time(),
-                        agent_rationale=f"50% scaled out at TP1 ({pos.take_profit_1}). Fee: ${exit_fee:,.2f}, TDS: ${tds_fee:,.2f}. Remaining 50% runner aiming for TP2."
+                        agent_rationale=f"50% scaled out at TP1 ({pos.take_profit_1}). Fee: ${exit_fee:,.2f}, TDS: ${tds_fee:,.2f}. Remaining 50% runner activated with Adaptive Chandelier ATR Trailing Stop."
                     )
                     self.trade_history.append(scale_record)
                     closed_trades.append(scale_record)
@@ -363,45 +385,56 @@ class VirtualPaperEngine:
                     pos.quantity = round(pos.quantity * 0.5, 6)
                     pos.margin_used = round(half_margin, 2)
                     pos.entry_fee_paid = round(pos.entry_fee_paid * 0.5, 4)
-                    pos.take_profit_1 = None  # TP1 cleared, runner now tracks TP2
+                    pos.take_profit_1 = None  # TP1 cleared, runner now tracks Chandelier trailing
+                    pos.trailing_stop_active = True
 
                     # 3. Lock Stop Loss at Break-Even + 0.1% buffer ($0 Risk Runner)
                     if pos.side == PositionSide.LONG:
-                        pos.stop_loss = round(pos.entry_price * 1.001, 2)
+                        pos.stop_loss = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
                     else:
-                        pos.stop_loss = round(pos.entry_price * 0.999, 2)
+                        pos.stop_loss = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
 
             # ==============================================================
-            # 🛡️ DYNAMIC ATR TRAILING STOP & BREAK-EVEN LOCK (RUNNERS)
+            # 🛡️ ADAPTIVE CHANDELIER ATR TRAILING STOP ENGINE (PHASE 1)
             # ==============================================================
-            atr_est = max(current_price * 0.018, abs(current_price - pos.entry_price) * 0.35)
-            is_runner = pos.take_profit_1 is None # TP1 already scaled out
+            # ATR estimation: use assigned ATR from Stage 1 or dynamic candle proxy
+            atr_val = pos.chandelier_atr or max(current_price * 0.018, abs(current_price - pos.entry_price) * 0.25)
+            multiplier = pos.chandelier_multiplier or 2.5
+            is_runner = (pos.take_profit_1 is None) or pos.trailing_stop_active
 
-            if pos.side == PositionSide.LONG:
-                # Breakeven lock for Long if runner or profit is deeply in green (>= +3.5%)
-                if (is_runner or price_delta_pct >= 0.035) and pos.stop_loss and pos.stop_loss < pos.entry_price:
+            # Pre-TP1 Breakeven Lock: if price surges >= +3.0% even before TP1, protect capital at BE
+            if price_delta_pct >= 0.030 and pos.stop_loss:
+                if pos.side == PositionSide.LONG and pos.stop_loss < pos.entry_price:
                     pos.stop_loss = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
-
-                # Dynamic Trailing Stop for runners behind peak
-                if is_runner and price_delta_pct >= 0.025:
-                    trailing_target = round(current_price - (atr_est * 1.5), 4 if current_price < 1 else 2)
-                    if pos.stop_loss:
-                        pos.stop_loss = max(pos.stop_loss, trailing_target)
-                    else:
-                        pos.stop_loss = trailing_target
-
-            elif pos.side == PositionSide.SHORT:
-                # Breakeven lock for Short if runner or profit is deeply in green (>= +3.5%)
-                if (is_runner or price_delta_pct >= 0.035) and pos.stop_loss and pos.stop_loss > pos.entry_price:
+                elif pos.side == PositionSide.SHORT and pos.stop_loss > pos.entry_price:
                     pos.stop_loss = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
 
-                # Dynamic Trailing Stop for Short runners behind trough
-                if is_runner and price_delta_pct >= 0.025:
-                    trailing_target = round(current_price + (atr_est * 1.5), 4 if current_price < 1 else 2)
+            # Adaptive Chandelier Exit logic for active runners
+            if is_runner:
+                pos.trailing_stop_active = True
+                if pos.side == PositionSide.LONG:
+                    # Long Chandelier Exit = Highest Price Seen - (Multiplier * ATR)
+                    high_water = pos.highest_price_seen or current_price
+                    chandelier_exit = round(high_water - (atr_val * multiplier), 4 if current_price < 1 else 2)
+                    # Never allow trailing stop to fall below the Break-Even lock
+                    be_floor = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
+                    target_stop = max(chandelier_exit, be_floor)
                     if pos.stop_loss:
-                        pos.stop_loss = min(pos.stop_loss, trailing_target)
+                        pos.stop_loss = max(pos.stop_loss, target_stop)
                     else:
-                        pos.stop_loss = trailing_target
+                        pos.stop_loss = target_stop
+
+                elif pos.side == PositionSide.SHORT:
+                    # Short Chandelier Exit = Lowest Price Seen + (Multiplier * ATR)
+                    low_water = pos.lowest_price_seen or current_price
+                    chandelier_exit = round(low_water + (atr_val * multiplier), 4 if current_price < 1 else 2)
+                    # Never allow trailing stop to rise above the Break-Even ceiling
+                    be_ceiling = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
+                    target_stop = min(chandelier_exit, be_ceiling)
+                    if pos.stop_loss:
+                        pos.stop_loss = min(pos.stop_loss, target_stop)
+                    else:
+                        pos.stop_loss = target_stop
 
             # Check Liquidation
             if (pos.side == PositionSide.LONG and current_price <= pos.liquidation_price) or \
@@ -411,24 +444,42 @@ class VirtualPaperEngine:
                 positions_to_remove.append(pos_id)
                 continue
 
-            # Check Stop-Loss / Trailing Stop Trigger
+            # Check Stop-Loss / Chandelier Trailing Stop Trigger
             if pos.stop_loss:
                 if (pos.side == PositionSide.LONG and current_price <= pos.stop_loss) or \
                    (pos.side == PositionSide.SHORT and current_price >= pos.stop_loss):
-                    exit_reason = "BREAKEVEN_OR_TRAILING_STOP_HIT" if ((pos.side == PositionSide.LONG and pos.stop_loss >= pos.entry_price) or (pos.side == PositionSide.SHORT and pos.stop_loss <= pos.entry_price)) else "STOP_LOSS_TRIGGERED"
+                    is_in_profit = (pos.side == PositionSide.LONG and pos.stop_loss > pos.entry_price * 1.002) or \
+                                   (pos.side == PositionSide.SHORT and pos.stop_loss < pos.entry_price * 0.998)
+                    is_be = (pos.side == PositionSide.LONG and pos.stop_loss >= pos.entry_price) or \
+                            (pos.side == PositionSide.SHORT and pos.stop_loss <= pos.entry_price)
+                    if is_in_profit and (pos.trailing_stop_active or is_runner):
+                        exit_reason = "CHANDELIER_TRAILING_STOP_HIT"
+                    elif is_be:
+                        exit_reason = "BREAKEVEN_OR_TRAILING_STOP_HIT"
+                    else:
+                        exit_reason = "STOP_LOSS_TRIGGERED"
                     trade_record = self._close_position(pos, pos.stop_loss, exit_reason)
                     closed_trades.append(trade_record)
                     positions_to_remove.append(pos_id)
                     continue
 
-            # Check Take-Profit 2 Trigger (Full Extension Macro Target)
+            # Check Take-Profit 2 Milestone (Parabolic Extension or Full Exit)
             if pos.take_profit_2:
-                if (pos.side == PositionSide.LONG and current_price >= pos.take_profit_2) or \
-                   (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_2):
-                    trade_record = self._close_position(pos, current_price, "TAKE_PROFIT_2_FULL_EXIT")
-                    closed_trades.append(trade_record)
-                    positions_to_remove.append(pos_id)
-                    continue
+                tp2_hit = (pos.side == PositionSide.LONG and current_price >= pos.take_profit_2) or \
+                          (pos.side == PositionSide.SHORT and current_price <= pos.take_profit_2)
+                if tp2_hit:
+                    # Parabolic expansion detected: tighten chandelier trailing stop to secure >=85% of TP2 gain,
+                    # and tighten multiplier to 1.5x ATR to let the explosive mega-trend run!
+                    if pos.side == PositionSide.LONG:
+                        locked_floor = round(pos.take_profit_2 * 0.985, 4 if current_price < 1 else 2)
+                        pos.stop_loss = max(pos.stop_loss or locked_floor, locked_floor)
+                        pos.chandelier_multiplier = 1.5
+                        pos.take_profit_2 = round(pos.take_profit_2 * 1.15, 4 if current_price < 1 else 2)
+                    else:
+                        locked_ceiling = round(pos.take_profit_2 * 1.015, 4 if current_price < 1 else 2)
+                        pos.stop_loss = min(pos.stop_loss or locked_ceiling, locked_ceiling)
+                        pos.chandelier_multiplier = 1.5
+                        pos.take_profit_2 = round(pos.take_profit_2 * 0.85, 4 if current_price < 1 else 2)
 
         for pid in positions_to_remove:
             if pid in self.open_positions:
@@ -457,8 +508,9 @@ class VirtualPaperEngine:
         self.total_fees_paid += exit_fee
         self.total_tds_deducted += tds_fee
 
-        net_realized_pnl = gross_realized_pnl - pos.entry_fee_paid - total_exit_deduction
-        returned_cash = max(0.0, pos.margin_used + gross_realized_pnl - total_exit_deduction)
+        funding_accrued = getattr(pos, "accrued_funding_usd", 0.0)
+        net_realized_pnl = gross_realized_pnl - pos.entry_fee_paid - total_exit_deduction + funding_accrued
+        returned_cash = max(0.0, pos.margin_used + gross_realized_pnl - total_exit_deduction + funding_accrued)
         self.cash_balance += returned_cash
 
         if net_realized_pnl > 0:
@@ -490,6 +542,11 @@ class VirtualPaperEngine:
             net_realized_pnl=round(net_realized_pnl, 2),
             exchange_name=exit_fee_info["exchange"],
             exit_reason=reason,
+            order_type=getattr(pos, "order_type", "MARKET"),
+            wholesale_entry_sniper=getattr(pos, "wholesale_entry_sniper", False),
+            spread_savings_usd=getattr(pos, "spread_savings_usd", 0.0),
+            accrued_funding_usd=round(funding_accrued, 4),
+            funding_carry_apr=round(getattr(pos, "funding_carry_apr", 0.0), 2),
             opened_at=pos.opened_at,
             closed_at=closed_ts,
             opened_at_iso=getattr(pos, "opened_at_iso", None),
@@ -519,5 +576,33 @@ class VirtualPaperEngine:
             print(f"[PaperEngine] Learning memory record notice: {e}")
 
         return record
+
+    def apply_funding_rate_payment(self, symbol: str, funding_rate_8h_pct: float) -> Dict[str, Any]:
+        """
+        Phase 4: Funding Cash Flow Accrual Engine.
+        Simulates / applies the 8-hour funding rate exchange settlement across matching open positions:
+        - For LONGs: If funding > 0, long pays short (funding_usd < 0). If funding < 0, short pays long (funding_usd > 0).
+        - For SHORTs: If funding > 0, long pays short (funding_usd > 0). If funding < 0, short pays long (funding_usd < 0).
+        """
+        settled_positions = []
+        for pos_id, pos in self.open_positions.items():
+            if pos.symbol.upper() == symbol.upper() or pos.symbol.split("/")[0].upper() == symbol.split("/")[0].upper():
+                is_long = pos.side == PositionSide.LONG
+                effective_rate = -funding_rate_8h_pct if is_long else funding_rate_8h_pct
+                payment_usd = round(pos.size_usd * (effective_rate / 100.0), 4)
+                pos.accrued_funding_usd = round(pos.accrued_funding_usd + payment_usd, 4)
+                pos.funding_carry_apr = round(effective_rate * 3 * 365, 2)
+                settled_positions.append({
+                    "position_id": pos_id,
+                    "symbol": pos.symbol,
+                    "side": pos.side.value,
+                    "payment_usd": payment_usd,
+                    "total_accrued_funding_usd": pos.accrued_funding_usd,
+                    "funding_carry_apr": pos.funding_carry_apr,
+                })
+        if settled_positions:
+            self._save_to_disk()
+            print(f"[PaperEngine Funding] Accrued 8h funding payment for {len(settled_positions)} {symbol} positions: Net={sum(p['payment_usd'] for p in settled_positions):+,.2f} USD")
+        return {"settled_count": len(settled_positions), "positions": settled_positions}
 
 paper_engine = VirtualPaperEngine()

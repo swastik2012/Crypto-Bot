@@ -13,8 +13,9 @@ import {
   Layers,
   ShieldAlert,
   AlertTriangle,
+  ShieldCheck,
 } from 'lucide-react';
-import type { Stage5GeminiArbiterOutput, MultiTimeframeConfluence, MacroCalendarStatus } from '../../types';
+import type { Stage5GeminiArbiterOutput, MultiTimeframeConfluence, MacroCalendarStatus, BTCGatekeeperStatus, PlaybookVetoStatus } from '../../types';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { useCurrency } from '../../context/CurrencyContext';
@@ -24,6 +25,8 @@ interface ConsensusSummaryProps {
   onExecuteTrade: () => void;
   mtfConfluence?: MultiTimeframeConfluence;
   macroStatus?: MacroCalendarStatus;
+  btcGatekeeper?: BTCGatekeeperStatus;
+  playbookVeto?: PlaybookVetoStatus;
 }
 
 export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
@@ -31,6 +34,8 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
   onExecuteTrade,
   mtfConfluence,
   macroStatus,
+  btcGatekeeper,
+  playbookVeto,
 }) => {
   const { formatPrice } = useCurrency();
   const { consensusSignal, consensusConfidence, executionPlan, executiveSummary, keyInvalidationCondition, agentConsensusMatrix } = arbiterData;
@@ -218,19 +223,113 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
           </motion.div>
         )}
 
+        {/* BTC Master Gatekeeper Telemetry Banner (Phase 2) */}
+        {btcGatekeeper && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className={`p-3.5 sm:p-4 rounded-2xl border flex items-start gap-3 sm:gap-4 shadow-sm ${
+              !btcGatekeeper.altcoin_long_allowed
+                ? 'bg-rose-500/10 border-rose-500/40 text-rose-800 dark:text-rose-200'
+                : 'bg-emerald-500/10 border-emerald-500/30 text-slate-800 dark:text-slate-200'
+            }`}
+          >
+            <div className={`p-2 rounded-xl shrink-0 ${
+              !btcGatekeeper.altcoin_long_allowed
+                ? 'bg-rose-500/20 text-rose-600 dark:text-rose-400 animate-pulse'
+                : 'bg-emerald-500/20 text-emerald-600 dark:text-emerald-400'
+            }`}>
+              {!btcGatekeeper.altcoin_long_allowed ? (
+                <ShieldAlert className="w-5 h-5" />
+              ) : (
+                <ShieldCheck className="w-5 h-5" />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-bold text-xs uppercase tracking-wider text-slate-900 dark:text-white">
+                  {!btcGatekeeper.altcoin_long_allowed
+                    ? '⛔ BTC Master Gatekeeper: Altcoin Longs Suppressed'
+                    : '🛡️ BTC Master Gatekeeper: Altcoin Environment Healthy'}
+                </span>
+                <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-black ${
+                  btcGatekeeper.btc_trend_1h === 'BULLISH'
+                    ? 'bg-emerald-500/20 text-emerald-700 dark:text-emerald-300'
+                    : btcGatekeeper.btc_trend_1h === 'BEARISH'
+                    ? 'bg-rose-500/20 text-rose-700 dark:text-rose-300'
+                    : 'bg-amber-500/20 text-amber-700 dark:text-amber-300'
+                }`}>
+                  BTC 1H: {btcGatekeeper.btc_trend_1h}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-white/80 font-mono text-[10px] font-semibold">
+                  BTC 4H: {btcGatekeeper.btc_trend_4h}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-white/80 font-mono text-[10px]">
+                  BTC: ${btcGatekeeper.btc_price.toLocaleString(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-white/80 font-mono text-[10px]">
+                  RSI(14): {btcGatekeeper.btc_rsi_14_1h.toFixed(1)}
+                </span>
+              </div>
+              <p className="text-xs text-slate-600 dark:text-slate-300 mt-1 leading-relaxed">
+                {btcGatekeeper.gatekeeper_reason}
+              </p>
+            </div>
+          </motion.div>
+        )}
+
+        {/* AI Trade Learner Playbook Veto Alert (Phase 6) */}
+        {(playbookVeto?.is_vetoed || executionPlan.aiPlaybookVeto) && (
+          <motion.div
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="p-3.5 sm:p-4 rounded-2xl border bg-rose-500/10 border-rose-500/40 text-rose-800 dark:text-rose-200 flex items-start gap-3 sm:gap-4 shadow-sm"
+          >
+            <div className="p-2 rounded-xl shrink-0 bg-rose-500/20 text-rose-600 dark:text-rose-400 animate-pulse">
+              <ShieldAlert className="w-5 h-5" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-mono font-bold text-xs uppercase tracking-wider text-rose-900 dark:text-rose-300">
+                  ⛔ AI Trade Learner Veto: {playbookVeto?.rule_id || executionPlan.aiPlaybookRule || 'Active Failure Rule'}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-rose-500/20 text-rose-700 dark:text-rose-300 font-mono text-[10px] font-bold uppercase">
+                  {playbookVeto?.rule_type || 'AVOID_TRAP'}
+                </span>
+                <span className="px-2 py-0.5 rounded bg-slate-200 dark:bg-white/10 text-slate-700 dark:text-white/80 font-mono text-[10px]">
+                  Target: {playbookVeto?.target_asset || 'ALL'}
+                </span>
+              </div>
+              <p className="text-xs text-rose-800 dark:text-rose-200 mt-1 leading-relaxed font-mono">
+                {playbookVeto?.veto_reason || executionPlan.aiPlaybookReason}
+              </p>
+              {playbookVeto?.actionable_directive && (
+                <div className="mt-1.5 text-[11px] text-slate-700 dark:text-slate-300 font-medium">
+                  <b>Directive:</b> {playbookVeto.actionable_directive}
+                </div>
+              )}
+            </div>
+          </motion.div>
+        )}
+
         {/* Target Price Execution Matrix (Entry, TP1, TP2, Stop Loss, RR) */}
         <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
           
           {/* Entry Target */}
           <div className="p-3.5 rounded-xl bg-white/85 dark:bg-dark-900/60 border border-slate-200 dark:border-white/5 shadow-sm">
-            <div className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase">
-              {isNeutral ? 'Current Baseline' : 'Recommended Entry'}
+            <div className="text-[10px] font-mono font-bold text-slate-500 dark:text-slate-400 uppercase flex items-center justify-between">
+              <span>{isNeutral ? 'Current Baseline' : 'Recommended Entry'}</span>
+              {(executionPlan as any).wholesale_limit_entry && (
+                <span className="px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-600 dark:text-cyan-300 text-[9px] font-bold">
+                  🎯 Wholesale Sniper
+                </span>
+              )}
             </div>
             <div className="text-base sm:text-lg font-black font-mono text-slate-900 dark:text-slate-100 mt-1">
-              {formatPrice(executionPlan.recommendedEntry)}
+              {formatPrice((executionPlan as any).wholesale_limit_entry || executionPlan.recommendedEntry)}
             </div>
             <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400 mt-0.5">
-              {isNeutral ? 'Range Median' : 'Market/Limit Zone'}
+              {(executionPlan as any).sweep_discount_pct ? `-${(executionPlan as any).sweep_discount_pct}% discount vs market chase` : (isNeutral ? 'Range Median' : 'Wholesale Limit Zone')}
             </div>
           </div>
 
@@ -310,6 +409,11 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
           {executionPlan.recommendedPositionUSD && (
             <div className="col-span-2 sm:col-span-4 lg:col-span-5 p-3 rounded-xl bg-gradient-to-r from-emerald-500/10 via-[#76B900]/10 to-cyan-500/10 border border-[#76B900]/30 font-mono text-xs flex flex-wrap items-center justify-between gap-2 shadow-sm">
               <div className="flex items-center gap-2">
+                {executionPlan.tradeGradeBadge && (
+                  <Badge variant={executionPlan.tradeGrade === 'A+' ? 'emerald' : executionPlan.tradeGrade === 'A' ? 'cyan' : 'amber'} size="sm">
+                    {executionPlan.tradeGradeBadge}
+                  </Badge>
+                )}
                 <Badge variant="nvidia" size="sm">
                   {executionPlan.sizingRegime || 'Half-Kelly Sizing'}
                 </Badge>

@@ -206,6 +206,8 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
               onExecuteTrade={onExecuteTrade}
               mtfConfluence={pipelineData.stage1?.multiTimeframeConfluence}
               macroStatus={pipelineData.macroStatus}
+              btcGatekeeper={pipelineData.btcGatekeeper}
+              playbookVeto={pipelineData.playbookVeto}
             />
           </motion.div>
         )}

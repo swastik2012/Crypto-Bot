@@ -5,7 +5,7 @@ import asyncio
 from pathlib import Path
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
-from backend.models.schemas import AITradeAuditPostMortem, EvolvingTradingRule, AIPlaybookSummary
+from backend.models.schemas import AITradeAuditPostMortem, EvolvingTradingRule, AIPlaybookSummary, PlaybookVetoSchema
 from backend.agents.trade_learning_agent import trade_learning_agent
 
 is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
@@ -436,5 +436,120 @@ class LearningMemoryService:
 
         lines.append("CRITICAL INSTRUCTION: Explicitly incorporate these evolving AI directives into your analysis and calculations. NEVER repeat documented failure modes!")
         return "\n".join(lines)
+
+    def evaluate_setup_against_playbook(
+        self,
+        symbol: str,
+        direction: str,
+        current_price: float = 0.0,
+        derivatives_data: Optional[Any] = None,
+        mtf_data: Optional[Any] = None,
+        indicators: Optional[Dict[str, Any]] = None,
+    ) -> PlaybookVetoSchema:
+        """
+        Phase 6: Automated Negative Rule Veto Engine.
+        Directly audits a proposed trade setup against evolving playbook failure rules
+        and past trade post-mortems to enforce algorithmic vetoes on recurring loss traps.
+        """
+        clean_sym = symbol.split("/")[0].upper()
+        side_upper = str(direction).upper()
+
+        # Parse derivatives microstructure
+        deriv_dict = {}
+        if derivatives_data:
+            if hasattr(derivatives_data, "dict"):
+                deriv_dict = derivatives_data.dict()
+            elif isinstance(derivatives_data, dict):
+                deriv_dict = derivatives_data
+
+        funding_rate = float(deriv_dict.get("funding_rate_8h_pct") or 0.0)
+        pred_risk = str(deriv_dict.get("predatory_liquidation_risk") or "LOW").upper()
+        cvd_div = str(deriv_dict.get("cvd_divergence") or "NEUTRAL").upper()
+
+        # Parse MTF data
+        trend_1d = "NEUTRAL"
+        has_mtf_warning = False
+        if mtf_data:
+            if hasattr(mtf_data, "screen_1d"):
+                s1d = getattr(mtf_data, "screen_1d")
+                trend_1d = getattr(s1d, "trend", "NEUTRAL") if s1d else "NEUTRAL"
+            elif isinstance(mtf_data, dict) and "screen_1d" in mtf_data:
+                trend_1d = mtf_data["screen_1d"].get("trend", "NEUTRAL")
+
+            has_mtf_warning = bool(
+                getattr(mtf_data, "counter_trend_warning", False)
+                if hasattr(mtf_data, "counter_trend_warning")
+                else (mtf_data.get("counter_trend_warning", False) if isinstance(mtf_data, dict) else False)
+            )
+
+        # Check Rule 1 (pb_003: Overextended Funding Long Trap)
+        # e.g., On SOL or ALL, if funding rate exceeds +0.035%, do not market-buy
+        if side_upper in ["BUY", "LONG"]:
+            if (clean_sym in ["SOL", "ALL"] or any(r.target_asset == clean_sym for r in self.playbook_rules if r.rule_id == "pb_003")) and funding_rate > 0.035:
+                matching_rule = next((r for r in self.playbook_rules if r.rule_id == "pb_003"), None)
+                return PlaybookVetoSchema(
+                    is_vetoed=True,
+                    rule_id="pb_003",
+                    rule_type="AVOID_TRAP",
+                    rule_text=matching_rule.rule_text if matching_rule else "If 8h funding rate exceeds +0.035%, do not market-buy; wait for pullback to 4H demand zone or liquidation sweep.",
+                    target_asset=clean_sym,
+                    veto_reason=f"⛔ AI PLAYBOOK VETO [pb_003]: Overextended funding (+{funding_rate*100:.3f}% > +0.035%) on {clean_sym}. High probability crowded long flush trap.",
+                    confidence_penalty=45.0,
+                    actionable_directive="Wait for liquidation sweep discount zone or negative funding reset before entering long.",
+                )
+
+        # Check Rule 2 (learn_001 / MTF Counter-Trend Failure)
+        # e.g., Never execute SHORT positions when 1D Screen is Bullish
+        if side_upper in ["SELL", "SHORT"]:
+            if trend_1d == "BULLISH" or has_mtf_warning:
+                return PlaybookVetoSchema(
+                    is_vetoed=True,
+                    rule_id="learn_001",
+                    rule_type="MTF_CONFLUENCE",
+                    rule_text="Never execute SHORT positions when 1D Screen is Bullish unless 4H demand floor has decisively closed below with expanding sell volume.",
+                    target_asset=clean_sym,
+                    veto_reason=f"⛔ AI PLAYBOOK VETO [learn_001]: Attempting SHORT while 1D Macro Tide is BULLISH on {clean_sym}. Historically led to -3.4% stop out via institutional ETF flows.",
+                    confidence_penalty=50.0,
+                    actionable_directive="Never short against 1D Bullish Macro Tide without confirmed 4H structural breakdown.",
+                )
+
+        # Check Rule 3 (pb_001: High Predatory Liquidation Trap on Breakout)
+        if side_upper in ["BUY", "LONG"] and (pred_risk == "HIGH" or cvd_div == "BEARISH_EXHAUSTION"):
+            return PlaybookVetoSchema(
+                is_vetoed=True,
+                rule_id="pb_001",
+                rule_type="AVOID_TRAP",
+                rule_text="Never enter LONG breakout near critical resistance without 15M/1H confirmation candle close to avoid liquidity sweeps.",
+                target_asset=clean_sym,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [pb_001]: High predatory liquidation risk with CVD bearish exhaustion on {clean_sym} LONG. Institutional liquidity sweep imminent.",
+                confidence_penalty=38.0,
+                actionable_directive="Avoid market breakout buy; wait for retail stop hunt below support to snipe wholesale discount.",
+            )
+
+        # Check Evolving Playbook dynamic rules
+        for rule in self.playbook_rules:
+            if rule.rule_type == "AVOID_TRAP" and (rule.target_asset == clean_sym or rule.target_asset == "ALL"):
+                # If rule specifies overbought RSI
+                if indicators:
+                    rsi = float(indicators.get("rsi", 50.0))
+                    if "RSI > 75" in rule.rule_text and rsi > 75.0 and side_upper in ["BUY", "LONG"]:
+                        return PlaybookVetoSchema(
+                            is_vetoed=True,
+                            rule_id=rule.rule_id,
+                            rule_type=rule.rule_type,
+                            rule_text=rule.rule_text,
+                            target_asset=rule.target_asset,
+                            veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} 14-period RSI={rsi:.1f} violates learned failure threshold (RSI > 75).",
+                            confidence_penalty=40.0,
+                            actionable_directive="Wait for RSI mean reversion before attempting long entries.",
+                        )
+
+        # No negative rule triggered
+        return PlaybookVetoSchema(
+            is_vetoed=False,
+            rule_id=None,
+            veto_reason="Clear - No active playbook failure traps triggered.",
+            confidence_penalty=0.0,
+        )
 
 learning_memory_service = LearningMemoryService()

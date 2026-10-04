@@ -265,12 +265,34 @@ class AutoTradingScheduler:
                         deepseek_gate_pass = False
                         print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek found no statistically significant edge.")
 
+                # ========================================================
+                # 🛑 RISK GUARD 5: BTC Master Gatekeeper (Altcoin Protection Shield)
+                # ========================================================
+                btc_gate_pass = True
+                btc_status = getattr(response, "btc_gatekeeper", None)
+                is_altcoin = not pair.upper().startswith("BTC")
+                if is_altcoin and is_buy and btc_status:
+                    if not getattr(btc_status, "altcoin_long_allowed", True):
+                        btc_gate_pass = False
+                        print(f"[AutoTrader BTC Gatekeeper] {pair} LONG blocked: BTC trend is {getattr(btc_status, 'btc_trend_1h', 'BEARISH')} ({getattr(btc_status, 'gatekeeper_verdict', '')})")
+
+                # ========================================================
+                # 🛑 RISK GUARD 6: AI Trade Learner Playbook Veto
+                # ========================================================
+                playbook_gate_pass = True
+                playbook_status = getattr(response, "playbook_veto", None) or (getattr(response.stage5, "playbook_veto", None) if hasattr(response, "stage5") else None)
+                if playbook_status and getattr(playbook_status, "is_vetoed", False):
+                    playbook_gate_pass = False
+                    print(f"[AutoTrader AI Playbook Gate] {pair} entry blocked: {getattr(playbook_status, 'veto_reason', 'Negative rule triggered')}")
+
                 can_execute = (
                     confidence >= 78.0 and
                     (is_buy or is_short) and
                     not already_open and
                     not portfolio_full and
-                    deepseek_gate_pass
+                    deepseek_gate_pass and
+                    btc_gate_pass and
+                    playbook_gate_pass
                 )
 
                 if can_execute:
@@ -307,6 +329,12 @@ class AutoTradingScheduler:
                     elif not is_short and sl >= entry_p:
                         sl = default_sl
 
+                    atr_val = plan.get("atr_14") if isinstance(plan, dict) else None
+                    chandelier_mult = plan.get("chandelier_multiplier", 2.5) if isinstance(plan, dict) else 2.5
+                    order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
+                    wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
+                    discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
+
                     exec_time_ms = round((time.time() - pair_start_time) * 1000, 1)
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
@@ -314,9 +342,14 @@ class AutoTradingScheduler:
                         size_usd=pos_size or default_auto_size,
                         leverage=3,
                         entry_price=entry_p,
+                        order_type=order_type_val,
+                        wholesale_limit_price=wholesale_limit,
+                        spread_discount_pct=discount_pct,
                         take_profit_1=tp1,
                         take_profit_2=tp2,
                         stop_loss=sl,
+                        chandelier_atr=atr_val,
+                        chandelier_multiplier=chandelier_mult,
                         agent_rationale=response.stage5.executive_summary,
                         execution_time_ms=exec_time_ms,
                         opened_by="AutoTrader",
@@ -337,6 +370,10 @@ class AutoTradingScheduler:
                     elif not deepseek_gate_pass:
                         skip_reason = "DEEPSEEK_ORDER_FLOW_VETO (toxic flow or lack of statistical edge)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Blocked by NVIDIA DeepSeek Order Flow reasoning gate.")
+                    elif not btc_gate_pass:
+                        btc_trend = getattr(btc_status, "btc_trend_1h", "BEARISH") if btc_status else "BEARISH"
+                        skip_reason = f"BTC_GATEKEEPER_VETO (BTC trend {btc_trend} blocks altcoin longs)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Blocked by BTC Master Gatekeeper ({btc_trend}).")
                     elif confidence < 78.0:
                         skip_reason = f"LOW_CONFIDENCE ({confidence:.1f}% < 78.0%)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Confidence {confidence:.1f}% below minimum 78.0% threshold.")

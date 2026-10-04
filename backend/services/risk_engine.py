@@ -25,6 +25,9 @@ class KellySizingResult(BaseModel):
     portfolio_heat_pct: float
     sizing_regime: str
     risk_multiplier: float
+    trade_grade: str = "A"
+    trade_grade_badge: str = "🔹 Grade A (Half-Kelly)"
+    kappa_used: float = 0.50
     formula_breakdown: str
 
     def to_schema(self) -> Dict[str, Any]:
@@ -39,6 +42,9 @@ class KellySizingResult(BaseModel):
             "portfolio_heat_pct": self.portfolio_heat_pct,
             "sizing_regime": self.sizing_regime,
             "risk_multiplier": self.risk_multiplier,
+            "trade_grade": self.trade_grade,
+            "trade_grade_badge": self.trade_grade_badge,
+            "kappa_used": self.kappa_used,
             "formula_breakdown": self.formula_breakdown,
         }
 
@@ -92,7 +98,6 @@ class RiskEngine:
         Calculates the complete dynamic volatility-scaled fractional Kelly position size.
         """
         equity = max(100.0, float(total_equity))
-        active_kappa = kappa if kappa is not None else self.default_kappa
 
         # 1. Calculate Payoff Ratio b (Risk-to-Reward on TP1)
         risk_per_unit = abs(entry_price - stop_loss)
@@ -106,12 +111,51 @@ class RiskEngine:
         raw_f_star = self.calculate_raw_kelly(p, payoff_b)
         expected_value = round((p * payoff_b) - q, 3)
 
-        # If negative expectancy, size drops to zero
-        if raw_f_star <= 0.0 or expected_value <= 0.0:
+        # Multiplier inputs
+        regime_upper = (volatility_regime or "NORMAL_VOLATILITY").upper()
+        mtf_upper = (mtf_alignment or "").upper()
+        is_3_of_3 = "3/3" in mtf_upper or "FULL" in mtf_upper
+        is_2_of_3 = is_3_of_3 or "2/3" in mtf_upper or "PARTIAL" in mtf_upper
+        is_extreme_vol = "EXTREME" in regime_upper
+        is_high_pred_risk = False
+        if derivatives_data:
+            deriv_dict = derivatives_data.dict() if hasattr(derivatives_data, "dict") else (derivatives_data if isinstance(derivatives_data, dict) else {})
+            if deriv_dict.get("predatory_liquidation_risk") == "HIGH":
+                is_high_pred_risk = True
+
+        # 3. Asymmetric Setup Grading & Dynamic Kelly Multiplier (Phase 5)
+        # Institutional Grading:
+        # A+ (Full-Kelly κ=1.00, cap 15%): p >= 72%, 3/3 MTF Confluence, Payoff b >= 1.8, No extreme risk
+        # A  (Half-Kelly κ=0.50, cap 9%):  p >= 62%, MTF >= 2/3, Payoff b >= 1.3
+        # B  (Quarter-Kelly κ=0.25, cap 4.5%): p >= 50%, Payoff b >= 1.0
+        # C_REJECT (κ=0.00): Negative expectancy, p < 50%, or invalid edge
+        if p >= 0.72 and is_3_of_3 and payoff_b >= 1.8 and not is_extreme_vol and not is_high_pred_risk:
+            trade_grade = "A+"
+            trade_grade_badge = "⭐ Grade A+ (Full Kelly 1.0x)"
+            auto_kappa = 1.00
+            max_grade_cap = 0.15
+        elif p >= 0.62 and is_2_of_3 and payoff_b >= 1.3:
+            trade_grade = "A"
+            trade_grade_badge = "🔹 Grade A (Half-Kelly 0.50x)"
+            auto_kappa = 0.50
+            max_grade_cap = 0.09
+        elif p >= 0.50 and payoff_b >= 1.0:
+            trade_grade = "B"
+            trade_grade_badge = "🔸 Grade B (Quarter-Kelly 0.25x)"
+            auto_kappa = 0.25
+            max_grade_cap = 0.045
+        else:
+            trade_grade = "C_REJECT"
+            trade_grade_badge = "⛔ Grade C (Vetoed 0.0x)"
+            auto_kappa = 0.00
+            max_grade_cap = 0.00
+
+        # If negative expectancy or Grade C, size drops to zero
+        if raw_f_star <= 0.0 or expected_value <= 0.0 or trade_grade == "C_REJECT":
             return KellySizingResult(
                 recommended_position_usd=0.0,
                 kelly_fraction_pct=0.0,
-                raw_kelly_pct=0.0,
+                raw_kelly_pct=round(raw_f_star * 100, 1),
                 payoff_ratio_b=payoff_b,
                 win_probability=round(p * 100, 1),
                 expected_value=expected_value,
@@ -119,33 +163,35 @@ class RiskEngine:
                 portfolio_heat_pct=0.0,
                 sizing_regime="NEGATIVE_EXPECTANCY_VETO",
                 risk_multiplier=0.0,
-                formula_breakdown=f"Negative Expectancy (EV: {expected_value:+.2f}). Kelly allocation vetoed to $0.",
+                trade_grade="C_REJECT",
+                trade_grade_badge="⛔ Grade C (Vetoed 0.0x)",
+                kappa_used=0.0,
+                formula_breakdown=f"Setup Grade C_REJECT (p={p*100:.1f}%, EV={expected_value:+.2f}). Kelly allocation vetoed to $0.",
             )
 
-        # 3. Apply Fractional Kelly (Half-Kelly)
+        # 4. Apply Fractional Kelly
+        active_kappa = kappa if kappa is not None else auto_kappa
         fractional_kelly = raw_f_star * active_kappa
 
-        # 4. Volatility Regime Multiplier (M_regime)
-        regime_upper = (volatility_regime or "NORMAL_VOLATILITY").upper()
+        # 5. Volatility Regime Multiplier (M_regime)
         if "COMPRESSED" in regime_upper or "SQUEEZE" in regime_upper:
             m_regime = 0.70  # Squeeze: reduced size until range expansion
-        elif "HIGH" in regime_upper and "EXTREME" not in regime_upper:
+        elif "HIGH" in regime_upper and not is_extreme_vol:
             m_regime = 0.80  # High volatility: scale down to buffer swings
-        elif "EXTREME" in regime_upper:
+        elif is_extreme_vol:
             m_regime = 0.55  # Extreme volatility: severe protection cut
         else:
             m_regime = 1.00  # Normal volatility: full base allocation
 
-        # 5. Multi-Timeframe Confluence Multiplier (M_confluence)
-        mtf_upper = (mtf_alignment or "").upper()
-        if "3/3" in mtf_upper or "FULL" in mtf_upper:
+        # 6. Multi-Timeframe Confluence Multiplier (M_confluence)
+        if is_3_of_3:
             m_confluence = 1.15  # Institutional tailwind bonus
-        elif "2/3" in mtf_upper or "PARTIAL" in mtf_upper:
+        elif is_2_of_3:
             m_confluence = 0.85  # Slight drag on partial confluence
         else:
             m_confluence = 0.50  # Divergence / counter-trend drag
 
-        # 6. Derivatives Microstructure Multiplier (M_microstructure)
+        # 7. Derivatives Microstructure Multiplier (M_microstructure)
         m_micro = 1.00
         if derivatives_data:
             deriv_dict = derivatives_data.dict() if hasattr(derivatives_data, "dict") else (derivatives_data if isinstance(derivatives_data, dict) else {})
@@ -156,17 +202,18 @@ class RiskEngine:
             elif pred_risk == "MEDIUM":
                 m_micro = 0.85
 
-        # 7. Total Combined Risk Multiplier
+        # 8. Total Combined Risk Multiplier
         total_risk_multiplier = round(m_regime * m_confluence * m_micro, 3)
 
-        # 8. Volatility-Scaled Kelly Percentage
+        # 9. Volatility-Scaled Kelly Percentage
         scaled_kelly_pct = fractional_kelly * total_risk_multiplier
 
-        # Clamp between min_position_pct and max_position_pct
-        clamped_pct = max(self.min_position_pct, min(self.max_position_pct, scaled_kelly_pct))
+        # Dynamic Grade Cap Clamp
+        effective_max_pct = min(self.max_position_pct, max_grade_cap) if kappa is None else self.max_position_pct
+        clamped_pct = max(self.min_position_pct, min(effective_max_pct, scaled_kelly_pct))
         calculated_usd = equity * clamped_pct
 
-        # 9. Portfolio Heat Calculation & Drawdown Protection
+        # 10. Portfolio Heat Calculation & Drawdown Protection
         # Calculate current open risk across all active trades: sum(pos_size * (loss_pct_to_sl))
         existing_heat_usd = 0.0
         if current_open_positions:
@@ -206,7 +253,7 @@ class RiskEngine:
         current_heat_pct = round(((existing_heat_usd + final_max_loss_usd) / equity) * 100, 2)
 
         breakdown = (
-            f"Half-Kelly (κ={active_kappa}) on p={p*100:.1f}%, b={payoff_b:.2f} (EV: {expected_value:+.2f}). "
+            f"Asymmetric Kelly [{trade_grade_badge}] (κ={active_kappa}) on p={p*100:.1f}%, b={payoff_b:.2f} (EV: {expected_value:+.2f}). "
             f"Raw Kelly: {raw_f_star*100:.1f}% -> Scaled: {final_pct:.1f}% (${final_usd:,.2f}) "
             f"[Regime: {volatility_regime}, Multiplier: {total_risk_multiplier:.2f}x, Risk at SL: ${final_max_loss_usd:,.2f} ({final_max_loss_usd/equity*100:.2f}% equity)]."
         )
@@ -222,6 +269,9 @@ class RiskEngine:
             portfolio_heat_pct=current_heat_pct,
             sizing_regime=sizing_regime,
             risk_multiplier=total_risk_multiplier,
+            trade_grade=trade_grade,
+            trade_grade_badge=trade_grade_badge,
+            kappa_used=active_kappa,
             formula_breakdown=breakdown,
         )
 

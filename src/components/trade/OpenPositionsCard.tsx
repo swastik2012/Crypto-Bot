@@ -31,10 +31,18 @@ export interface OpenPositionItem {
   take_profit_1?: number;
   take_profit_2?: number;
   stop_loss?: number;
+  trailing_stop_active?: boolean;
+  highest_price_seen?: number;
+  lowest_price_seen?: number;
   unrealized_pnl: number;
   unrealized_pnl_pct: number;
   entry_fee_paid?: number;
   exchange_model?: string;
+  order_type?: string;
+  wholesale_entry_sniper?: boolean;
+  spread_savings_usd?: number;
+  accrued_funding_usd?: number;
+  funding_carry_apr?: number;
   opened_at: number;
   opened_at_iso?: string;
   execution_time_ms?: number;
@@ -57,6 +65,11 @@ export interface TradeHistoryItem {
   net_realized_pnl?: number;
   exchange_name?: string;
   exit_reason: string;
+  order_type?: string;
+  wholesale_entry_sniper?: boolean;
+  spread_savings_usd?: number;
+  accrued_funding_usd?: number;
+  funding_carry_apr?: number;
   opened_at: number;
   closed_at: number;
   opened_at_iso?: string;
@@ -209,6 +222,21 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                         <Badge variant={isLong ? 'emerald' : 'rose'} size="sm">
                           {pos.side} {pos.leverage}x
                         </Badge>
+                        {(pos.wholesale_entry_sniper || pos.order_type === 'LIMIT') && (
+                          <span className="px-2 py-0.5 rounded-full bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 text-[10px] font-bold border border-cyan-500/30 flex items-center gap-1 shadow-sm">
+                            🎯 Wholesale Sniper {pos.spread_savings_usd && pos.spread_savings_usd > 0 ? `(Saved $${pos.spread_savings_usd.toFixed(2)})` : ''}
+                          </span>
+                        )}
+                        {pos.funding_carry_apr !== undefined && Math.abs(pos.funding_carry_apr) >= 5 && (
+                          <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border flex items-center gap-1 shadow-sm ${
+                            pos.funding_carry_apr > 0
+                              ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30'
+                              : 'bg-amber-500/15 text-amber-700 dark:text-amber-300 border-amber-500/30'
+                          }`}>
+                            ⚡ Carry: {pos.funding_carry_apr > 0 ? '+' : ''}{pos.funding_carry_apr.toFixed(1)}% APR
+                            {pos.accrued_funding_usd ? ` (${pos.accrued_funding_usd > 0 ? '+' : ''}$${pos.accrued_funding_usd.toFixed(2)})` : ''}
+                          </span>
+                        )}
                         <span className="text-[10px] text-slate-500 dark:text-slate-400">
                           Margin: <b>{formatPrice(pos.margin_used)}</b>
                         </span>
@@ -298,6 +326,11 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                           <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400 font-bold">
                             <ShieldAlert className="w-3 h-3" /> SL: {formatPrice(pos.stop_loss)}
                           </span>
+                        )}
+                        {pos.trailing_stop_active && (
+                          <Badge variant="cyan" size="sm" className="font-mono text-[9px]">
+                            ⚡ Chandelier ATR Trailing Stop
+                          </Badge>
                         )}
                         <span className="text-slate-500">
                           Entry Fee: <span className="font-bold text-rose-500">{formatPrice(pos.entry_fee_paid || pos.size_usd * 0.001)}</span> ({pos.exchange_model || 'Binance 0.10%'})

@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, Any, Tuple, Optional
 from backend.models.state import AgentGraphState
-from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema
+from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema, BTCGatekeeperStatusSchema
 from backend.agents.stage1_gemini_vision import run_stage1_gemini_vision
 from backend.agents.stage2_news_sentiment import run_stage2_news_sentiment
 from backend.agents.stage3_nvidia_deepseek import run_stage3_nvidia_deepseek
@@ -54,6 +54,10 @@ class MultiAgentConsensusPipeline:
 
         # MACROECONOMIC EVENT CIRCUIT BREAKER ENGINE (Phase 5: CPI, PPI, FOMC, NFP Lockouts)
         macro_status = macro_calendar_service.check_circuit_breaker()
+
+        # BTC MASTER GATEKEEPER ENGINE (Phase 2: Altcoin Protection Shield)
+        from backend.services.market_data import market_data_service
+        btc_gatekeeper = await market_data_service.check_btc_gatekeeper()
 
         # DERIVATIVES MICROSTRUCTURE ENGINE (Binance Futures: Funding Rate, OI Delta, CVD)
         from backend.services.derivatives_service import derivatives_service
@@ -126,6 +130,7 @@ class MultiAgentConsensusPipeline:
             stage_jev=stage_jev_res,
             derivatives_data=derivatives_data,
             macro_status=macro_status,
+            btc_gatekeeper=btc_gatekeeper,
         )
         debate_stream.append(msg4)
 
@@ -144,14 +149,19 @@ class MultiAgentConsensusPipeline:
             timeframe=timeframe,
             derivatives_data=derivatives_data,
             macro_status=macro_status,
+            btc_gatekeeper=btc_gatekeeper,
         )
         debate_stream.append(msg5)
 
-        # Execution Hook: If auto_execute is requested, consensus score >= 80%, AND macro lockout is NOT active
+        # Execution Hook: If auto_execute is requested, consensus score >= 80%, macro lockout is NOT active, AND BTC Gatekeeper permits
         executed_position: Optional[PaperPosition] = None
         auto_executed = False
 
-        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active:
+        is_alt = not symbol.upper().startswith("BTC")
+        btc_block = is_alt and btc_gatekeeper and not btc_gatekeeper.altcoin_long_allowed and "BUY" in stage5_res.consensus_signal.value
+        playbook_block = bool(stage5_res.playbook_veto and stage5_res.playbook_veto.is_vetoed)
+
+        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active and not btc_block and not playbook_block:
             plan = stage5_res.execution_plan
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
             default_fallback_size = max(100.0, round(account_eq * 0.08, 2))
@@ -161,6 +171,12 @@ class MultiAgentConsensusPipeline:
             tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
             sl = plan.get("stop_loss") if isinstance(plan, dict) else getattr(plan, "stop_loss", None)
 
+            atr_val = plan.get("atr_14") if isinstance(plan, dict) else None
+            chandelier_mult = plan.get("chandelier_multiplier", 2.5) if isinstance(plan, dict) else 2.5
+            order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
+            wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
+            discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
+
             exec_latency_ms = round((time.time() - pipeline_start) * 1000, 1)
             order_req = PlacePaperOrderRequest(
                 symbol=symbol,
@@ -168,9 +184,14 @@ class MultiAgentConsensusPipeline:
                 size_usd=pos_size or default_fallback_size,
                 leverage=3,
                 entry_price=entry_p,
+                order_type=order_type_val,
+                wholesale_limit_price=wholesale_limit,
+                spread_discount_pct=discount_pct,
                 take_profit_1=tp1,
                 take_profit_2=tp2,
                 stop_loss=sl,
+                chandelier_atr=atr_val,
+                chandelier_multiplier=chandelier_mult,
                 agent_rationale=stage5_res.executive_summary,
                 execution_time_ms=exec_latency_ms,
                 opened_by="AutoTrader",
@@ -199,6 +220,8 @@ class MultiAgentConsensusPipeline:
             stage5=stage5_res,
             derivatives_data=derivatives_data,
             macro_status=MacroCalendarStatusSchema(**macro_status.to_schema()),
+            btc_gatekeeper=BTCGatekeeperStatusSchema(**btc_gatekeeper.dict()) if btc_gatekeeper else None,
+            playbook_veto=stage5_res.playbook_veto,
             debate_stream=debate_stream,
             auto_executed=auto_executed,
             executed_position=executed_position,

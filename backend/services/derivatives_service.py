@@ -1,7 +1,7 @@
 import asyncio
 import httpx
 import time
-from typing import Dict, Optional, Tuple
+from typing import Dict, Optional, Tuple, Any
 from backend.models.schemas import DerivativesMicrostructureSchema as DerivativesMicrostructure
 
 class DerivativesService:
@@ -158,11 +158,30 @@ class DerivativesService:
         else:
             pred_risk = "LOW"
 
+        # 5. Phase 3: Liquidation Sweep Sniping & Wholesale Limit Calculation
+        sweep_data = self.calculate_liquidation_sweep_zone(
+            symbol=symbol,
+            current_price=p,
+            direction="LONG",
+            funding_rate_8h_pct=funding_pct,
+            predatory_liquidation_risk=pred_risk,
+        )
+
+        # 6. Phase 4: Funding Rate Arbitrage & Positive Carry Analysis
+        carry_data = self.evaluate_funding_carry(
+            symbol=symbol,
+            funding_rate_8h_pct=funding_pct,
+            direction="LONG",
+            position_size_usd=1000.0,
+        )
+
         summary = (
-            f"Derivatives Flow: Funding={funding_pct:+.4f}% ({funding_regime}), "
+            f"Derivatives Flow: Funding={funding_pct:+.4f}% ({funding_regime}, {carry_data['carry_regime']}), "
+            f"Carry APR={carry_data['annualized_carry_apr']:+.1f}%, "
             f"OI=${oi_usd/1e6:.1f}M ({oi_delta_pct:+.1f}% 1h: {oi_interp}), "
             f"Taker Buy Ratio={buy_ratio:.2f} ({cvd_divergence}). "
-            f"Predatory Liquidation Risk={pred_risk}."
+            f"Predatory Liquidation Risk={pred_risk}. "
+            f"Wholesale Sniper Limit: ${sweep_data['wholesale_limit_entry']:,.2f} (-{sweep_data['discount_pct']}% discount)."
         )
 
         result = DerivativesMicrostructure(
@@ -181,11 +200,155 @@ class DerivativesService:
             cvd_divergence=cvd_divergence,
             predatory_liquidation_risk=pred_risk,
             liquidation_bias=liq_bias,
+            liquidation_sweep_entry=sweep_data["wholesale_limit_entry"],
+            recommended_order_type=sweep_data["recommended_order_type"],
+            sweep_discount_pct=sweep_data["discount_pct"],
+            sweep_zone_low=sweep_data["sweep_zone_low"],
+            sweep_zone_high=sweep_data["sweep_zone_high"],
+            sniping_rationale=sweep_data["sniping_rationale"],
+            annualized_carry_apr=carry_data["annualized_carry_apr"],
+            carry_regime=carry_data["carry_regime"],
+            carry_cashflow_8h_usd=carry_data["cashflow_per_8h_usd"],
+            carry_rationale=carry_data["carry_rationale"],
             summary=summary,
             timestamp=now,
         )
 
         self._cache[clean_key] = {"time": now, "data": result}
         return result
+
+    def evaluate_funding_carry(
+        self,
+        symbol: str,
+        funding_rate_8h_pct: float,
+        direction: str = "LONG",
+        position_size_usd: float = 1000.0,
+    ) -> Dict[str, Any]:
+        """
+        Phase 4: Funding Rate Arbitrage & Positive Carry Biasing.
+        Analyzes 8h funding rate carry dynamics:
+        - If LONG:
+            - When funding > 0: Long pays Short (Negative Carry).
+            - When funding < 0: Short pays Long (Positive Carry! Whale short squeeze setup).
+        - If SHORT:
+            - When funding > 0: Long pays Short (Positive Carry! Earn passive cash flow holding short).
+            - When funding < 0: Short pays Long (Negative Carry).
+        """
+        is_long = direction.upper() in ["LONG", "BUY", "STRONG BUY"]
+        
+        # Determine whether this trade receives (+) or pays (-) funding
+        if is_long:
+            receives_funding = funding_rate_8h_pct < 0
+            effective_carry_pct = -funding_rate_8h_pct
+        else:
+            receives_funding = funding_rate_8h_pct > 0
+            effective_carry_pct = funding_rate_8h_pct
+
+        annualized_carry_apr = round(effective_carry_pct * 3 * 365, 2)
+        cashflow_per_8h_usd = round(position_size_usd * (effective_carry_pct / 100.0), 4)
+
+        if annualized_carry_apr >= 15.0:
+            carry_regime = "POSITIVE_CARRY_ADVANTAGE"
+            conviction_boost = 4.0
+            rationale = (
+                f"⚡ POSITIVE CARRY BIAS: Position earns +{annualized_carry_apr:.1f}% annualized cash flow "
+                f"(+${cashflow_per_8h_usd:,.2f} per 8h cycle) from counterparty perp funding payments."
+            )
+        elif annualized_carry_apr <= -25.0:
+            carry_regime = "HEAVY_NEGATIVE_CARRY_PENALTY"
+            conviction_boost = -6.0
+            rationale = (
+                f"⚠️ HIGH NEGATIVE CARRY HEADWIND: Position pays {abs(annualized_carry_apr):.1f}% annualized "
+                f"(-${abs(cashflow_per_8h_usd):,.2f} per 8h cycle). Setup requires immediate momentum to overcome decay."
+            )
+        else:
+            carry_regime = "NEUTRAL_CARRY"
+            conviction_boost = 0.0
+            rationale = f"Neutral carry environment ({annualized_carry_apr:+.1f}% APR). Negligible funding impact."
+
+        return {
+            "symbol": symbol,
+            "funding_rate_8h_pct": funding_rate_8h_pct,
+            "direction": "LONG" if is_long else "SHORT",
+            "receives_funding": receives_funding,
+            "annualized_carry_apr": annualized_carry_apr,
+            "cashflow_per_8h_usd": cashflow_per_8h_usd,
+            "carry_regime": carry_regime,
+            "conviction_boost": conviction_boost,
+            "carry_rationale": rationale,
+        }
+
+    def calculate_liquidation_sweep_zone(
+        self,
+        symbol: str,
+        current_price: float,
+        direction: str = "LONG",
+        atr_14: Optional[float] = None,
+        funding_rate_8h_pct: float = 0.0,
+        predatory_liquidation_risk: str = "LOW",
+    ) -> Dict[str, Any]:
+        """
+        Phase 3: Liquidation Sweep Sniping & Wholesale Limit Order Engine.
+        Calculates wholesale limit entries where retail stop clusters & 10x-50x liquidations accumulate:
+        - For LONGs: Whales push price down into retail stop clusters (0.45x - 0.85x ATR below current price)
+          before launching massive markup. Entering at the 0.618x ATR discount zone allows entering at wholesale.
+        - For SHORTs: Whales spike price up into retail stop clusters (0.45x - 0.85x ATR above current price)
+          before the flush.
+        - Returns:
+            - recommended_order_type: "LIMIT" (Wholesale Sniper) or "MARKET" (Breakout Momentum)
+            - wholesale_limit_entry: Optimal sniper limit entry price
+            - sweep_zone_low: Lower bound of the liquidity pool
+            - sweep_zone_high: Upper bound of the liquidity pool
+            - discount_pct: Percent discount from current market price
+            - estimated_spread_savings_pct: Estimated execution edge vs market taker chase
+            - sniping_rationale: Institutional explanation
+        """
+        # If ATR not provided, estimate based on 1.5% volatility
+        vol_atr = atr_14 if (atr_14 and atr_14 > 0) else (current_price * 0.015)
+        
+        is_long = direction.upper() in ["LONG", "BUY", "STRONG BUY"]
+        
+        # Golden Fibonacci Liquidation Cluster Sweep: 0.618 x ATR
+        fib_discount = vol_atr * 0.618
+        deep_sweep = vol_atr * 0.85
+        shallow_sweep = vol_atr * 0.40
+        
+        if is_long:
+            wholesale_entry = round(current_price - fib_discount, 4 if current_price < 10 else 2)
+            zone_low = round(current_price - deep_sweep, 4 if current_price < 10 else 2)
+            zone_high = round(current_price - shallow_sweep, 4 if current_price < 10 else 2)
+            discount_pct = round(((current_price - wholesale_entry) / current_price) * 100.0, 2)
+            
+            order_type = "LIMIT"
+            rationale = (
+                f"Wholesale Liquidity Sweep Pool detected between ${zone_low:,.2f} and ${zone_high:,.2f} "
+                f"(retail stop clusters & high-leverage long liquidations). "
+                f"Placing institutional Limit Sniper Order @ ${wholesale_entry:,.2f} (-{discount_pct}% discount) "
+                f"to capture whale liquidity absorption rather than paying retail spread."
+            )
+        else:
+            wholesale_entry = round(current_price + fib_discount, 4 if current_price < 10 else 2)
+            zone_low = round(current_price + shallow_sweep, 4 if current_price < 10 else 2)
+            zone_high = round(current_price + deep_sweep, 4 if current_price < 10 else 2)
+            discount_pct = round(((wholesale_entry - current_price) / current_price) * 100.0, 2)
+            
+            order_type = "LIMIT"
+            rationale = (
+                f"Wholesale Liquidity Sweep Pool detected between ${zone_low:,.2f} and ${zone_high:,.2f} "
+                f"(retail short stops & breakout trap liquidity). "
+                f"Placing institutional Short Limit Sniper Order @ ${wholesale_entry:,.2f} (+{discount_pct}% premium) "
+                f"to fade whale pump-and-dump spikes."
+            )
+            
+        return {
+            "recommended_order_type": order_type,
+            "wholesale_limit_entry": wholesale_entry,
+            "market_chase_entry": current_price,
+            "sweep_zone_low": zone_low,
+            "sweep_zone_high": zone_high,
+            "discount_pct": discount_pct,
+            "estimated_spread_savings_pct": discount_pct,
+            "sniping_rationale": rationale,
+        }
 
 derivatives_service = DerivativesService()

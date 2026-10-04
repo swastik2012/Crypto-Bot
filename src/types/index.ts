@@ -239,6 +239,9 @@ export interface Stage3NvidiaNimOutput {
     portfolioHeatPct: number;
     sizingRegime: string;
     riskMultiplier: number;
+    tradeGrade?: string;
+    tradeGradeBadge?: string;
+    kappaUsed?: number;
     formulaBreakdown: string;
   };
   mathematicalProof: string;
@@ -281,6 +284,12 @@ export interface Stage5GeminiArbiterOutput {
     kellyFractionPct?: number;
     portfolioHeatPct?: number;
     sizingRegime?: string;
+    tradeGrade?: string;
+    tradeGradeBadge?: string;
+    kappaUsed?: number;
+    aiPlaybookVeto?: boolean;
+    aiPlaybookRule?: string;
+    aiPlaybookReason?: string;
   };
   executiveSummary: string;
   keyInvalidationCondition: string;
@@ -292,6 +301,12 @@ export interface Stage5GeminiArbiterOutput {
     systemOneEdgeConfirmed?: boolean;
     nvidiaScore: number;
     openaiScore: number;
+    tradeGrade?: string;
+    tradeGradeBadge?: string;
+    kappaUsed?: number;
+    aiPlaybookVeto?: boolean;
+    aiPlaybookRule?: string;
+    aiPlaybookReason?: string;
     kellyOptimalAllocationUsd?: number;
     kellyFractionPct?: number;
     portfolioHeatPct?: number;
@@ -335,6 +350,17 @@ export interface MacroCalendarStatus {
   upcoming_events: MacroEventItem[];
 }
 
+export interface PlaybookVetoStatus {
+  is_vetoed: boolean;
+  rule_id?: string;
+  rule_type?: string;
+  rule_text?: string;
+  target_asset?: string;
+  veto_reason?: string;
+  confidence_penalty?: number;
+  actionable_directive?: string;
+}
+
 export interface FullDebatePipelineData {
   asset: CryptoAsset;
   timeframe: TimeInterval;
@@ -346,7 +372,22 @@ export interface FullDebatePipelineData {
   stage4: Stage4OpenAIOutput;
   stage5: Stage5GeminiArbiterOutput;
   macroStatus?: MacroCalendarStatus;
+  btcGatekeeper?: BTCGatekeeperStatus;
+  playbookVeto?: PlaybookVetoStatus;
   debateStream: DebateMessage[];
+}
+
+export interface BTCGatekeeperStatus {
+  btc_price: number;
+  btc_trend_1h: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  btc_trend_4h: 'BULLISH' | 'BEARISH' | 'NEUTRAL';
+  btc_ema_50_1h: number;
+  btc_rsi_14_1h: number;
+  altcoin_long_allowed: boolean;
+  altcoin_short_allowed: boolean;
+  gatekeeper_reason: string;
+  directive: string;
+  timestamp?: number;
 }
 
 export interface AgentConfigState {
