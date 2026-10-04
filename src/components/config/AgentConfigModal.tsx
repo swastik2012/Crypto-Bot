@@ -5,6 +5,7 @@ import {
   Sliders,
   Cpu,
   Zap,
+  Brain,
   Layers,
   Shield,
   Save,
@@ -215,26 +216,26 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                   </div>
                 </div>
 
-                {/* 3. TypeSafe AI Jev (System One Fast-Twitch Reflex) Config */}
-                <div className="p-3.5 rounded-2xl bg-slate-100/70 dark:bg-dark-900/60 border border-indigo-500/25 space-y-2.5">
+                {/* 3. NVIDIA DeepSeek (Order Flow & Reasoning) Config */}
+                <div className="p-3.5 rounded-2xl bg-slate-100/70 dark:bg-dark-900/60 border border-emerald-500/25 space-y-2.5">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 text-xs font-bold text-indigo-400">
-                      <Zap className="w-4 h-4" />
-                      <span>Stage 3: TypeSafe AI Jev (System One Fast-Twitch)</span>
+                    <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                      <Brain className="w-4 h-4" />
+                      <span>Stage 3: NVIDIA DeepSeek (Order Flow Reasoning)</span>
                     </div>
-                    <Badge variant="purple" size="sm">Sub-200ms Decision Gate</Badge>
+                    <Badge variant="emerald" size="sm">NVIDIA NIM Chain-of-Thought</Badge>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                     <div>
-                      <label className="text-slate-400 block mb-1">Jev Model</label>
+                      <label className="text-slate-400 block mb-1">Reasoning Model</label>
                       <select
-                        value={localConfig.typeSafeJev?.model || 'jev-latest'}
+                        value={localConfig.typeSafeJev?.model || 'deepseek-ai/deepseek-r1'}
                         onChange={(e) =>
                           setLocalConfig({
                             ...localConfig,
                             typeSafeJev: {
                               model: e.target.value,
-                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://api.typesafe.ai/v1/systemone',
+                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://integrate.api.nvidia.com/v1',
                               apiKey: localConfig.typeSafeJev?.apiKey || '',
                               active: localConfig.typeSafeJev?.active ?? true,
                             },
@@ -242,12 +243,14 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                         }
                         className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold"
                       >
-                        <option value="jev-latest">jev-latest (TypeSafe System One Flagship)</option>
-                        <option value="jev-1.13.0">jev-1.13.0 (Calibrated Stable)</option>
+                        <option value="deepseek-ai/deepseek-r1">deepseek-ai/deepseek-r1 (Reasoning Flagship)</option>
+                        <option value="nvidia/nemotron-3.5-lightning-30b-a3b">nvidia/nemotron-3.5-lightning-30b-a3b (Ultra-Fast)</option>
+                        <option value="moonshotai/kimi-k2.6">moonshotai/kimi-k2.6 (Long-Context CoT)</option>
+                        <option value="nvidia/nemotron-3-super-120b-a12b">nvidia/nemotron-3-super-120b-a12b (Quant Flagship)</option>
                       </select>
                     </div>
                     <div>
-                      <label className="text-slate-400 block mb-1">TypeSafe API Key</label>
+                      <label className="text-slate-400 block mb-1">NVIDIA / DeepSeek API Key</label>
                       <input
                         type="password"
                         value={localConfig.typeSafeJev?.apiKey || ''}
@@ -255,14 +258,14 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                           setLocalConfig({
                             ...localConfig,
                             typeSafeJev: {
-                              model: localConfig.typeSafeJev?.model || 'jev-latest',
-                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://api.typesafe.ai/v1/systemone',
+                              model: localConfig.typeSafeJev?.model || 'deepseek-ai/deepseek-r1',
+                              endpointUrl: localConfig.typeSafeJev?.endpointUrl || 'https://integrate.api.nvidia.com/v1',
                               apiKey: e.target.value,
                               active: localConfig.typeSafeJev?.active ?? true,
                             },
                           })
                         }
-                        placeholder="ts-..."
+                        placeholder="nvapi-... or sk-..."
                         className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100"
                       />
                     </div>

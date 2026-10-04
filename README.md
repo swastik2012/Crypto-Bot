@@ -1,9 +1,9 @@
 # 🤖 Crypto Bot — AetherTrade AI | Autonomous Dual-Brain Multi-Agent AI Crypto Trading Bot
 
-> **The #1 Open-Source Autonomous AI Crypto Trading Bot & Consensus Terminal** powered by **TypeSafe AI (Jev System 1 Fast-Twitch Intuition)**, **Google Gemini Vision**, **NVIDIA NIM (DeepSeek V4 Pro)**, and **OpenAI GPT-4o**. Features **Sub-200ms Fast-Twitch Calibration**, **Real-Time Chart Pattern Vision**, **CoinDesk/Cointelegraph News Sentiment**, **10,000 Monte Carlo Quant Proof**, **TradingView Charting**, **Live API Telemetry**, and a **Virtual Paper Trading Engine**.
+> **The #1 Open-Source Autonomous AI Crypto Trading Bot & Consensus Terminal** powered by **NVIDIA NIM (DeepSeek Reasoning & Order Flow)**, **Google Gemini Vision**, **NVIDIA NIM Quantitative Stress Engine**, and **OpenAI Risk Guard**. Features **Derivatives Order Flow Calibration**, **Continuous AI Trade Learning Engine**, **Real-Time Chart Pattern Vision**, **CoinDesk/Cointelegraph News Sentiment**, **10,000 Monte Carlo Quant Proof**, **TradingView Charting**, **Live API Telemetry**, and a **Virtual Paper Trading Engine**.
 
 [![Crypto Bot](https://img.shields.io/badge/Crypto_Bot-v2.6_Dual--Brain_Autonomous-00F0FF?style=for-the-badge&logo=bitcoin&logoColor=white)](https://github.com/swastik2012/Crypto-Bot)
-[![TypeSafe AI](https://img.shields.io/badge/TypeSafe_AI-Jev_System_1-FF6B6B?style=for-the-badge&logo=lightning&logoColor=white)](https://typesafe.ai)
+[![NVIDIA NIM](https://img.shields.io/badge/NVIDIA_NIM-DeepSeek_R1-76B900?style=for-the-badge&logo=nvidia&logoColor=white)](https://build.nvidia.com)
 [![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?style=for-the-badge&logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black)](https://react.dev/)
@@ -38,10 +38,10 @@
 Rather than relying on basic moving average crossovers or hallucinatory single-prompt LLMs, this crypto bot operates an **institutional 6-Stage Dual-Brain Multi-Agent Consensus Debate**:
 1. **Gemini Vision**: Scans live candlestick charts, multi-timeframe demand/supply zones, and geometric patterns.
 2. **NVIDIA News Sentiment**: Scrapes real-time headlines from **CoinDesk**, **Cointelegraph**, and **CryptoSlate** to prevent trading against macro headwinds.
-3. **TypeSafe AI (Jev System 1)**: Sub-200ms fast-twitch intuition model evaluating typed primitives (`execution_bias`, `toxic_flow_detected`, `market_regime`, `execution_urgency`) establishing the prior probability distribution.
-4. **NVIDIA DeepSeek Quant**: Executes **10,000 Monte Carlo path simulations** conditioned on Jev's fast-twitch prior and news-adjusted volatility to verify mathematical expectancy ($R:R \ge 2.0$).
-5. **OpenAI Risk Guard**: Acts as Devil's Advocate, cross-examining Jev's toxic flow flags and auditing for false breakout traps and liquidity hunts.
-6. **Gemini Arbiter**: Reconciles the System 1 fast-twitch priors with the System 2 consensus desk to synthesize exact execution levels (Entry, Take-Profit 1, Take-Profit 2, Stop-Loss).
+3. **NVIDIA DeepSeek (Reasoning & Order Flow)**: Microstructure reasoning engine evaluating Binance perpetual funding rates, Open Interest delta, and Cumulative Volume Delta (CVD) to spot predatory sweeps.
+4. **NVIDIA NIM Quant**: Executes **10,000 Monte Carlo path simulations** conditioned on DeepSeek priors and news-adjusted volatility to verify mathematical expectancy ($R:R \ge 2.0$).
+5. **OpenAI Risk Guard / NVIDIA Failover**: Acts as Devil's Advocate, cross-examining toxic flow flags and auditing for false breakout traps and liquidity hunts.
+6. **Gemini Arbiter**: Reconciles the System 1 fast reasoning priors with the System 2 consensus desk to synthesize exact execution levels (Entry, Take-Profit 1, Take-Profit 2, Stop-Loss).
 
 Whether you are looking for an **automated crypto trading bot**, a **Bitcoin trading bot**, or an algorithmic **paper trading simulator**, AetherTrade AI provides a complete institutional trading desk in a single, easy-to-run repository.
 
@@ -51,11 +51,11 @@ Whether you are looking for an **automated crypto trading bot**, a **Bitcoin tra
 
 | Feature / Capability | Traditional Grid / DCA Bot | Single-Prompt AI Bot | ⚡ AetherTrade AI Crypto Bot |
 | :--- | :---: | :---: | :---: |
-| **System 1 Fast-Twitch Intuition** | ❌ None | ❌ None (high latency) | ✅ **TypeSafe AI (Jev) Sub-200ms Typed Model** |
+| **System 1 Fast Reasoning & Order Flow** | ❌ None | ❌ None (high latency) | ✅ **NVIDIA DeepSeek R1 / Nemotron CoT** |
 | **Technical Vision Analysis** | ❌ None (lagging math only) | ❌ Text-only prompts | ✅ **Gemini Vision Chart Pattern Recognition** |
 | **Live News Sentiment Scraping** | ❌ None | ❌ Outdated knowledge | ✅ **Real-Time CoinDesk, Cointelegraph & CryptoSlate** |
 | **Quantitative Monte Carlo Proof** | ❌ None | ❌ None | ✅ **10,000-Path Mathematical Simulation Engine** |
-| **False Breakout / Trap Auditing** | ❌ Trapped by sudden wicks | ❌ Prone to hallucinations | ✅ **OpenAI Risk Guard Devil's Advocate** |
+| **False Breakout / Trap Auditing** | ❌ Trapped by sudden wicks | ❌ Prone to hallucinations | ✅ **OpenAI Risk Guard / NVIDIA Failover** |
 | **Dual-Brain Multi-Agent Consensus** | ❌ Single static rule | ❌ Single LLM | ✅ **6-Stage Dual-Brain (System 1 + System 2)** |
 | **Hands-Free Auto-Trading Loop** | ⚠️ Blindly executes grids | ❌ Manual prompting | ✅ **Autonomous 30-Min Cycles with 5s Trailing SL** |
 | **Virtual Paper Trading Portfolio** | ⚠️ Often requires API keys | ❌ None | ✅ **$10k Virtual Capital Engine with Real PnL Audit** |
@@ -68,9 +68,9 @@ Whether you are looking for an **automated crypto trading bot**, a **Bitcoin tra
 ### 1. 🧠 6-Stage Dual-Brain Multi-Agent LangGraph Consensus Engine
 - **Stage 1: Google Gemini Vision** — Ingests live candlestick chart structures, detecting ascending triangles, double bottoms, order blocks, and RSI divergences with 90%+ confidence.
 - **Stage 2: NVIDIA NIM News Sentiment** — Scrapes live RSS feeds from **CoinDesk**, **Cointelegraph**, and **CryptoSlate**, synthesizes macro catalysts, and extracts a news sentiment score (0–100%).
-- **Stage 3: TypeSafe AI Jev (System 1 Intuition)** — Sub-200ms fast-twitch inference over typed questions (`execution_bias`, `market_regime`, `high_probability_edge`, `toxic_flow_detected`, `execution_urgency`, `fast_twitch_conviction`) serving as the Bayesian prior for the trading desk.
-- **Stage 4: NVIDIA NIM DeepSeek Quant (Stress Test)** — Ingests Vision, News Gist, and Jev's System 1 prior distribution, executing **10,000 Monte Carlo path simulations** with news-weighted volatility adjustments.
-- **Stage 5: OpenAI GPT-4o Risk Guard** — Audits false breakout probability, traps, liquidity sweep boundaries, and toxic predatory order flow flagged by Jev System 1.
+- **Stage 3: NVIDIA DeepSeek (Reasoning & Order Flow)** — Microstructure reasoning over Binance perpetual futures funding rates, CVD divergence, and liquidation clusters.
+- **Stage 4: NVIDIA NIM Quant (Stress Test)** — Ingests Vision, News Gist, and DeepSeek prior distribution, executing **10,000 Monte Carlo path simulations** with news-weighted volatility adjustments.
+- **Stage 5: OpenAI GPT-4o / NVIDIA Risk Guard** — Audits false breakout probability, traps, liquidity sweep boundaries, and toxic predatory order flow.
 - **Stage 6: Google Gemini Arbiter** — Synthesizes the final unified verdict (`STRONG BUY`, `BUY`, `HOLD`, `SELL`), entry price, Take-Profit 1 (+4.2%), Take-Profit 2 (+7.8%), and Stop-Loss (-2.2%), computing the Dual-Brain Alignment score.
 
 ### 2. 📊 TradingView Advanced Chart & Holographic HUD
@@ -79,7 +79,7 @@ Whether you are looking for an **automated crypto trading bot**, a **Bitcoin tra
 
 ### 3. 🤖 30-Minute Autonomous AI Auto-Trader Loop
 - Executes automated 6-stage consensus cycles every 30 minutes across monitored crypto assets (`BTC/USDT`, `ETH/USDT`, `SOL/USDT`, `AVAX/USDT`, `DOGE/USDT`).
-- Employs a pre-flight Jev System 1 filter to instantly drop toxic flow setups before running expensive deep LLM stages.
+- Employs a pre-flight order flow and volatility filter to instantly drop toxic flow setups before running expensive deep LLM stages.
 - Background 5-second tick loop continuously audits open positions against live Binance prices, automatically executing Take-Profit 1 (50% scale-out with stop locked to break-even), Take-Profit 2 (runner), or Stop-Loss exits.
 
 ### 4. 💰 Virtual Paper Trading Engine (PnL Auditor)
@@ -88,7 +88,7 @@ Whether you are looking for an **automated crypto trading bot**, a **Bitcoin tra
 
 ### 5. 📡 Real-Time Agent Telemetry & Diagnostics Console
 - Real-time live call stream of every outbound LLM API call with round-trip latency (ms), HTTP status codes, and expandable JSON request/response drawers.
-- Provider filters (`All`, `Gemini`, `NVIDIA`, `OpenAI`, `TypeSafe (Jev)`, `News`, `Errors`) and 1-click buffer purge.
+- Provider filters (`All`, `Gemini`, `NVIDIA`, `OpenAI`, `NVIDIA (DeepSeek)`, `News`, `Errors`) and 1-click buffer purge.
 
 ---
 
@@ -113,15 +113,14 @@ flowchart TD
     subgraph Consensus ["🤖 6-Stage Dual-Brain Multi-Agent Pipeline"]
         S1["Stage 1: Gemini Vision (Chart Technicals)"]
         S2["Stage 2: NVIDIA News Sentiment (CoinDesk/Cointelegraph)"]
-        S3["Stage 3: TypeSafe AI Jev (System 1 Fast-Twitch Intuition)"]
-        S4["Stage 4: DeepSeek Quant (10k Monte Carlo Simulations)"]
-        S5["Stage 5: OpenAI GPT-4o Risk Guard (False Breakout & Toxic Flow)"]
+        S3["Stage 3: NVIDIA DeepSeek (Reasoning & Order Flow)"]
+        S4["Stage 4: NVIDIA Quant (10k Monte Carlo Simulations)"]
+        S5["Stage 5: OpenAI / NVIDIA Risk Guard (False Breakout & Traps)"]
         S6["Stage 6: Gemini Arbiter (Dual-Brain Reconciled Verdict & TP/SL)"]
     end
 
     TVChart --> Resolver
-    Scheduler --> S3
-    S3 -.->|Pre-Flight Filter| S1
+    Scheduler --> S1
     S1 --> S2 --> S3 --> S4 --> S5 --> S6
     S6 --> PaperEngine
     S1 & S2 & S3 & S4 & S5 & S6 --> TelemetryStore

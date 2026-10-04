@@ -295,8 +295,50 @@ async def run_stage4_openai_risk(
         except Exception:
             pass
 
+    # 2. Secondary Failover: NVIDIA NIM Risk Analysis
+    if not parsed_successfully and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
+        try:
+            nv_headers = {
+                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            nv_payload = {
+                "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.2,
+                "max_tokens": 600,
+            }
+            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.5)) as client:
+                resp = await client.post(
+                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+                    headers=nv_headers,
+                    json=nv_payload,
+                )
+                if resp.status_code == 200:
+                    raw_content = resp.json()["choices"][0]["message"]["content"]
+                    clean_text = raw_content
+                    if "{" in clean_text and "}" in clean_text:
+                        first_b = clean_text.find("{")
+                        last_b = clean_text.rfind("}")
+                        parsed = json.loads(clean_text[first_b:last_b+1])
+                        safety_score = float(parsed.get("safety_score", safety_score))
+                        false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                        order_block_status = parsed.get("order_block_status", order_block_status)
+                        macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                        critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                        critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                        model_name = "nvidia/nemotron-3.5-lightning-30b-a3b"
+                        parsed_successfully = True
+        except Exception:
+            pass
+
+    from backend.services.gemini_guard import GeminiQuotaGuard
+
     # 3. Tertiary Failover: Google Gemini 3.7 Flash
-    if not parsed_successfully and settings.GEMINI_API_KEY:
+    if not parsed_successfully and settings.GEMINI_API_KEY and GeminiQuotaGuard.is_available():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
@@ -322,7 +364,10 @@ async def run_stage4_openai_risk(
                 model_name = gemini_model
                 parsed_successfully = True
         except Exception as e:
-            print(f"[Stage 4 LLM Risk Notice]: {e}")
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                GeminiQuotaGuard.mark_exhausted(str(e))
+            else:
+                print(f"[Stage 4 LLM Risk Notice]: {e}")
 
     # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime
     proposed_dir = stage1.initial_thesis.get("direction", "NEUTRAL") if stage1.initial_thesis else "NEUTRAL"

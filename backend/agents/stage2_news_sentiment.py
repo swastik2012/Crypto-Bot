@@ -185,7 +185,7 @@ async def run_stage2_news_sentiment(
                 "temperature": 0.1,
                 "max_tokens": 1000,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -206,8 +206,10 @@ async def run_stage2_news_sentiment(
         except Exception:
             pass
 
-    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash on the live news stream
-    if not parsed_successfully and settings.GEMINI_API_KEY:
+    from backend.services.gemini_guard import GeminiQuotaGuard
+
+    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash on the live news stream if available
+    if not parsed_successfully and settings.GEMINI_API_KEY and GeminiQuotaGuard.is_available():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
@@ -232,7 +234,10 @@ async def run_stage2_news_sentiment(
                 source_breakdown = parsed.get("source_sentiment_breakdown", source_breakdown)
                 parsed_successfully = True
         except Exception as e:
-            print(f"[Stage 2 LLM Synthesis Notice]: {e}")
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                GeminiQuotaGuard.mark_exhausted(str(e))
+            else:
+                print(f"[Stage 2 LLM Synthesis Notice]: {e}")
 
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:

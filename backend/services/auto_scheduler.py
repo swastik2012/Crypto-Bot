@@ -253,23 +253,24 @@ class AutoTradingScheduler:
 
                 # ========================================================
                 # 🤖 DUAL-BRAIN AI CONSENSUS DECISION ENGINE:
-                # System 1 Fast-Twitch Reflex (TypeSafe Jev) + System 2 (NVIDIA + OpenAI + Gemini Arbiter)
+                # Stage 3: NVIDIA DeepSeek Reasoning + System 2 (NVIDIA Quant + OpenAI + Gemini Arbiter)
                 # ========================================================
-                jev_gate_pass = True
-                if response.stage_jev:
-                    if response.stage_jev.toxic_flow_detected.value:
-                        jev_gate_pass = False
-                        print(f"[AutoTrader Jev Gate] {pair} entry blocked: System 1 detected toxic predatory flow.")
-                    elif not response.stage_jev.high_probability_edge.value:
-                        jev_gate_pass = False
-                        print(f"[AutoTrader Jev Gate] {pair} entry blocked: System 1 found no statistically significant edge.")
+                deepseek_stage = getattr(response, "stage_deepseek", None) or getattr(response, "stage_jev", None)
+                deepseek_gate_pass = True
+                if deepseek_stage:
+                    if getattr(deepseek_stage.toxic_flow_detected, "value", False):
+                        deepseek_gate_pass = False
+                        print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek detected toxic predatory flow.")
+                    elif not getattr(deepseek_stage.high_probability_edge, "value", True):
+                        deepseek_gate_pass = False
+                        print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek found no statistically significant edge.")
 
                 can_execute = (
                     confidence >= 78.0 and
                     (is_buy or is_short) and
                     not already_open and
                     not portfolio_full and
-                    jev_gate_pass
+                    deepseek_gate_pass
                 )
 
                 if can_execute:
@@ -333,9 +334,9 @@ class AutoTradingScheduler:
                         max_slots = getattr(paper_engine, "max_concurrent_positions", 5)
                         skip_reason = f"PORTFOLIO_FULL ({len(paper_engine.open_positions)}/{max_slots} active positions occupied)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Portfolio full ({len(paper_engine.open_positions)}/{max_slots} maximum concurrent slots occupied).")
-                    elif not jev_gate_pass:
-                        skip_reason = "JEV_SYSTEM_ONE_VETO (toxic flow or no statistical edge)"
-                        print(f"[AutoTrader Guard] Skipped {pair}: Blocked by System 1 Jev reflex gate.")
+                    elif not deepseek_gate_pass:
+                        skip_reason = "DEEPSEEK_ORDER_FLOW_VETO (toxic flow or lack of statistical edge)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Blocked by NVIDIA DeepSeek Order Flow reasoning gate.")
                     elif confidence < 78.0:
                         skip_reason = f"LOW_CONFIDENCE ({confidence:.1f}% < 78.0%)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Confidence {confidence:.1f}% below minimum 78.0% threshold.")

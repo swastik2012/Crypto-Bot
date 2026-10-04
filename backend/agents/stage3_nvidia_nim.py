@@ -31,8 +31,8 @@ async def run_stage3_nvidia_nim(
 ) -> Tuple[Stage3NvidiaNimResult, DebateMessageSchema]:
     """
     Stage 4: NVIDIA NIM Quantitative Reasoning & Monte Carlo Engine
-    - Ingests Stage 1 (Gemini Vision), Stage 2 (News Sentiment), and Stage 3 (TypeSafe Jev System 1 Reflex).
-    - Executes 10,000 Monte Carlo path simulations weighted by news catalyst scores and Jev fast-twitch probabilities.
+    - Ingests Stage 1 (Gemini Vision), Stage 2 (News Sentiment), and Stage 3 (NVIDIA DeepSeek Order Flow Reasoning).
+    - Executes 10,000 Monte Carlo path simulations weighted by news catalyst scores and DeepSeek reasoning probabilities.
     - Sizes capital dynamically using Fractional Kelly Criterion (Half-Kelly) scaled by volatility regime and portfolio heat.
     - Validates Mathematical Proof of Risk/Reward and liquidity depth.
     """
@@ -393,7 +393,7 @@ async def run_stage3_nvidia_nim(
                 "temperature": 0.1,
                 "max_tokens": 1000,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(4.0, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -414,8 +414,10 @@ async def run_stage3_nvidia_nim(
         except Exception:
             pass
 
-    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash for quantitative synthesis
-    if not parsed_successfully and settings.GEMINI_API_KEY:
+    from backend.services.gemini_guard import GeminiQuotaGuard
+
+    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash if quota available
+    if not parsed_successfully and settings.GEMINI_API_KEY and GeminiQuotaGuard.is_available():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
@@ -440,7 +442,10 @@ async def run_stage3_nvidia_nim(
                 math_proof = parsed.get("mathematical_proof", math_proof)
                 parsed_successfully = True
         except Exception as e:
-            print(f"[Stage 3 LLM Quant Notice]: {e}")
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                GeminiQuotaGuard.mark_exhausted(str(e))
+            else:
+                print(f"[Stage 3 LLM Quant Notice]: {e}")
 
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:

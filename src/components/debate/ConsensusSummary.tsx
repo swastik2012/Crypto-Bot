@@ -347,8 +347,8 @@ export const ConsensusSummary: React.FC<ConsensusSummaryProps> = ({
             <div className="flex flex-wrap items-center justify-center gap-1.5 sm:gap-2 font-bold">
               <span className="text-blue-600 dark:text-blue-400">Gemini {agentConsensusMatrix.geminiScore}%</span>
               <span>•</span>
-              <span className="text-indigo-600 dark:text-indigo-400">
-                ⚡ Jev (Sys 1) {agentConsensusMatrix.systemOneJevScore ?? 86}%
+              <span className="text-emerald-600 dark:text-emerald-400">
+                ⚡ DeepSeek (Sys 1) {agentConsensusMatrix.systemOneJevScore ?? 86}%
               </span>
               <span>•</span>
               <span className="text-[#598c00] dark:text-[#76B900]">NVIDIA {agentConsensusMatrix.nvidiaScore}%</span>

@@ -174,8 +174,10 @@ async def run_stage1_gemini_vision(
         timeframe=timeframe,
     )
 
-    # If API key is present, invoke Google Gemini 3.7 Flash model dynamically
-    if effective_key:
+    from backend.services.gemini_guard import GeminiQuotaGuard
+
+    # If API key is present and Gemini quota is active, invoke Google Gemini 3.7 Flash
+    if effective_key and GeminiQuotaGuard.is_available():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
@@ -289,7 +291,10 @@ async def run_stage1_gemini_vision(
                 )
                 return result, debate_msg
         except Exception as e:
-            print(f"[Stage 1 Gemini Warning] LLM call fallback: {e}")
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                GeminiQuotaGuard.mark_exhausted(str(e))
+            else:
+                print(f"[Stage 1 Gemini Warning] LLM call fallback: {e}")
 
     # Dynamic High-Fidelity Technical Calculation based on live market metrics & Fibonacci pivots
     p = current_price or 78150.0

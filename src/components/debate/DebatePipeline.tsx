@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Layers,
   Newspaper,
-  Zap,
+  Brain,
   Cpu,
   ShieldAlert,
   Sparkles,
@@ -54,12 +54,12 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
     },
     {
       id: 3,
-      title: 'Stage 3: System 1',
-      subtitle: 'TypeSafe Jev Fast Reflex',
-      icon: Zap,
-      color: 'text-indigo-600 dark:text-indigo-400',
-      borderColor: 'border-indigo-500/50 dark:border-indigo-500/30',
-      activeBg: 'bg-indigo-500/15 dark:bg-indigo-500/10',
+      title: 'Stage 3: DeepSeek',
+      subtitle: 'NVIDIA Reasoning & Order Flow',
+      icon: Brain,
+      color: 'text-emerald-600 dark:text-emerald-400',
+      borderColor: 'border-emerald-500/50 dark:border-emerald-500/30',
+      activeBg: 'bg-emerald-500/15 dark:bg-emerald-500/10',
     },
     {
       id: 4,
@@ -101,7 +101,7 @@ export const DebatePipeline: React.FC<DebatePipelineProps> = ({
               6-Stage Dual-Brain AI Consensus Pipeline
             </span>
             <Badge variant="purple" size="sm">
-              ⚡ System 1 (Jev) + System 2 Active
+              ⚡ System 1 (DeepSeek) + System 2 Active
             </Badge>
           </div>
 

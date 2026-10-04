@@ -24,25 +24,26 @@ class Settings(BaseSettings):
     GEMINI_API_KEY: Optional[str] = os.getenv("GEMINI_API_KEY", "")
     NVIDIA_API_KEY: Optional[str] = os.getenv("NVIDIA_API_KEY", "")
     OPENAI_API_KEY: Optional[str] = os.getenv("OPENAI_API_KEY", "")
-    TYPESAFE_API_KEY: Optional[str] = os.getenv("TYPESAFE_API_KEY", os.getenv("JEV_API_KEY", ""))
+    DEEPSEEK_API_KEY: Optional[str] = os.getenv("DEEPSEEK_API_KEY", os.getenv("NVIDIA_API_KEY", ""))
 
     # Aliases & Model Settings
     NVIDIA_NIM_API_KEY: Optional[str] = os.getenv("NVIDIA_API_KEY", "")
-    JEV_API_KEY: Optional[str] = os.getenv("TYPESAFE_API_KEY", os.getenv("JEV_API_KEY", ""))
-    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning")
+    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
+    NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "deepseek-ai/deepseek-r1")
+    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k2.6")
+    NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "nvidia/nemotron-3-super-120b-a12b")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
-    JEV_MODEL: str = os.getenv("JEV_MODEL", "jev-latest")
-    JEV_ENDPOINT: str = os.getenv("JEV_ENDPOINT", "https://api.typesafe.ai/v1/systemone")
 
     # Model Defaults
     DEFAULT_GEMINI_MODEL: str = "gemini-3.7-flash"
-    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
+    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
-    DEFAULT_JEV_MODEL: str = "jev-latest"
-    DEFAULT_JEV_ENDPOINT: str = "https://api.typesafe.ai/v1/systemone"
+    DEFAULT_DEEPSEEK_MODEL: str = "deepseek-ai/deepseek-r1"
+    DEFAULT_KIMI_MODEL: str = "moonshotai/kimi-k2.6"
     
     # Paper Trading Defaults
     DEFAULT_STARTING_BALANCE: float = 10000.0

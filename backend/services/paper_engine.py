@@ -512,7 +512,8 @@ class VirtualPaperEngine:
                 pnl_usd=net_realized_pnl,
                 pnl_pct=pnl_pct * 100.0,
                 exit_reason=reason,
-                agent_rationale=f"Position opened at ${pos.entry_price:,.2f} exited via {reason}. Net PnL (after fees & TDS): ${net_realized_pnl:,.2f}."
+                duration_seconds=duration_sec,
+                agent_rationale=getattr(pos, "agent_rationale", f"Position opened at ${pos.entry_price:,.2f} exited via {reason}. Net PnL (after fees & TDS): ${net_realized_pnl:,.2f}."),
             )
         except Exception as e:
             print(f"[PaperEngine] Learning memory record notice: {e}")

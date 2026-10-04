@@ -73,7 +73,7 @@ async def run_tests():
     print(f"  ✓ Stage 1 (Gemini Vision): {len(analysis_res.stage1.patterns)} patterns, {len(analysis_res.stage1.key_levels)} key S/R levels")
     print(f"  ✓ Stage 2 (NVIDIA News): Sentiment = {analysis_res.stage2.sentiment_label}, Score = {analysis_res.stage2.sentiment_score}%")
     assert analysis_res.stage_jev is not None, "Stage Jev System One must not be None"
-    print(f"  ✓ Stage 3 (TypeSafe AI Jev - System 1): Bias = {analysis_res.stage_jev.execution_bias.value} ({analysis_res.stage_jev.execution_bias.confidence*100:.0f}%), Regime = {analysis_res.stage_jev.market_regime.value}, Edge = {analysis_res.stage_jev.high_probability_edge.value}, Latency = {analysis_res.stage_jev.latency_ms}ms")
+    print(f"  ✓ Stage 3 (NVIDIA DeepSeek - System 1): Bias = {analysis_res.stage_jev.execution_bias.value} ({analysis_res.stage_jev.execution_bias.confidence*100:.0f}%), Regime = {analysis_res.stage_jev.market_regime.value}, Edge = {analysis_res.stage_jev.high_probability_edge.value}, Latency = {analysis_res.stage_jev.latency_ms}ms")
     print(f"  ✓ Stage 4 (NVIDIA Quant): Monte Carlo Win Rate = {analysis_res.stage3.monte_carlo_win_rate}%, Stress Score = {analysis_res.stage3.stress_test_score}/100, R:R = {analysis_res.stage3.risk_reward_ratio}")
     print(f"  ✓ Stage 5 (Risk Officer): Trap Risk = {analysis_res.stage4.liquidity_sweep_risk}, Safety Score = {analysis_res.stage4.safety_score}/100")
     print(f"  ✓ Stage 6 (Gemini Arbiter): Verdict = {analysis_res.stage5.consensus_signal.value}, Conviction = {analysis_res.stage5.consensus_confidence}%, TP1 = ${analysis_res.stage5.execution_plan.get('take_profit_1')}")

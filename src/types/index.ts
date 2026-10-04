@@ -130,7 +130,7 @@ export interface Stage2NewsSentimentOutput {
   sourceSentimentBreakdown: Record<string, string>;
 }
 
-// Stage 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
+// Stage 3: NVIDIA DeepSeek — System One Fast Reasoning & Order Flow Gate
 export interface JevQuestionOutput {
   type: string; // 'choice' | 'score' | 'noul'
   value: any; // string | boolean | number
@@ -150,8 +150,54 @@ export interface StageJevSystemOneOutput {
   executionUrgency: JevQuestionOutput;
   toxicFlowDetected: JevQuestionOutput;
   fastTwitchConviction: JevQuestionOutput;
+  chainOfThought?: string;
+  deepseekReasoning?: string;
+  orderFlowImbalance?: number;
+  predatoryLiquidationRisk?: string;
   rawResults?: Record<string, any>;
   summary: string;
+}
+
+export type StageDeepSeekReasoningOutput = StageJevSystemOneOutput;
+
+// ========================================================
+// 🧠 Continuous AI Trade Learner & Evolving Playbook Types
+// ========================================================
+export interface EvolvingTradingRule {
+  rule_id: string;
+  rule_text: string;
+  rule_type: 'AVOID_TRAP' | 'REPLICATE_EDGE' | 'STOP_DISCIPLINE';
+  target_asset: string;
+  win_rate_impact: string;
+  sample_size: number;
+  created_at: number;
+}
+
+export interface AITradeAuditPostMortem {
+  trade_id: string;
+  symbol: string;
+  side: string;
+  entry_price: number;
+  exit_price: number;
+  pnl_usd: number;
+  pnl_pct: number;
+  outcome: 'WIN' | 'LOSS' | 'BREAKEVEN';
+  exit_reason: string;
+  root_cause_analysis: string;
+  cloud_ai_performance_verdict?: string;
+  actionable_rule: string;
+  rule_category: string;
+  confidence_adjustment?: number;
+  analyzed_by_model: string;
+  timestamp: number;
+}
+
+export interface AIPlaybookSummary {
+  total_trades_analyzed: number;
+  winning_rules_count: number;
+  failure_traps_count: number;
+  active_playbook_rules: EvolvingTradingRule[];
+  agent_accuracy_scorecard: Record<string, number>;
 }
 
 // Stage 4: NVIDIA NIM Quantitative Reasoning & Monte Carlo (Ingests Stages 1-3)
@@ -259,7 +305,7 @@ export interface Stage5GeminiArbiterOutput {
 export interface DebateMessage {
   id: string;
   stageNumber: 1 | 2 | 3 | 4 | 5 | 6;
-  agentId: 'gemini-vision' | 'nvidia-news' | 'typesafe-jev' | 'nvidia-nim' | 'openai-risk' | 'gemini-arbiter';
+  agentId: 'gemini-vision' | 'nvidia-news' | 'nvidia-deepseek' | 'typesafe-jev' | 'nvidia-nim' | 'openai-risk' | 'gemini-arbiter';
   agentName: string;
   agentBadge: string;
   avatarColor: string;
@@ -314,6 +360,12 @@ export interface AgentConfigState {
     model: string;
     endpointUrl: string;
     temperature: number;
+    apiKey: string;
+    active: boolean;
+  };
+  nvidiaDeepSeek?: {
+    model: string;
+    endpointUrl: string;
     apiKey: string;
     active: boolean;
   };

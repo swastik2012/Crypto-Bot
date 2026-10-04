@@ -21,6 +21,7 @@ import {
   ShieldAlert,
   AlertTriangle,
   Info,
+  Brain,
 } from 'lucide-react';
 import type { CryptoAsset, MacroCalendarStatus } from '../../types';
 import { Badge } from '../common/Badge';
@@ -34,6 +35,7 @@ interface NavbarProps {
   assets: CryptoAsset[];
   onSelectAsset: (asset: CryptoAsset) => void;
   onOpenConfig: () => void;
+  onOpenLearningPlaybook?: () => void;
   isAnalyzing: boolean;
   paperBalance?: number;
   paperPnL?: number;
@@ -53,6 +55,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   assets,
   onSelectAsset,
   onOpenConfig,
+  onOpenLearningPlaybook,
   isAnalyzing,
   paperBalance = 10000,
   paperPnL = 4.8,
@@ -547,6 +550,20 @@ export const Navbar: React.FC<NavbarProps> = ({
             </Badge>
           )}
 
+          {/* AI Trade Learner Button (Desktop) */}
+          {onOpenLearningPlaybook && (
+            <motion.button
+              whileHover={{ scale: 1.04 }}
+              whileTap={{ scale: 0.96 }}
+              onClick={onOpenLearningPlaybook}
+              className="hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 sm:py-2 rounded-xl bg-gradient-to-r from-purple-500/15 to-indigo-500/15 hover:from-purple-500/25 hover:to-indigo-500/25 text-slate-800 dark:text-slate-100 border border-purple-500/30 font-mono text-xs font-bold transition-all shadow-xs shrink-0 cursor-pointer"
+              title="Continuous AI Trade Learner & Evolving Playbook"
+            >
+              <Brain className="w-3.5 h-3.5 text-purple-400 shrink-0" />
+              <span className="shrink-0 hidden xl:inline">AI Learner</span>
+            </motion.button>
+          )}
+
           {/* Agent Parameters & Settings Button (Desktop - available in bottom dock on mobile) */}
           <motion.button
             whileHover={{ scale: 1.04 }}
@@ -579,8 +596,8 @@ export const Navbar: React.FC<NavbarProps> = ({
       </div>
 
       {/* Floating Mobile Bottom Navigation Dock (Visible on screens < md) */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-3 pb-safe pt-1.5 bg-[#0B0F19] dark:bg-[#070A11] border-t border-slate-300/20 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
-        <div className="max-w-md mx-auto grid grid-cols-5 items-center gap-1 font-mono text-[10px]">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 px-2 pb-safe pt-1.5 bg-[#0B0F19] dark:bg-[#070A11] border-t border-slate-300/20 dark:border-white/10 shadow-[0_-8px_30px_rgba(0,0,0,0.5)]">
+        <div className="max-w-md mx-auto grid grid-cols-6 items-center gap-1 font-mono text-[10px]">
           
           {/* 1. Terminal View */}
           <button
@@ -613,7 +630,21 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="mt-0.5 tracking-tight font-medium">Telemetry</span>
           </button>
 
-          {/* 3. 30m Auto-Trader Controller */}
+          {/* 3. AI Learner Playbook */}
+          {onOpenLearningPlaybook ? (
+            <button
+              onClick={onOpenLearningPlaybook}
+              className="flex flex-col items-center justify-center py-1.5 rounded-xl text-purple-400 hover:text-purple-300 transition-all cursor-pointer"
+              title="Autonomous AI Trade Learner"
+            >
+              <div className="p-1.5 rounded-xl bg-purple-500/15 text-purple-300">
+                <Brain className="w-4 h-4" />
+              </div>
+              <span className="mt-0.5 tracking-tight font-medium">Learner</span>
+            </button>
+          ) : <div />}
+
+          {/* 4. 30m Auto-Trader Controller */}
           {onToggleAutoTrader ? (
             <button
               onClick={onToggleAutoTrader}
@@ -635,7 +666,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             </button>
           ) : <div />}
 
-          {/* 4. Agents Config */}
+          {/* 5. Agents Config */}
           <button
             onClick={onOpenConfig}
             className="flex flex-col items-center justify-center py-1.5 rounded-xl text-slate-400 hover:text-cyan-300 transition-all cursor-pointer"
@@ -646,7 +677,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <span className="mt-0.5 tracking-tight font-medium">Agents</span>
           </button>
 
-          {/* 5. 1-Click Paper Reset */}
+          {/* 6. 1-Click Paper Reset */}
           {onResetPaperAccount ? (
             <button
               onClick={onResetPaperAccount}

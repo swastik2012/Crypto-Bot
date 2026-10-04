@@ -39,7 +39,7 @@ async def run_stage5_gemini_arbiter(
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
-    - Reconciles System 1 (TypeSafe AI Jev Fast-Twitch Reflex) with System 2 Deliberation:
+    - Reconciles System 1 (NVIDIA DeepSeek Fast Reasoning) with System 2 Deliberation:
       Vision (Stage 1), News Sentiment (Stage 2), Quant Proof (Stage 4), Risk Audit (Stage 5), and Derivatives Microstructure.
     - Synthesizes final actionable consensus verdict, confidence score, and execution plan.
     """
@@ -275,8 +275,11 @@ async def run_stage5_gemini_arbiter(
         f"Arbitrate final consensus verdict and synthesize execution plan."
     )
 
-    # If Gemini API Key is present, invoke Gemini LLM for dynamic synthesis
-    if gemini_key and not gemini_key.startswith("AIzaSy***"):
+    from backend.services.gemini_guard import GeminiQuotaGuard
+
+    # If Gemini API Key is present and quota is available, invoke Gemini LLM for dynamic synthesis
+    parsed_arbiter = False
+    if gemini_key and not gemini_key.startswith("AIzaSy***") and GeminiQuotaGuard.is_available():
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
@@ -302,10 +305,56 @@ async def run_stage5_gemini_arbiter(
                 consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
                 summary = parsed.get("executive_summary", summary)
                 invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+                parsed_arbiter = True
             elif veto_active:
                 signal = SignalAction.HOLD
+                parsed_arbiter = True
         except Exception as e:
-            print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
+            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                GeminiQuotaGuard.mark_exhausted(str(e))
+            else:
+                print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
+
+    # Fallback to NVIDIA NIM for consensus arbitration if Gemini is unavailable
+    if not parsed_arbiter and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
+        try:
+            nv_headers = {
+                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            nv_payload = {
+                "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.1,
+                "max_tokens": 400,
+            }
+            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.5)) as client:
+                resp = await client.post(
+                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+                    headers=nv_headers,
+                    json=nv_payload,
+                )
+                if resp.status_code == 200:
+                    raw_content = resp.json()["choices"][0]["message"]["content"]
+                    clean_text = raw_content
+                    if "{" in clean_text and "}" in clean_text:
+                        parsed = json.loads(clean_text[clean_text.find("{"):clean_text.rfind("}")+1])
+                        if "consensus_signal" in parsed and not veto_active:
+                            sig_str = parsed.get("consensus_signal", signal.value).upper()
+                            for sa in SignalAction:
+                                if sa.value == sig_str:
+                                    signal = sa
+                                    break
+                            consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
+                            summary = parsed.get("executive_summary", summary)
+                            invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+                            model_name = "nvidia/nemotron-3.5-lightning-30b-a3b"
+                            parsed_arbiter = True
+        except Exception:
+            pass
 
     open_positions: List[Dict] = account_state.get("open_positions", [])
     equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)

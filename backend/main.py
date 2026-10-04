@@ -8,6 +8,7 @@ from backend.config import settings
 from backend.api.routes_search import router as search_router
 from backend.api.routes_paper import router as paper_router
 from backend.api.routes_analysis import router as analysis_router
+from backend.api.routes_learning import router as learning_router
 from backend.api.websocket_stream import router as ws_router
 from backend.services.auto_scheduler import auto_scheduler
 from backend.services.telemetry import telemetry_service
@@ -44,6 +45,7 @@ app.add_middleware(
 app.include_router(search_router)
 app.include_router(paper_router)
 app.include_router(analysis_router)
+app.include_router(learning_router)
 app.include_router(ws_router)
 
 # Autonomous 30-Minute Trading Engine Endpoints

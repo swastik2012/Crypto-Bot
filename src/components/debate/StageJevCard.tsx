@@ -9,7 +9,9 @@ import {
   ChevronDown,
   ChevronUp,
   Cpu,
-  Flame,
+  BrainCircuit,
+  Activity,
+  Layers,
 } from 'lucide-react';
 import type { StageJevSystemOneOutput } from '../../types';
 import { GlassCard } from '../common/GlassCard';
@@ -22,13 +24,14 @@ interface StageJevCardProps {
 
 export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
   const [showRawDrawer, setShowRawDrawer] = useState(false);
+  const [showCotDrawer, setShowCotDrawer] = useState(true);
 
   // Fallback defaults if data not yet loaded
   const fallbackData: StageJevSystemOneOutput = {
     status: 'completed',
-    agentName: 'TypeSafe AI Jev (System One)',
-    model: 'jev-latest',
-    latencyMs: 118,
+    agentName: 'NVIDIA DeepSeek (Reasoning & Order Flow)',
+    model: 'deepseek-ai/deepseek-r1',
+    latencyMs: 120,
     executionBias: {
       type: 'choice',
       value: 'BUY',
@@ -74,8 +77,10 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
       },
       confidence: 0.84,
     },
+    chainOfThought:
+      "Order flow imbalance indicates institutional spot accumulation. Cumulative Volume Delta (CVD) shows positive divergence while 8h funding rate (+0.015%) remains non-predatory.",
     summary:
-      "⚡ System 1 Fast-Twitch Reflex: BUY (84.0% probability, 88% confidence). Micro-Regime: 'trend_continuation'. High-Probability Edge: CONFIRMED (86% certainty). Urgency: 'Immediate Market Execution' with minimal toxic flow risk.",
+      "⚡ NVIDIA DeepSeek Reasoning: BUY (84.0% conviction). Microstructure Regime: 'trend_continuation'. High-Probability Edge: CONFIRMED. Toxic predatory flow risk: CLEARED.",
   };
 
   const stage = data || fallbackData;
@@ -97,25 +102,28 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
     (stage.toxicFlowDetected?.probabilities?.['true'] ?? (toxicDetected ? 0.65 : 0.15)) * 100
   );
 
+  const modelTag = stage.model || 'deepseek-ai/deepseek-r1';
+  const cot = stage.chainOfThought || stage.deepseekReasoning;
+
   return (
-    <GlassCard className="p-4 sm:p-6 border border-indigo-500/30 dark:border-indigo-500/20 bg-gradient-to-br from-indigo-950/20 via-dark-900/60 to-purple-950/20 shadow-glass-lg space-y-4">
+    <GlassCard className="p-4 sm:p-6 border border-emerald-500/30 dark:border-emerald-500/20 bg-gradient-to-br from-emerald-950/20 via-dark-900/60 to-teal-950/20 shadow-glass-lg space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-200/50 dark:border-white/10 pb-4">
         <div className="flex items-center gap-3">
-          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-indigo-500 to-purple-600 text-white shadow-lg shadow-indigo-500/25">
-            <Zap className="w-5 h-5 animate-pulse" />
+          <div className="p-2.5 rounded-2xl bg-gradient-to-tr from-emerald-500 to-teal-600 text-white shadow-lg shadow-emerald-500/25">
+            <BrainCircuit className="w-5 h-5 animate-pulse" />
           </div>
           <div>
             <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-base sm:text-lg font-bold font-mono text-slate-800 dark:text-slate-100">
-                Stage 3: TypeSafe AI Jev
+                Stage 3: NVIDIA DeepSeek Reasoning
               </h3>
               <Badge variant="cyan" size="sm" className="font-mono">
-                ⚡ System 1 Fast-Twitch Reflex
+                ⚡ Quantitative Order Flow & Traps
               </Badge>
             </div>
             <p className="text-xs font-mono text-slate-500 dark:text-slate-400">
-              Low-Latency Probabilistic Decision Model & Prior Distribution Gate
+              Chain-of-Thought Deduction & Predator Liquidation Audit
             </p>
           </div>
         </div>
@@ -123,22 +131,22 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
         {/* Telemetry Pills */}
         <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
           <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 dark:bg-dark-800 border border-slate-200 dark:border-white/5 text-[11px] font-mono font-bold text-slate-600 dark:text-slate-300">
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
+            <Clock className="w-3.5 h-3.5 text-emerald-400" />
             <span>{stage.latencyMs}ms</span>
-            <span className="text-[9px] text-emerald-500 dark:text-emerald-400 uppercase font-semibold">Sub-200ms</span>
+            <span className="text-[9px] text-emerald-500 dark:text-emerald-400 uppercase font-semibold">NVIDIA NIM</span>
           </div>
-          <Badge variant="purple" size="sm" className="font-mono">
-            {stage.model}
+          <Badge variant="emerald" size="sm" className="font-mono">
+            {modelTag.split('/').pop()}
           </Badge>
         </div>
       </div>
 
-      {/* Dual-Brain Concept Banner */}
-      <div className="p-3 rounded-2xl bg-indigo-500/10 dark:bg-indigo-500/10 border border-indigo-500/20 flex items-start gap-3 text-xs font-mono">
-        <Cpu className="w-4 h-4 text-indigo-400 mt-0.5 shrink-0" />
+      {/* DeepSeek Reasoning Concept Banner */}
+      <div className="p-3 rounded-2xl bg-emerald-500/10 dark:bg-emerald-500/10 border border-emerald-500/20 flex items-start gap-3 text-xs font-mono">
+        <Cpu className="w-4 h-4 text-emerald-400 mt-0.5 shrink-0" />
         <div className="space-y-0.5 text-slate-700 dark:text-slate-300">
-          <span className="font-bold text-indigo-600 dark:text-indigo-400 uppercase">Dual-Brain Architecture:</span>{' '}
-          Jev acts as the fast-twitch intuitive reflex (System 1), computing calibrated probabilities for bias, regime, and edge in milliseconds. These typed priors directly prime System 2 (NVIDIA Monte Carlo & OpenAI Risk Guard) before Gemini Arbiter's final verdict.
+          <span className="font-bold text-emerald-600 dark:text-emerald-400 uppercase">Microstructure Reasoning:</span>{' '}
+          NVIDIA DeepSeek inspects live Binance perpetuals funding rates, open interest shifts, and Cumulative Volume Delta (CVD) to spot retail traps and predatory squeezes before capital is committed.
         </div>
       </div>
 
@@ -146,7 +154,7 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
       <div className="p-3.5 sm:p-4 rounded-2xl bg-slate-100/80 dark:bg-dark-850/80 border border-slate-200/80 dark:border-white/5 space-y-3 font-mono">
         <div className="flex items-center justify-between">
           <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
-            Fast-Twitch Execution Bias
+            Quantitative Directional Bias
           </span>
           <div className="flex items-center gap-2">
             <span
@@ -160,160 +168,131 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
             >
               {biasValue}
             </span>
-            <span className="text-xs text-slate-500 dark:text-slate-400">({biasConfidence}% Confidence)</span>
+            <span className="text-xs text-slate-500 dark:text-slate-400">({biasConfidence}% conviction)</span>
           </div>
         </div>
 
-        {/* Distribution Bar */}
+        {/* Probability Breakdown Bar */}
         <div className="space-y-1.5">
-          <div className="h-3 rounded-full bg-slate-200 dark:bg-dark-700 overflow-hidden flex">
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${buyPct}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="bg-emerald-500 h-full"
-              title={`BUY: ${buyPct}%`}
-            />
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${holdPct}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut', delay: 0.1 }}
-              className="bg-amber-500 h-full"
-              title={`HOLD: ${holdPct}%`}
-            />
-            <motion.div
-              initial={{ width: 0 }}
-              animate={{ width: `${sellPct}%` }}
-              transition={{ duration: 0.5, ease: 'easeOut', delay: 0.2 }}
-              className="bg-rose-500 h-full"
-              title={`SELL: ${sellPct}%`}
-            />
+          <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-dark-700 overflow-hidden flex">
+            <div style={{ width: `${buyPct}%` }} className="bg-emerald-500 transition-all duration-500" title={`BUY: ${buyPct}%`} />
+            <div style={{ width: `${holdPct}%` }} className="bg-amber-400 transition-all duration-500" title={`HOLD: ${holdPct}%`} />
+            <div style={{ width: `${sellPct}%` }} className="bg-rose-500 transition-all duration-500" title={`SELL: ${sellPct}%`} />
           </div>
-          <div className="flex justify-between text-[11px] text-slate-500 dark:text-slate-400 px-0.5">
-            <span className="flex items-center gap-1 font-bold text-emerald-600 dark:text-emerald-400">
-              <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" /> BUY {buyPct}%
-            </span>
-            <span className="flex items-center gap-1 font-bold text-amber-600 dark:text-amber-400">
-              <span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> HOLD {holdPct}%
-            </span>
-            <span className="flex items-center gap-1 font-bold text-rose-600 dark:text-rose-400">
-              <span className="w-2 h-2 rounded-full bg-rose-500 inline-block" /> SELL {sellPct}%
-            </span>
+          <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="text-emerald-600 dark:text-emerald-400 font-bold">BUY: {buyPct}%</span>
+            <span className="text-amber-600 dark:text-amber-400 font-bold">HOLD: {holdPct}%</span>
+            <span className="text-rose-600 dark:text-rose-400 font-bold">SELL: {sellPct}%</span>
           </div>
         </div>
       </div>
 
-      {/* Typed Question Primitives Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 font-mono">
-        {/* Market Micro-Regime */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
+      {/* Grid of Microstructure Primitives */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3 font-mono">
+        {/* 1. Market Micro-Regime */}
+        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-850/60 border border-slate-200/60 dark:border-white/5 space-y-1">
           <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Market Micro-Regime</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">choice</span>
+            <span>Market Regime</span>
+            <Layers className="w-3.5 h-3.5 text-teal-400" />
           </div>
           <div className="text-xs font-bold text-slate-800 dark:text-slate-100 capitalize">
-            {String(stage.marketRegime?.value || 'trend_continuation').replace(/_/g, ' ')}
+            {String(stage.marketRegime?.value || 'trend_continuation').replace('_', ' ')}
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            Confidence: {Math.round((stage.marketRegime?.confidence || 0.8) * 100)}%
+            Regime Certainty: {Math.round((stage.marketRegime?.confidence || 0.8) * 100)}%
           </div>
         </div>
 
-        {/* High-Probability Edge */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
+        {/* 2. Statistical Edge Validation */}
+        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-850/60 border border-slate-200/60 dark:border-white/5 space-y-1">
           <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>High-Probability Edge</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">noul (yes/no)</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold">
+            <span>Statistical Edge</span>
             {edgeConfirmed ? (
-              <>
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span className="text-emerald-600 dark:text-emerald-400">CONFIRMED EDGE</span>
-              </>
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
             ) : (
-              <>
-                <AlertTriangle className="w-4 h-4 text-rose-500" />
-                <span className="text-rose-600 dark:text-rose-400">NO EDGE / CHOP</span>
-              </>
+              <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
             )}
           </div>
+          <div className={`text-xs font-bold ${edgeConfirmed ? 'text-emerald-500' : 'text-rose-500'}`}>
+            {edgeConfirmed ? 'CONFIRMED EDGE' : 'NO CLEAR EDGE'}
+          </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            Edge Probability: {edgePct}%
+            Mathematical Probability: {edgePct}%
           </div>
         </div>
 
-        {/* Execution Urgency */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
+        {/* 3. Toxic Predator Flow Guard */}
+        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-850/60 border border-slate-200/60 dark:border-white/5 space-y-1">
           <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Execution Urgency</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">score</span>
+            <span>Toxic Flow Trap</span>
+            <ShieldAlert className={`w-3.5 h-3.5 ${toxicDetected ? 'text-rose-400 animate-bounce' : 'text-emerald-400'}`} />
           </div>
-          <div className="text-xs font-bold text-slate-800 dark:text-slate-100">
+          <div className={`text-xs font-bold ${toxicDetected ? 'text-rose-500 font-bold' : 'text-emerald-500'}`}>
+            {toxicDetected ? 'PREDATORY FLOW TRAP' : 'CLEARED FLOW'}
+          </div>
+          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+            Trap Risk: {toxicPct}% ({toxicDetected ? 'VETO ACTIVE' : 'SAFE FOR ENTRY'})
+          </div>
+        </div>
+
+        {/* 4. Execution Urgency */}
+        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-850/60 border border-slate-200/60 dark:border-white/5 space-y-1 sm:col-span-2 lg:col-span-2">
+          <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
+            <span>Execution Urgency Directive</span>
+            <Activity className="w-3.5 h-3.5 text-cyan-400" />
+          </div>
+          <div className="text-xs font-bold text-cyan-600 dark:text-cyan-400">
             {String(stage.executionUrgency?.value || 'Immediate Market Execution')}
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            Certainty: {Math.round((stage.executionUrgency?.confidence || 0.8) * 100)}%
+            Order Style: Limit Pullback or Market Entry based on Spread
           </div>
         </div>
 
-        {/* Toxic Predatory Flow Risk */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
+        {/* 5. Model Architecture */}
+        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-850/60 border border-slate-200/60 dark:border-white/5 space-y-1">
           <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Toxic Order Flow</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">noul</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-xs font-bold">
-            {toxicDetected ? (
-              <>
-                <ShieldAlert className="w-4 h-4 text-rose-500" />
-                <span className="text-rose-600 dark:text-rose-400">TOXIC FLOW DETECTED</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 className="w-4 h-4 text-emerald-500" />
-                <span className="text-emerald-600 dark:text-emerald-400">CLEAN ORDER FLOW</span>
-              </>
-            )}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            Adverse Risk: {toxicPct}%
-          </div>
-        </div>
-
-        {/* Fast-Twitch Conviction */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
-          <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Fast-Twitch Conviction</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-indigo-500/10 text-indigo-400">score</span>
-          </div>
-          <div className="text-xs font-bold text-indigo-600 dark:text-indigo-400">
-            {String(stage.fastTwitchConviction?.value || 'High Conviction (75% - 88%)')}
-          </div>
-          <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            System 1 Calibrated
-          </div>
-        </div>
-
-        {/* Response Latency Benchmark */}
-        <div className="p-3 rounded-xl bg-slate-100/60 dark:bg-dark-800/60 border border-slate-200 dark:border-white/5 space-y-1.5">
-          <div className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400 flex items-center justify-between">
-            <span>Latency vs Traditional LLMs</span>
-            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">benchmark</span>
+            <span>Inference Model</span>
+            <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400">Reasoning</span>
           </div>
           <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-            <Flame className="w-3.5 h-3.5" />
-            <span>~15x Faster than GPT-4o</span>
+            <Zap className="w-3.5 h-3.5" />
+            <span>NVIDIA NIM Engine</span>
           </div>
           <div className="text-[10px] text-slate-500 dark:text-slate-400">
-            Jev: {stage.latencyMs}ms | LLMs: 2,500ms+
+            Latency: {stage.latencyMs}ms
           </div>
         </div>
       </div>
 
+      {/* DeepSeek Chain of Thought Drawer */}
+      {cot && (
+        <div className="rounded-2xl bg-dark-950/80 border border-emerald-500/20 p-3 space-y-2 font-mono">
+          <button
+            onClick={() => setShowCotDrawer(!showCotDrawer)}
+            className="w-full flex items-center justify-between text-xs font-bold text-emerald-400 hover:text-emerald-300 transition-colors"
+          >
+            <div className="flex items-center gap-2">
+              <BrainCircuit className="w-4 h-4 text-emerald-400" />
+              <span>DeepSeek Chain-of-Thought Deduction</span>
+            </div>
+            {showCotDrawer ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </button>
+          {showCotDrawer && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="text-xs text-slate-300 leading-relaxed pl-6 border-l-2 border-emerald-500/40"
+            >
+              {cot}
+            </motion.p>
+          )}
+        </div>
+      )}
+
       {/* Summary Narrative */}
-      <div className="p-3.5 rounded-2xl bg-indigo-500/5 dark:bg-indigo-500/5 border border-indigo-500/20 font-mono text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
-        <span className="font-bold text-indigo-600 dark:text-indigo-400">Chief Fast-Twitch Dispatch:</span>{' '}
+      <div className="p-3.5 rounded-2xl bg-emerald-500/5 dark:bg-emerald-500/5 border border-emerald-500/20 font-mono text-xs text-slate-700 dark:text-slate-300 leading-relaxed">
+        <span className="font-bold text-emerald-600 dark:text-emerald-400">DeepSeek Quantitative Dispatch:</span>{' '}
         {stage.summary}
       </div>
 
@@ -321,10 +300,10 @@ export const StageJevCard: React.FC<StageJevCardProps> = ({ data }) => {
       <div className="border-t border-slate-200/50 dark:border-white/10 pt-3">
         <button
           onClick={() => setShowRawDrawer(!showRawDrawer)}
-          className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-indigo-500 dark:hover:text-indigo-400 transition-colors"
+          className="flex items-center gap-1.5 text-xs font-mono font-bold text-slate-500 dark:text-slate-400 hover:text-emerald-500 dark:hover:text-emerald-400 transition-colors"
         >
           {showRawDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-          <span>{showRawDrawer ? 'Hide' : 'View'} Typed Jev System One JSON Payload</span>
+          <span>{showRawDrawer ? 'Hide' : 'View'} NVIDIA DeepSeek Order Flow Telemetry Payload</span>
         </button>
 
         {showRawDrawer && (

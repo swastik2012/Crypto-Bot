@@ -207,27 +207,74 @@ class Stage2NewsSentimentResult(BaseModel):
     articles: List[NewsArticleSchema]
     source_sentiment_breakdown: Dict[str, Any]
 
-# Stage 3 (NEW): TypeSafe AI Jev — System One Fast-Twitch Reflex Gate
-class JevQuestionResult(BaseModel):
-    type: str  # "choice" | "score" | "noul"
+# Stage 3: NVIDIA DeepSeek Reasoning & Macro Order Flow Engine
+class DeepSeekQuestionResult(BaseModel):
+    type: str = "choice"  # "choice" | "score" | "noul"
     value: Any  # choice string, score string, or boolean
     probabilities: Dict[str, float] = {}
     confidence: float = 0.0
     instructions: Optional[str] = None
 
-class StageJevSystemOneResult(BaseModel):
+# Backward compatibility alias
+JevQuestionResult = DeepSeekQuestionResult
+
+class StageDeepSeekReasoningResult(BaseModel):
     status: str = "completed"
-    agent_name: str = "TypeSafe AI Jev (System One)"
-    model: str = "jev-latest"
+    agent_name: str = "NVIDIA DeepSeek (Reasoning & Macro Order Flow)"
+    model: str = "deepseek-ai/deepseek-r1"
     latency_ms: int = 120
-    execution_bias: JevQuestionResult
-    market_regime: JevQuestionResult
-    high_probability_edge: JevQuestionResult
-    execution_urgency: JevQuestionResult
-    toxic_flow_detected: JevQuestionResult
-    fast_twitch_conviction: JevQuestionResult
+    execution_bias: DeepSeekQuestionResult
+    market_regime: DeepSeekQuestionResult
+    high_probability_edge: DeepSeekQuestionResult
+    execution_urgency: DeepSeekQuestionResult
+    toxic_flow_detected: DeepSeekQuestionResult
+    fast_twitch_conviction: DeepSeekQuestionResult
+    chain_of_thought: str = ""
+    deepseek_reasoning: str = ""
+    order_flow_imbalance: float = 0.0
+    predatory_liquidation_risk: str = "LOW"
     raw_results: Dict[str, Any] = {}
     summary: str = ""
+
+# Backward compatibility alias
+StageJevSystemOneResult = StageDeepSeekReasoningResult
+
+# ========================================================
+# 🧠 Continuous AI Trade Learner & Playbook Schemas
+# ========================================================
+class AITradeAuditPostMortem(BaseModel):
+    trade_id: str
+    symbol: str
+    side: str
+    entry_price: float
+    exit_price: float
+    pnl_usd: float
+    pnl_pct: float
+    outcome: str  # "WIN" | "LOSS" | "BREAKEVEN"
+    exit_reason: str
+    root_cause_analysis: str
+    cloud_ai_performance_verdict: str
+    actionable_rule: str
+    rule_category: str = "ENTRY_FILTER"  # "ENTRY_FILTER" | "STOP_MANAGEMENT" | "LIQUIDITY_TRAP" | "MTF_CONFLUENCE" | "MOMENTUM_RUNNER"
+    confidence_adjustment: float = 0.0
+    analyzed_by_model: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    timestamp: float = 0.0
+
+class EvolvingTradingRule(BaseModel):
+    rule_id: str
+    rule_text: str
+    rule_type: str = "AVOID_TRAP"  # "AVOID_TRAP" | "REPLICATE_EDGE" | "STOP_DISCIPLINE"
+    target_asset: str = "ALL"
+    win_rate_impact: str = "+5.2% Win Rate"
+    sample_size: int = 1
+    created_at: float = 0.0
+
+class AIPlaybookSummary(BaseModel):
+    total_trades_analyzed: int
+    winning_rules_count: int
+    failure_traps_count: int
+    active_playbook_rules: List[EvolvingTradingRule]
+    agent_accuracy_scorecard: Dict[str, float] = {}
 
 class KellySizingSchema(BaseModel):
     recommended_position_usd: float
@@ -343,6 +390,7 @@ class AnalyzeAndTradeRequest(BaseModel):
     custom_gemini_key: Optional[str] = None
     custom_nvidia_key: Optional[str] = None
     custom_openai_key: Optional[str] = None
+    custom_deepseek_key: Optional[str] = None
     custom_typesafe_key: Optional[str] = None
     custom_jev_key: Optional[str] = None
 
@@ -353,7 +401,8 @@ class AnalyzeAndTradeResponse(BaseModel):
     analyzed_at: str
     stage1: Stage1GeminiVisionResult
     stage2: Stage2NewsSentimentResult
-    stage_jev: Optional[StageJevSystemOneResult] = None
+    stage_deepseek: Optional[StageDeepSeekReasoningResult] = None
+    stage_jev: Optional[StageJevSystemOneResult] = None  # Backward compatibility
     stage3: Stage3NvidiaNimResult
     stage4: Stage4OpenAIRiskResult
     stage5: Stage5GeminiArbiterResult

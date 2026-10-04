@@ -83,8 +83,33 @@ class AgentTelemetryService:
 
         return log_entry
 
-    def log_call(self, *args, **kwargs):
-        return self.record_call(*args, **kwargs)
+    def log_call(self, **kwargs):
+        provider = kwargs.get("provider", "NVIDIA")
+        model = kwargs.get("model", "default")
+        stage = kwargs.get("stage", "Reasoning")
+        status = kwargs.get("status", "SUCCESS")
+        status_code = kwargs.get("status_code", 200)
+        latency_ms = kwargs.get("latency_ms", 0)
+        endpoint = kwargs.get("endpoint", "")
+        req_sum = kwargs.get("request_summary") or kwargs.get("request_payload") or {}
+        resp_sum = kwargs.get("response_summary") or kwargs.get("response_payload") or {}
+        prompt_text = kwargs.get("prompt_text")
+        response_text = kwargs.get("response_text")
+        err = kwargs.get("error_message")
+        return self.record_call(
+            provider=provider,
+            model=model,
+            stage=stage,
+            status=status,
+            status_code=status_code,
+            latency_ms=latency_ms,
+            endpoint=endpoint,
+            request_summary=req_sum,
+            response_summary=resp_sum,
+            prompt_text=prompt_text,
+            response_text=response_text,
+            error_message=err,
+        )
 
     def get_logs(self, limit: int = 100, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         logs_list = list(self._logs)

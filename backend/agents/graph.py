@@ -5,7 +5,7 @@ from backend.models.state import AgentGraphState
 from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema
 from backend.agents.stage1_gemini_vision import run_stage1_gemini_vision
 from backend.agents.stage2_news_sentiment import run_stage2_news_sentiment
-from backend.agents.stage_jev_system_one import run_stage_jev_system_one
+from backend.agents.stage3_nvidia_deepseek import run_stage3_nvidia_deepseek
 from backend.agents.stage3_nvidia_nim import run_stage3_nvidia_nim
 from backend.agents.stage4_openai_risk import run_stage4_openai_risk
 from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
@@ -17,10 +17,10 @@ class MultiAgentConsensusPipeline:
     6-Stage Dual-Brain LangGraph Multi-Agent Consensus Debate Loop:
     1. Gemini Vision: Ingests chart image and extracts visual patterns and key levels.
     2. NVIDIA NIM News & Macro Sentiment: Scrapes CoinDesk, Cointelegraph & CryptoSlate, extracts news gist and sentiment score.
-    3. TypeSafe AI Jev (System One): Sub-200ms Fast-Twitch Reflex Gate computing calibrated probabilities for bias, regime, edge, and urgency.
-    4. NVIDIA NIM Quantitative Reasoning: Ingests Stages 1-3, runs 10,000 Monte Carlo simulations with news and System 1 weighting.
+    3. NVIDIA DeepSeek Reasoner: NVIDIA NIM DeepSeek-R1 / Nemotron reasoning over order flow, CVD, and toxic liquidation traps.
+    4. NVIDIA NIM Quantitative Reasoning: Ingests Stages 1-3, runs 10,000 Monte Carlo simulations with news and DeepSeek weighting.
     5. OpenAI Risk Guard: Audits false breakout probability, liquidity sweeps, and toxic flow traps.
-    6. Gemini Arbiter: Reconciles System 1 (Jev Reflex) with System 2 (Consensus Desk) to synthesize final execution order.
+    6. Gemini Arbiter: Reconciles all stages to synthesize final execution order.
     """
     
     async def run(
@@ -34,6 +34,7 @@ class MultiAgentConsensusPipeline:
         gemini_key: str = "",
         nvidia_key: str = "",
         openai_key: str = "",
+        deepseek_key: str = "",
         typesafe_key: str = "",
         jev_key: str = "",
         account_state: Optional[Dict[str, Any]] = None,
@@ -43,7 +44,7 @@ class MultiAgentConsensusPipeline:
         pipeline_start = time.time()
         debate_stream = []
 
-        active_typesafe_key = typesafe_key or jev_key
+        active_deepseek_key = deepseek_key or nvidia_key
 
         if not current_price or current_price <= 0:
             from backend.services.symbol_resolver import symbol_resolver
@@ -84,18 +85,21 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg2)
 
-        # STAGE 3: TypeSafe AI Jev — System One Fast-Twitch Reflex Gate (Ingests Stages 1-2 & Derivatives Order Flow)
-        stage_jev_res, msg_jev = await run_stage_jev_system_one(
+        # STAGE 3: NVIDIA DeepSeek Reasoning & Macro Order Flow Engine (Ingests Stages 1-2 & Derivatives Order Flow)
+        stage_deepseek_res, msg_deepseek = await run_stage3_nvidia_deepseek(
             symbol=symbol,
             stage1_res=stage1_res,
             stage2_res=stage2_res,
             current_price=current_price,
             account_state=account_state,
-            api_key=active_typesafe_key,
+            api_key=active_deepseek_key,
             derivatives_data=derivatives_data,
             macro_status=macro_status,
         )
-        debate_stream.append(msg_jev)
+        debate_stream.append(msg_deepseek)
+
+        # Backward compatibility reference for downstream stages
+        stage_jev_res = stage_deepseek_res
 
         # STAGE 4: NVIDIA NIM Quantitative Stress Test (Ingests Stages 1, 2 & Jev System 1)
         stage3_res, msg3 = await run_stage3_nvidia_nim(
@@ -188,6 +192,7 @@ class MultiAgentConsensusPipeline:
             ),
             stage1=stage1_res,
             stage2=stage2_res,
+            stage_deepseek=stage_deepseek_res,
             stage_jev=stage_jev_res,
             stage3=stage3_res,
             stage4=stage4_res,

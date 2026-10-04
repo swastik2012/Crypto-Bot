@@ -182,6 +182,7 @@ export const api = {
     custom_gemini_key?: string;
     custom_nvidia_key?: string;
     custom_openai_key?: string;
+    custom_deepseek_key?: string;
     custom_typesafe_key?: string;
     custom_jev_key?: string;
   }) {
@@ -382,5 +383,43 @@ export const api = {
       console.warn('[API] Macro calendar events error:', e);
     }
     return [];
+  },
+
+  async fetchLearningSummary(): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/learning/summary`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] fetchLearningSummary error:', e);
+    }
+    return null;
+  },
+
+  async fetchTradePostMortems(limit: number = 25): Promise<any[]> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/learning/post-mortems?limit=${limit}`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] fetchTradePostMortems error:', e);
+    }
+    return [];
+  },
+
+  async triggerAuditAll(limit: number = 15): Promise<any> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/learning/audit-all?limit=${limit}`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] triggerAuditAll error:', e);
+    }
+    return null;
   },
 };

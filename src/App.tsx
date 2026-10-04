@@ -8,6 +8,7 @@ import { OpenPositionsCard, type OpenPositionItem, type TradeHistoryItem } from 
 import { RecentSignalsFeed } from './components/signals/RecentSignalsFeed';
 import { AgentConfigModal } from './components/config/AgentConfigModal';
 import { PaperTradeModal } from './components/trade/PaperTradeModal';
+import { AILearningPlaybookModal } from './components/trade/AILearningPlaybookModal';
 import { AgentTelemetryPage } from './components/logs/AgentTelemetryPage';
 import { api, type AutoTraderStatus } from './services/api';
 import {
@@ -254,9 +255,15 @@ export const App: React.FC = () => {
       apiKey: 'sk-proj-****************',
       active: true,
     },
+    nvidiaDeepSeek: {
+      model: 'deepseek-ai/deepseek-r1',
+      endpointUrl: 'https://integrate.api.nvidia.com/v1',
+      apiKey: '',
+      active: true,
+    },
     typeSafeJev: {
-      model: 'jev-latest',
-      endpointUrl: 'https://api.typesafe.ai/v1/systemone',
+      model: 'deepseek-ai/deepseek-r1',
+      endpointUrl: 'https://integrate.api.nvidia.com/v1',
       apiKey: '',
       active: true,
     },
@@ -281,6 +288,7 @@ export const App: React.FC = () => {
   // Modals State
   const [isConfigOpen, setIsConfigOpen] = useState<boolean>(false);
   const [isTradeModalOpen, setIsTradeModalOpen] = useState<boolean>(false);
+  const [isLearningModalOpen, setIsLearningModalOpen] = useState<boolean>(false);
 
   // Analysis / Multi-Agent Execution State
   const [isAnalyzing, setIsAnalyzing] = useState<boolean>(false);
@@ -582,50 +590,54 @@ export const App: React.FC = () => {
         articles: res.stage2?.articles || [],
         sourceSentimentBreakdown: res.stage2?.source_sentiment_breakdown || {},
       },
-      stageJev: res.stage_jev ? {
+      stageJev: (res.stage_deepseek || res.stage_jev) ? {
         status: 'completed',
-        agentName: res.stage_jev.agent_name || 'TypeSafe AI Jev (System One)',
-        model: res.stage_jev.model || 'jev-latest',
-        latencyMs: res.stage_jev.latency_ms || 118,
+        agentName: (res.stage_deepseek?.agent_name || res.stage_jev?.agent_name || 'NVIDIA DeepSeek (Reasoning & Order Flow)'),
+        model: (res.stage_deepseek?.model || res.stage_jev?.model || 'deepseek-ai/deepseek-r1'),
+        latencyMs: (res.stage_deepseek?.latency_ms || res.stage_jev?.latency_ms || 118),
         executionBias: {
-          type: res.stage_jev.execution_bias?.type || 'choice',
-          value: res.stage_jev.execution_bias?.value || 'BUY',
-          probabilities: res.stage_jev.execution_bias?.probabilities || {},
-          confidence: res.stage_jev.execution_bias?.confidence || 0.85,
-          instructions: res.stage_jev.execution_bias?.instructions,
+          type: (res.stage_deepseek?.execution_bias?.type || res.stage_jev?.execution_bias?.type || 'choice'),
+          value: (res.stage_deepseek?.execution_bias?.value || res.stage_jev?.execution_bias?.value || 'BUY'),
+          probabilities: (res.stage_deepseek?.execution_bias?.probabilities || res.stage_jev?.execution_bias?.probabilities || {}),
+          confidence: (res.stage_deepseek?.execution_bias?.confidence || res.stage_jev?.execution_bias?.confidence || 0.85),
+          instructions: (res.stage_deepseek?.execution_bias?.instructions || res.stage_jev?.execution_bias?.instructions),
         },
         marketRegime: {
-          type: res.stage_jev.market_regime?.type || 'choice',
-          value: res.stage_jev.market_regime?.value || 'trend_continuation',
-          probabilities: res.stage_jev.market_regime?.probabilities || {},
-          confidence: res.stage_jev.market_regime?.confidence || 0.82,
+          type: (res.stage_deepseek?.market_regime?.type || res.stage_jev?.market_regime?.type || 'choice'),
+          value: (res.stage_deepseek?.market_regime?.value || res.stage_jev?.market_regime?.value || 'trend_continuation'),
+          probabilities: (res.stage_deepseek?.market_regime?.probabilities || res.stage_jev?.market_regime?.probabilities || {}),
+          confidence: (res.stage_deepseek?.market_regime?.confidence || res.stage_jev?.market_regime?.confidence || 0.82),
         },
         highProbabilityEdge: {
-          type: res.stage_jev.high_probability_edge?.type || 'noul',
-          value: res.stage_jev.high_probability_edge?.value ?? true,
-          probabilities: res.stage_jev.high_probability_edge?.probabilities || {},
-          confidence: res.stage_jev.high_probability_edge?.confidence || 0.86,
+          type: (res.stage_deepseek?.high_probability_edge?.type || res.stage_jev?.high_probability_edge?.type || 'noul'),
+          value: (res.stage_deepseek?.high_probability_edge?.value ?? res.stage_jev?.high_probability_edge?.value ?? true),
+          probabilities: (res.stage_deepseek?.high_probability_edge?.probabilities || res.stage_jev?.high_probability_edge?.probabilities || {}),
+          confidence: (res.stage_deepseek?.high_probability_edge?.confidence || res.stage_jev?.high_probability_edge?.confidence || 0.86),
         },
         executionUrgency: {
-          type: res.stage_jev.execution_urgency?.type || 'score',
-          value: res.stage_jev.execution_urgency?.value || 'Immediate Market Execution',
-          probabilities: res.stage_jev.execution_urgency?.probabilities || {},
-          confidence: res.stage_jev.execution_urgency?.confidence || 0.81,
+          type: (res.stage_deepseek?.execution_urgency?.type || res.stage_jev?.execution_urgency?.type || 'score'),
+          value: (res.stage_deepseek?.execution_urgency?.value || res.stage_jev?.execution_urgency?.value || 'Immediate Market Execution'),
+          probabilities: (res.stage_deepseek?.execution_urgency?.probabilities || res.stage_jev?.execution_urgency?.probabilities || {}),
+          confidence: (res.stage_deepseek?.execution_urgency?.confidence || res.stage_jev?.execution_urgency?.confidence || 0.81),
         },
         toxicFlowDetected: {
-          type: res.stage_jev.toxic_flow_detected?.type || 'noul',
-          value: res.stage_jev.toxic_flow_detected?.value ?? false,
-          probabilities: res.stage_jev.toxic_flow_detected?.probabilities || {},
-          confidence: res.stage_jev.toxic_flow_detected?.confidence || 0.85,
+          type: (res.stage_deepseek?.toxic_flow_detected?.type || res.stage_jev?.toxic_flow_detected?.type || 'noul'),
+          value: (res.stage_deepseek?.toxic_flow_detected?.value ?? res.stage_jev?.toxic_flow_detected?.value ?? false),
+          probabilities: (res.stage_deepseek?.toxic_flow_detected?.probabilities || res.stage_jev?.toxic_flow_detected?.probabilities || {}),
+          confidence: (res.stage_deepseek?.toxic_flow_detected?.confidence || res.stage_jev?.toxic_flow_detected?.confidence || 0.85),
         },
         fastTwitchConviction: {
-          type: res.stage_jev.fast_twitch_conviction?.type || 'score',
-          value: res.stage_jev.fast_twitch_conviction?.value || 'High Conviction (75% - 88%)',
-          probabilities: res.stage_jev.fast_twitch_conviction?.probabilities || {},
-          confidence: res.stage_jev.fast_twitch_conviction?.confidence || 0.84,
+          type: (res.stage_deepseek?.fast_twitch_conviction?.type || res.stage_jev?.fast_twitch_conviction?.type || 'score'),
+          value: (res.stage_deepseek?.fast_twitch_conviction?.value || res.stage_jev?.fast_twitch_conviction?.value || 'High Conviction (75% - 88%)'),
+          probabilities: (res.stage_deepseek?.fast_twitch_conviction?.probabilities || res.stage_jev?.fast_twitch_conviction?.probabilities || {}),
+          confidence: (res.stage_deepseek?.fast_twitch_conviction?.confidence || res.stage_jev?.fast_twitch_conviction?.confidence || 0.84),
         },
-        rawResults: res.stage_jev.raw_results,
-        summary: res.stage_jev.summary || '⚡ System 1 Fast-Twitch Reflex completed.',
+        chainOfThought: (res.stage_deepseek?.chain_of_thought || res.stage_deepseek?.deepseek_reasoning),
+        deepseekReasoning: (res.stage_deepseek?.deepseek_reasoning || res.stage_deepseek?.chain_of_thought),
+        orderFlowImbalance: res.stage_deepseek?.order_flow_imbalance,
+        predatoryLiquidationRisk: res.stage_deepseek?.predatory_liquidation_risk,
+        rawResults: (res.stage_deepseek?.raw_results || res.stage_jev?.raw_results),
+        summary: (res.stage_deepseek?.summary || res.stage_jev?.summary || '⚡ NVIDIA DeepSeek Reasoning completed.'),
       } : undefined,
       stage3: {
         status: 'completed',
@@ -735,7 +747,7 @@ export const App: React.FC = () => {
       debateStream: (res.debate_stream || []).map((m: any) => ({
         id: m.id,
         stageNumber: (m.stage_number || 1) as 1 | 2 | 3 | 4 | 5 | 6,
-        agentId: m.agent_id === 'typesafe-jev' ? 'typesafe-jev' : m.stage_number === 1 ? 'gemini-vision' : m.stage_number === 2 ? 'nvidia-news' : m.stage_number === 3 ? 'typesafe-jev' : m.stage_number === 4 ? 'nvidia-nim' : m.stage_number === 5 ? 'openai-risk' : 'gemini-arbiter',
+        agentId: (m.agent_id === 'typesafe-jev' || m.stage_number === 3) ? 'nvidia-deepseek' : m.stage_number === 1 ? 'gemini-vision' : m.stage_number === 2 ? 'nvidia-news' : m.stage_number === 4 ? 'nvidia-nim' : m.stage_number === 5 ? 'openai-risk' : 'gemini-arbiter',
         agentName: m.agent_name,
         agentBadge: m.agent_badge,
         avatarColor: m.avatar_color,
@@ -766,7 +778,8 @@ export const App: React.FC = () => {
         current_price: selectedAsset.price,
         strategy_preset: agentConfig.strategyPreset,
         auto_execute: agentConfig.autoExecute,
-        custom_typesafe_key: agentConfig.typeSafeJev?.apiKey,
+        custom_deepseek_key: agentConfig.nvidiaDeepSeek?.apiKey || agentConfig.typeSafeJev?.apiKey,
+        custom_typesafe_key: agentConfig.nvidiaDeepSeek?.apiKey || agentConfig.typeSafeJev?.apiKey,
       });
 
       if (res && res.stage1 && res.stage5) {
@@ -800,6 +813,7 @@ export const App: React.FC = () => {
         assets={SUPPORTED_ASSETS}
         onSelectAsset={setSelectedAsset}
         onOpenConfig={() => setIsConfigOpen(true)}
+        onOpenLearningPlaybook={() => setIsLearningModalOpen(true)}
         isAnalyzing={isAnalyzing}
         paperBalance={totalEquity}
         paperPnL={overallPnlPct}
@@ -889,6 +903,12 @@ export const App: React.FC = () => {
         asset={selectedAsset}
         consensusData={pipelineData.stage5}
         onExecuteTradeOrder={handleExecuteTradeOrder}
+      />
+
+      {/* Autonomous AI Trade Learner & Evolving Playbook Modal */}
+      <AILearningPlaybookModal
+        isOpen={isLearningModalOpen}
+        onClose={() => setIsLearningModalOpen(false)}
       />
 
     </div>
