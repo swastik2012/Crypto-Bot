@@ -88,15 +88,15 @@ Provide a mathematical proof verifying expected value (EV) and margin safety fac
                     model=model_name,
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
-                    max_tokens=300,
+                    max_tokens=800,
                 )
                 math_text = response.choices[0].message.content
             except Exception:
                 response = await client.chat.completions.create(
-                    model="deepseek-ai/deepseek-r1",
+                    model="nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
                     messages=[{"role": "user", "content": prompt}],
                     temperature=0.1,
-                    max_tokens=300,
+                    max_tokens=800,
                 )
                 math_text = response.choices[0].message.content
                 

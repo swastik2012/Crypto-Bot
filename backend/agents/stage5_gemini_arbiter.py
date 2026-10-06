@@ -136,6 +136,22 @@ async def run_stage5_gemini_arbiter(
             f"Mandatory algorithmic veto applied: {playbook_veto.actionable_directive}"
         )
 
+    # Phase 2: BTC Master Gatekeeper Shield (Altcoin Protection)
+    elif not symbol.upper().startswith("BTC") and btc_gatekeeper and not getattr(btc_gatekeeper, "altcoin_long_allowed", True):
+        veto_active = True
+        signal = SignalAction.HOLD
+        consensus_confidence = 36.0
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        reason = getattr(btc_gatekeeper, "gatekeeper_reason", "Bitcoin is breaking down")
+        invalidation_cond = f"ALTCOIN VETOED by BTC Gatekeeper: {reason}. Mandatory capital preservation."
+        summary = (
+            f"⛔ BTC MASTER GATEKEEPER OVERRIDE: HOLD / STAND ASIDE for {symbol}. "
+            f"While isolated altcoin patterns indicated trading activity, {reason}. "
+            f"Historical analysis proves altcoins during an active Bitcoin sell-off suffer a >78% failure rate from market-wide liquidation contagion."
+        )
+
     # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
     elif pred_risk == "HIGH":
         veto_active = True

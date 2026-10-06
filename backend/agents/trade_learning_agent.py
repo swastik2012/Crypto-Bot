@@ -78,8 +78,17 @@ class TradeLearningAgent:
         parsed_json = None
         model_used = "nvidia/nemotron-3.5-lightning-30b-a3b"
 
+        is_official_deepseek = bool(effective_key and effective_key.startswith("sk-"))
+        api_endpoint = "https://api.deepseek.com/chat/completions" if is_official_deepseek else f"{self.endpoint}/chat/completions"
+        provider_name = "DeepSeek Official (Trade Learner)" if is_official_deepseek else "NVIDIA NIM (Trade Learner)"
+        candidate_models = ["deepseek-reasoner", "deepseek-chat"] if is_official_deepseek else [
+            "nvidia/nemotron-3-super-120b-a12b",
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            settings.NVIDIA_DEEPSEEK_MODEL or "nvidia/nemotron-3-super-120b-a12b",
+        ]
+
         if effective_key and not effective_key.startswith("your-") and not effective_key.startswith("nvapi-***"):
-            for cand in self.preferred_models:
+            for cand in candidate_models:
                 try:
                     payload = {
                         "model": cand,
@@ -88,11 +97,11 @@ class TradeLearningAgent:
                             {"role": "user", "content": user_prompt},
                         ],
                         "temperature": 0.2,
-                        "max_tokens": 500,
+                        "max_tokens": 1500,
                     }
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=4.0)) as client:
                         resp = await client.post(
-                            f"{self.endpoint}/chat/completions",
+                            api_endpoint,
                             headers={
                                 "Authorization": f"Bearer {effective_key}",
                                 "Content-Type": "application/json",
@@ -101,19 +110,23 @@ class TradeLearningAgent:
                         )
                         if resp.status_code == 200:
                             data = resp.json()
-                            raw_content = data["choices"][0]["message"]["content"]
+                            raw_content = data["choices"][0]["message"].get("content") or ""
                             clean_text = raw_content.strip()
                             if "```json" in clean_text:
                                 clean_text = clean_text.split("```json")[1].split("```")[0].strip()
                             elif "```" in clean_text:
                                 clean_text = clean_text.split("```")[1].split("```")[0].strip()
+                            elif "{" in clean_text and "}" in clean_text:
+                                last_b = clean_text.rfind("}")
+                                first_b = clean_text.find("{")
+                                clean_text = clean_text[first_b:last_b+1]
 
                             parsed_json = json.loads(clean_text)
                             model_used = cand
                             telemetry_service.log_call(
-                                provider="NVIDIA (Trade Learner AI)",
+                                provider=provider_name,
                                 model=model_used,
-                                endpoint=f"{self.endpoint}/chat/completions",
+                                endpoint=api_endpoint,
                                 request_payload={"symbol": symbol, "pnl": pnl_usd, "outcome": outcome},
                                 response_payload=parsed_json,
                                 latency_ms=round((time.time() - start_ts) * 1000),

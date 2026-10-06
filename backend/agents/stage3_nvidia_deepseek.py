@@ -95,18 +95,24 @@ async def run_stage3_nvidia_deepseek(
         "Evaluate the edge, identify toxic predatory sweeps, and determine the optimal execution directive."
     )
 
-    model_used = "deepseek-ai/deepseek-r1"
+    is_official_deepseek = bool(effective_key and effective_key.startswith("sk-"))
+    api_endpoint = "https://api.deepseek.com/chat/completions" if is_official_deepseek else f"{endpoint}/chat/completions"
+    provider_name = "DeepSeek Official" if is_official_deepseek else "NVIDIA NIM (DeepSeek / Reasoning)"
+
+    if is_official_deepseek:
+        candidate_models = ["deepseek-reasoner", "deepseek-chat"]
+    else:
+        # Verified live models on NVIDIA NIM: 120B Super Reasoning model & Nano reasoning model
+        candidate_models = [
+            settings.NVIDIA_DEEPSEEK_MODEL or "nvidia/nemotron-3-super-120b-a12b",
+            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            settings.NVIDIA_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
+        ]
+
+    model_used = candidate_models[0]
     parsed_json = None
     telemetry_status = "FALLBACK"
     raw_response_text = ""
-
-    # Attempt live inference across supported NVIDIA NIM models (Nemotron-3.5 Lightning / DeepSeek-R1 / Nemotron 120B)
-    candidate_models = [
-        "nvidia/nemotron-3.5-lightning-30b-a3b",
-        settings.NVIDIA_DEEPSEEK_MODEL or "deepseek-ai/deepseek-r1",
-        "nvidia/nemotron-3-super-120b-a12b",
-        settings.NVIDIA_MODEL or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-    ]
 
     if effective_key and not effective_key.startswith("your-") and not effective_key.startswith("nvapi-***"):
         for cand in candidate_models:
@@ -122,19 +128,21 @@ async def run_stage3_nvidia_deepseek(
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.2,
-                    "max_tokens": 450,
+                    "max_tokens": 1500,  # Needs >=1200 tokens because reasoning models consume ~600 CoT tokens before emitting JSON
                 }
                 req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=4.0)) as client:
                     resp = await client.post(
-                        f"{endpoint}/chat/completions",
+                        api_endpoint,
                         headers=headers,
                         json=payload,
                     )
                     req_latency = round((time.time() - req_start) * 1000)
                     if resp.status_code == 200:
                         data = resp.json()
-                        raw_content = data["choices"][0]["message"]["content"]
+                        choice = data["choices"][0]
+                        raw_content = choice["message"].get("content") or ""
+                        reasoning_cot = choice["message"].get("reasoning_content") or ""
                         raw_response_text = raw_content
 
                         # Strip markdown or CoT narrative if present
@@ -149,12 +157,15 @@ async def run_stage3_nvidia_deepseek(
                             clean_text = clean_text[first_b:last_b+1]
 
                         parsed_json = json.loads(clean_text)
+                        if reasoning_cot and (not parsed_json.get("chain_of_thought") or len(parsed_json.get("chain_of_thought", "")) < 20):
+                            parsed_json["chain_of_thought"] = reasoning_cot[:400]
+
                         model_used = cand
                         telemetry_status = "SUCCESS"
                         telemetry_service.log_call(
-                            provider="NVIDIA (DeepSeek)",
+                            provider=provider_name,
                             model=model_used,
-                            endpoint=f"{endpoint}/chat/completions",
+                            endpoint=api_endpoint,
                             request_payload={"model": cand, "symbol": symbol},
                             response_payload=parsed_json,
                             latency_ms=req_latency,
@@ -162,8 +173,10 @@ async def run_stage3_nvidia_deepseek(
                             status_code=200,
                         )
                         break
+                    else:
+                        print(f"[Stage 3 Reasoning Candidate {cand}] Status {resp.status_code}: {resp.text[:120]}")
             except Exception as e:
-                # Try next candidate model smoothly
+                print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {e}")
                 continue
 
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
