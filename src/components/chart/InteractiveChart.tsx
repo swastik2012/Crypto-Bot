@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Scan,
@@ -13,6 +13,10 @@ import {
   Minus,
   Target,
   ShieldAlert,
+  Star,
+  ChevronDown,
+  Clock,
+  Check,
 } from 'lucide-react';
 import type { CryptoAsset, CandleData, TimeInterval, SupportResistanceLevel, FullDebatePipelineData } from '../../types';
 import { GlassCard } from '../common/GlassCard';
@@ -50,11 +54,85 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
   const [showAiOverlays, setShowAiOverlays] = useState<boolean>(true);
   const chartCaptureRef = useRef<HTMLDivElement>(null);
 
-  const timeIntervals: TimeInterval[] = ['1H', '4H', '1D', '1W', '1M'];
+  const ALL_TIMEFRAMES: { id: TimeInterval; label: string; category: 'Minutes' | 'Hours' | 'Days & Weeks' }[] = [
+    { id: '1m', label: '1m', category: 'Minutes' },
+    { id: '3m', label: '3m', category: 'Minutes' },
+    { id: '5m', label: '5m', category: 'Minutes' },
+    { id: '15m', label: '15m', category: 'Minutes' },
+    { id: '30m', label: '30m', category: 'Minutes' },
+    { id: '1H', label: '1h', category: 'Hours' },
+    { id: '2H', label: '2h', category: 'Hours' },
+    { id: '4H', label: '4h', category: 'Hours' },
+    { id: '1D', label: '1D', category: 'Days & Weeks' },
+    { id: '1W', label: '1W', category: 'Days & Weeks' },
+    { id: '1M', label: '1M', category: 'Days & Weeks' },
+  ];
+
+  const DEFAULT_FAVORITES: TimeInterval[] = ['15m', '1H', '4H', '1D'];
+
+  // Persistent favorite timeframes stored in localStorage
+  const [favoriteTimeframes, setFavoriteTimeframes] = useState<TimeInterval[]>(() => {
+    try {
+      const saved = localStorage.getItem('crypto_bot_favorite_timeframes');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          return parsed as TimeInterval[];
+        }
+      }
+    } catch {}
+    return DEFAULT_FAVORITES;
+  });
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    if (isDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isDropdownOpen]);
+
+  // Toggle favorite timeframe with automatic localStorage persistence
+  const toggleFavorite = (tf: TimeInterval, e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setFavoriteTimeframes((prev) => {
+      let updated: TimeInterval[];
+      if (prev.includes(tf)) {
+        if (prev.length <= 1) return prev; // Keep at least one favorite
+        updated = prev.filter((item) => item !== tf);
+      } else {
+        const orderMap = ALL_TIMEFRAMES.reduce(
+          (acc, curr, idx) => ({ ...acc, [curr.id]: idx }),
+          {} as Record<TimeInterval, number>
+        );
+        updated = [...prev, tf].sort((a, b) => (orderMap[a] ?? 0) - (orderMap[b] ?? 0));
+      }
+      try {
+        localStorage.setItem('crypto_bot_favorite_timeframes', JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  };
 
   // Map application timeframe to TradingView widget format
   const tvIntervalMap: Record<TimeInterval, string> = {
+    '1m': '1',
+    '3m': '3',
+    '5m': '5',
+    '15m': '15',
+    '30m': '30',
     '1H': '60',
+    '2H': '120',
     '4H': '240',
     '1D': 'D',
     '1W': 'W',
@@ -175,9 +253,10 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
             )}
           </motion.button>
 
-          {/* Timeframe Selector Pills */}
-          <div className="flex items-center p-0.5 sm:p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 shrink-0">
-            {timeIntervals.map((interval) => (
+          {/* Timeframe Selector with Starred Favorites & Dropdown Popover */}
+          <div className="relative flex items-center p-0.5 sm:p-1 rounded-xl bg-slate-200/70 dark:bg-dark-850 border border-slate-300/60 dark:border-white/5 shrink-0" ref={dropdownRef}>
+            {/* Quick-Access Favorite Pills */}
+            {favoriteTimeframes.map((interval) => (
               <motion.button
                 key={interval}
                 whileHover={{ scale: 1.05 }}
@@ -192,6 +271,124 @@ export const InteractiveChart: React.FC<InteractiveChartProps> = ({
                 {interval}
               </motion.button>
             ))}
+
+            {/* Display active timeframe if not currently in favorites */}
+            {!favoriteTimeframes.includes(timeInterval) && (
+              <motion.button
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
+                className="px-2 sm:px-2.5 py-1 rounded-lg text-[11px] sm:text-xs font-mono font-bold transition-all bg-purple-500/25 text-purple-800 dark:text-purple-300 border border-purple-500/50 shadow-sm"
+                title={`${timeInterval} is active`}
+              >
+                {timeInterval}
+              </motion.button>
+            )}
+
+            {/* Dropdown Menu Trigger with Star Hint */}
+            <motion.button
+              whileHover={{ scale: 1.05 }}
+              whileTap={{ scale: 0.95 }}
+              onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+              className={`flex items-center gap-1 px-1.5 sm:px-2 py-1 rounded-lg text-[11px] sm:text-xs font-mono font-bold transition-all ml-0.5 ${
+                isDropdownOpen
+                  ? 'bg-cyan-500/20 text-cyan-700 dark:text-cyan-400 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-300/40 dark:hover:bg-white/5'
+              }`}
+              title="Add or remove favorite timeframes (⭐)"
+            >
+              <Clock className="w-3.5 h-3.5 text-cyan-500" />
+              <ChevronDown className={`w-3 h-3 transition-transform duration-200 ${isDropdownOpen ? 'rotate-180' : ''}`} />
+            </motion.button>
+
+            {/* Floating Dropdown Popover */}
+            <AnimatePresence>
+              {isDropdownOpen && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute right-0 top-full mt-2 w-72 sm:w-80 rounded-2xl bg-white/95 dark:bg-dark-900/95 backdrop-blur-xl border border-slate-200 dark:border-white/10 shadow-2xl p-3 z-50 overflow-hidden"
+                >
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-200 dark:border-white/10">
+                    <div className="flex items-center gap-1.5">
+                      <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
+                      <span className="text-xs font-bold font-mono text-slate-800 dark:text-slate-200">
+                        Chart Timeframes
+                      </span>
+                    </div>
+                    <span className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                      {favoriteTimeframes.length} pinned ⭐
+                    </span>
+                  </div>
+
+                  <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
+                    {(['Minutes', 'Hours', 'Days & Weeks'] as const).map((category) => (
+                      <div key={category} className="space-y-1">
+                        <div className="text-[10px] font-mono uppercase tracking-wider font-bold text-slate-400 dark:text-slate-500 px-1">
+                          {category}
+                        </div>
+                        <div className="grid grid-cols-1 gap-1">
+                          {ALL_TIMEFRAMES.filter((tf) => tf.category === category).map((tf) => {
+                            const isFav = favoriteTimeframes.includes(tf.id);
+                            const isActive = timeInterval === tf.id;
+                            return (
+                              <div
+                                key={tf.id}
+                                onClick={() => {
+                                  onTimeIntervalChange(tf.id);
+                                }}
+                                className={`flex items-center justify-between px-2.5 py-1.5 rounded-xl cursor-pointer text-xs font-mono font-medium transition-all ${
+                                  isActive
+                                    ? 'bg-cyan-500/15 text-cyan-700 dark:text-cyan-300 border border-cyan-500/30'
+                                    : 'text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-white/5'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2">
+                                  {isActive && <Check className="w-3.5 h-3.5 text-cyan-500 shrink-0" />}
+                                  <span className={`font-bold ${isActive ? 'text-cyan-600 dark:text-cyan-400' : ''}`}>
+                                    {tf.id}
+                                  </span>
+                                  <span className="text-[10px] text-slate-400">
+                                    {tf.category === 'Minutes'
+                                      ? `${tf.label} Candle`
+                                      : tf.category === 'Hours'
+                                      ? `${tf.label} Candle`
+                                      : `${tf.label} Period`}
+                                  </span>
+                                </div>
+
+                                <motion.button
+                                  type="button"
+                                  whileHover={{ scale: 1.25 }}
+                                  whileTap={{ scale: 0.85 }}
+                                  onClick={(e) => toggleFavorite(tf.id, e)}
+                                  className="p-1 rounded-md hover:bg-slate-200/60 dark:hover:bg-white/10 transition-colors"
+                                  title={isFav ? 'Remove from favorites' : 'Add to favorite timeframes'}
+                                >
+                                  <Star
+                                    className={`w-4 h-4 transition-colors ${
+                                      isFav
+                                        ? 'text-amber-400 fill-amber-400 drop-shadow-[0_0_6px_rgba(251,191,36,0.5)]'
+                                        : 'text-slate-400/40 hover:text-amber-400'
+                                    }`}
+                                  />
+                                </motion.button>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2.5 pt-2 border-t border-slate-200 dark:border-white/10 flex items-center justify-between text-[10px] font-mono text-slate-500 dark:text-slate-400 px-1">
+                    <span>⭐ Click star to pin to toolbar</span>
+                    <span>Saved in browser</span>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
         </div>

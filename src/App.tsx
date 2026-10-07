@@ -60,9 +60,22 @@ export const App: React.FC = () => {
   // View State: 'terminal' (Charts & Debate) vs 'telemetry' (Live Agent API Logs)
   const [activeView, setActiveView] = useState<'terminal' | 'telemetry'>('terminal');
 
-  // Asset & Chart Interval State (Default: 1H)
+  // Asset & Chart Interval State (Default: 1H, with localStorage persistence)
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>(SUPPORTED_ASSETS[0]);
-  const [timeInterval, setTimeInterval] = useState<TimeInterval>('1H');
+  const [timeInterval, setTimeInterval] = useState<TimeInterval>(() => {
+    try {
+      const saved = localStorage.getItem('crypto_bot_active_timeframe') as TimeInterval | null;
+      if (saved) return saved;
+    } catch {}
+    return '1H';
+  });
+
+  const handleTimeIntervalChange = useCallback((newInterval: TimeInterval) => {
+    setTimeInterval(newInterval);
+    try {
+      localStorage.setItem('crypto_bot_active_timeframe', newInterval);
+    } catch {}
+  }, []);
 
   // Auto-Trader 30-Minute Status
   const [autoTraderStatus, setAutoTraderStatus] = useState<AutoTraderStatus | null>({
@@ -885,7 +898,7 @@ export const App: React.FC = () => {
                 asset={selectedAsset}
                 candles={candles}
                 timeInterval={timeInterval}
-                onTimeIntervalChange={setTimeInterval}
+                onTimeIntervalChange={handleTimeIntervalChange}
                 onRunAnalysis={handleRunAnalysis}
                 isAnalyzing={isAnalyzing}
                 activeStageNumber={activeStageNumber}

@@ -66,12 +66,26 @@ export function generateCandleData(
   const candles: CandleData[] = [];
   let currentPrice = basePrice * 0.94;
   const now = Date.now();
-  const stepMs = interval === '1H' ? 3600000 : interval === '4H' ? 14400000 : 86400000;
+  const stepMap: Record<TimeInterval, number> = {
+    '1m': 60000,
+    '3m': 180000,
+    '5m': 300000,
+    '15m': 900000,
+    '30m': 1800000,
+    '1H': 3600000,
+    '2H': 7200000,
+    '4H': 14400000,
+    '1D': 86400000,
+    '1W': 604800000,
+    '1M': 2592000000,
+  };
+  const stepMs = stepMap[interval] || 3600000;
 
   for (let i = count; i >= 0; i--) {
     const timestamp = now - i * stepMs;
     const date = new Date(timestamp);
-    const timeStr = interval === '1D' 
+    const isDailyOrHigher = interval === '1D' || interval === '1W' || interval === '1M';
+    const timeStr = isDailyOrHigher
       ? date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
       : date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
