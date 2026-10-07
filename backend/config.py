@@ -28,22 +28,22 @@ class Settings(BaseSettings):
 
     # Aliases & Model Settings
     NVIDIA_NIM_API_KEY: Optional[str] = os.getenv("NVIDIA_API_KEY", "")
-    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "meta/llama-3.2-11b-vision-instruct")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
-    NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "nvidia/nemotron-3-super-120b-a12b")
-    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "moonshotai/kimi-k3")
-    NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "nvidia/nemotron-3-super-120b-a12b")
-    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "nvidia/nemotron-3-super-120b-a12b")
+    NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "meta/llama-3.2-11b-vision-instruct")
+    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "meta/llama-3.2-11b-vision-instruct")
+    NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "meta/llama-3.2-11b-vision-instruct")
+    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "meta/llama-3.2-11b-vision-instruct")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-3.7-flash")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Model Defaults
     DEFAULT_GEMINI_MODEL: str = "gemini-3.7-flash"
-    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
+    DEFAULT_NVIDIA_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
-    DEFAULT_DEEPSEEK_MODEL: str = "nvidia/nemotron-3-super-120b-a12b"
-    DEFAULT_KIMI_MODEL: str = "moonshotai/kimi-k3"
+    DEFAULT_DEEPSEEK_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+    DEFAULT_KIMI_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
     
     # Paper Trading Defaults
     DEFAULT_STARTING_BALANCE: float = 10000.0

@@ -102,10 +102,11 @@ async def run_stage3_nvidia_deepseek(
     if is_official_deepseek:
         candidate_models = ["deepseek-reasoner", "deepseek-chat"]
     else:
-        # Verified live models on NVIDIA NIM: 120B Super Reasoning model & Nano reasoning model
+        # Verified live high-speed models on NVIDIA NIM: meta/llama-3.2-11b-vision-instruct
         candidate_models = [
-            settings.NVIDIA_DEEPSEEK_MODEL or "nvidia/nemotron-3-super-120b-a12b",
-            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
+            "meta/llama-3.2-11b-vision-instruct",
+            "openai/gpt-oss-20b",
             settings.NVIDIA_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
         ]
 
@@ -181,8 +182,8 @@ async def run_stage3_nvidia_deepseek(
 
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
     if not parsed_json:
-        is_bullish = direction == "LONG" and news_sentiment_score >= 55.0 and not has_mtf_warning
-        is_bearish = direction == "SHORT" and news_sentiment_score <= 45.0
+        is_bullish = direction == "LONG" and news_sentiment_score >= 48.0 and not has_mtf_warning
+        is_bearish = direction == "SHORT" and news_sentiment_score <= 52.0
         toxic_flag = (pred_risk in ["HIGH", "EXTREME"]) or (funding_rate > 0.05 and direction == "LONG") or (funding_rate < -0.05 and direction == "SHORT")
 
         bias = "BUY" if is_bullish and not toxic_flag else ("SELL" if is_bearish and not toxic_flag else "NEUTRAL")
@@ -198,15 +199,15 @@ async def run_stage3_nvidia_deepseek(
             "toxic_flow_detected": toxic_flag,
             "confidence": confidence,
             "bias_probabilities": {
-                "BUY": 0.82 if bias == "BUY" else 0.10,
-                "HOLD": 0.12 if bias != "NEUTRAL" else 0.70,
-                "SELL": 0.82 if bias == "SELL" else 0.06,
+                "BUY": 0.82 if bias == "BUY" else 0.08,
+                "HOLD": 0.10 if bias != "NEUTRAL" else 0.84,
+                "SELL": 0.82 if bias == "SELL" else 0.08,
             },
             "chain_of_thought": f"Order flow delta conditioned on {funding_reg} funding rate ({funding_rate:+.4f}%) and {cvd_div}. MTF confluence: {mtf_align}.",
             "summary": f"NVIDIA DeepSeek Reasoning ({model_used}): {bias} conviction ({confidence*100:.1f}%) in {regime} regime with toxic flow={toxic_flag}."
         }
         telemetry_service.log_call(
-            provider="NVIDIA (DeepSeek)",
+            provider=provider_name,
             model=model_used,
             endpoint=f"{endpoint}/chat/completions",
             request_payload={"symbol": symbol, "fallback": True},

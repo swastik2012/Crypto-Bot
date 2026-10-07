@@ -153,8 +153,11 @@ async def run_stage1_gemini_vision(
     portfolio_ctx = _format_portfolio_context(account_state)
     open_count = len(account_state.get("open_positions", []))
 
-    # Fetch Triple-Screen MTF data in parallel from Binance
-    mtf_raw = await market_data_service.get_multi_timeframe_confluence(symbol, current_price)
+    # Fetch Triple-Screen MTF data & 30-day live candle matrix in parallel from Binance
+    mtf_raw, monthly_candles = await asyncio.gather(
+        market_data_service.get_multi_timeframe_confluence(symbol, current_price),
+        market_data_service.get_monthly_candles_summary(symbol),
+    )
     mtf_schema = _to_mtf_schema(mtf_raw)
 
     # Determine asset metrics from Binance
@@ -195,6 +198,7 @@ async def run_stage1_gemini_vision(
                 f"- Current Live Price: ${current_price:,.2f}\n"
                 f"- 24h Price Change: {change_24h:+.2f}%\n"
                 f"- 24h High: ${high_24h:,.2f} | 24h Low: ${low_24h:,.2f}\n\n"
+                f"{monthly_candles}\n\n"
                 f"DYNAMIC ATR VOLATILITY GEOMETRY (Binance 14-Period):\n"
                 f"• Volatility Regime: {atr_targets['volatility_regime']} (ATR: ${atr_targets['atr_14']:,.2f} / {atr_targets['atr_pct']}% of price)\n"
                 f"• Recommended Dynamic SL: ${atr_targets['stop_loss']:,.2f} ({atr_targets['sl_distance']:,.2f} buffer)\n"
@@ -313,24 +317,25 @@ async def run_stage1_gemini_vision(
     struct_4h_trend = mtf_raw.screen_4h.trend
     trigger_15m_trend = mtf_raw.screen_15m.trend
 
-    # STRICT ANTI-COUNTER-TREND RULES:
-    # 1. If 1D Macro Tide is BULLISH, NEVER short. Dips are accumulation zones or HOLD.
-    if macro_1d_trend == "BULLISH":
-        if struct_4h_trend == "BULLISH" or trigger_15m_trend == "BULLISH" or change_24h >= -1.5:
+    # Honor Triple-Screen Confluence or evaluate symmetric multi-timeframe rules
+    if mtf_raw.confluence_direction in ["SHORT", "LONG"]:
+        direction = mtf_raw.confluence_direction
+    elif macro_1d_trend == "BULLISH":
+        if struct_4h_trend == "BULLISH" or trigger_15m_trend == "BULLISH" or change_24h > 1.0:
             direction = "LONG"
         else:
             direction = "NEUTRAL"
     elif macro_1d_trend == "BEARISH":
-        if struct_4h_trend == "BEARISH" or trigger_15m_trend == "BEARISH":
+        if struct_4h_trend == "BEARISH" or trigger_15m_trend == "BEARISH" or change_24h < -1.0:
             direction = "SHORT"
         else:
             direction = "NEUTRAL"
     else:
-        # 1D Macro is NEUTRAL / Equilibrium
-        if struct_4h_trend == "BULLISH" and change_24h > 1.2:
-            direction = "LONG"
-        elif struct_4h_trend == "BEARISH" and change_24h < -2.5:
+        # 1D Macro is NEUTRAL / Equilibrium: Symmetric thresholds for Short & Long
+        if (struct_4h_trend == "BEARISH" or trigger_15m_trend == "BEARISH") and change_24h < 0.0:
             direction = "SHORT"
+        elif (struct_4h_trend == "BULLISH" or trigger_15m_trend == "BULLISH") and change_24h > 0.0:
+            direction = "LONG"
         else:
             direction = "NEUTRAL"
 

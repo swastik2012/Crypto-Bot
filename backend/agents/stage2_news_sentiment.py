@@ -61,15 +61,20 @@ async def run_stage2_news_sentiment(
         "}"
     )
 
+    stage1_setup = (
+        f"Stage 1 Technical Setup: {stage1_res.patterns[0].name if (stage1_res and stage1_res.patterns) else 'Multi-Timeframe Structure'} "
+        f"(Proposed Direction: {stage1_res.initial_thesis.get('direction', 'NEUTRAL') if (stage1_res and stage1_res.initial_thesis) else 'Market Confluence'})\n\n"
+    )
+
     user_prompt = (
         f"Cryptocurrency Pair: {symbol} | Current Price: ${current_price:,.2f}\n"
-        f"Stage 1 Gemini Vision Setup: {stage1_res.patterns[0].name if stage1_res.patterns else 'Consolidation'} (Proposed Direction: {stage1_res.initial_thesis.get('direction', 'NEUTRAL') if stage1_res.initial_thesis else 'NEUTRAL'})\n\n"
+        f"{stage1_setup}"
         f"Real-Time News Stream from CoinDesk, Cointelegraph & CryptoSlate:\n"
         f"{news_text_block}\n\n"
         f"Evaluate genuine institutional liquidity catalysts vs retail noise, synthesize the news gist, and calculate the institutional sentiment score."
     )
 
-    direction = str(stage1_res.initial_thesis.get("direction", "LONG")).upper() if stage1_res.initial_thesis else "LONG"
+    direction = str(stage1_res.initial_thesis.get("direction", "LONG")).upper() if (stage1_res and stage1_res.initial_thesis) else "LONG"
     
     # Calculate live sentiment score from market direction and live scraped articles
     art_count = len(articles_list)

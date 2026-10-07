@@ -193,9 +193,10 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                         }
                         className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold"
                       >
-                        <option value="deepseek-ai/deepseek-v4-pro">deepseek-ai/deepseek-v4-pro (Flagship Reasoning)</option>
-                        <option value="deepseek-ai/deepseek-r1">deepseek-ai/deepseek-r1</option>
-                        <option value="meta/llama-3.1-nemotron-70b-instruct">meta/llama-3.1-nemotron-70b-instruct</option>
+                        <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct (Ultra-Fast 500ms - Recommended)</option>
+                        <option value="deepseek-ai/deepseek-r1">deepseek-ai/deepseek-r1 (Reasoning Flagship)</option>
+                        <option value="nvidia/nemotron-3.5-lightning-30b-a3b">nvidia/nemotron-3.5-lightning-30b-a3b</option>
+                        <option value="meta/llama-3.2-90b-vision-instruct">meta/llama-3.2-90b-vision-instruct</option>
                       </select>
                     </div>
                     <div>
@@ -243,9 +244,10 @@ export const AgentConfigModal: React.FC<AgentConfigModalProps> = ({
                         }
                         className="w-full px-2.5 py-1.5 rounded-xl bg-slate-200/70 dark:bg-dark-800 border border-slate-300 dark:border-white/10 text-slate-800 dark:text-slate-100 font-bold"
                       >
+                        <option value="meta/llama-3.2-11b-vision-instruct">meta/llama-3.2-11b-vision-instruct (Ultra-Fast 500ms - Recommended)</option>
                         <option value="deepseek-ai/deepseek-r1">deepseek-ai/deepseek-r1 (Reasoning Flagship)</option>
-                        <option value="nvidia/nemotron-3.5-lightning-30b-a3b">nvidia/nemotron-3.5-lightning-30b-a3b (Ultra-Fast)</option>
-                        <option value="moonshotai/kimi-k2.6">moonshotai/kimi-k2.6 (Long-Context CoT)</option>
+                        <option value="nvidia/nemotron-3.5-lightning-30b-a3b">nvidia/nemotron-3.5-lightning-30b-a3b (Fast CoT)</option>
+                        <option value="meta/llama-3.2-90b-vision-instruct">meta/llama-3.2-90b-vision-instruct (90B Reasoning)</option>
                         <option value="nvidia/nemotron-3-super-120b-a12b">nvidia/nemotron-3-super-120b-a12b (Quant Flagship)</option>
                       </select>
                     </div>

@@ -17,10 +17,10 @@ class TradeLearningAgent:
     def __init__(self):
         self.endpoint = settings.NVIDIA_ENDPOINT or "https://integrate.api.nvidia.com/v1"
         self.preferred_models = [
-            settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
-            settings.NVIDIA_DEEPSEEK_MODEL or "deepseek-ai/deepseek-r1",
-            "nvidia/nemotron-3-super-120b-a12b",
-            settings.NVIDIA_MODEL or "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
+            settings.NVIDIA_REASONING_MODEL or "meta/llama-3.2-11b-vision-instruct",
+            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
+            "meta/llama-3.2-11b-vision-instruct",
+            "openai/gpt-oss-20b",
         ]
 
     async def analyze_trade(
@@ -82,9 +82,10 @@ class TradeLearningAgent:
         api_endpoint = "https://api.deepseek.com/chat/completions" if is_official_deepseek else f"{self.endpoint}/chat/completions"
         provider_name = "DeepSeek Official (Trade Learner)" if is_official_deepseek else "NVIDIA NIM (Trade Learner)"
         candidate_models = ["deepseek-reasoner", "deepseek-chat"] if is_official_deepseek else [
-            "nvidia/nemotron-3-super-120b-a12b",
-            "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-            settings.NVIDIA_DEEPSEEK_MODEL or "nvidia/nemotron-3-super-120b-a12b",
+            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
+            "meta/llama-3.2-11b-vision-instruct",
+            "openai/gpt-oss-20b",
+            settings.NVIDIA_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
         ]
 
         if effective_key and not effective_key.startswith("your-") and not effective_key.startswith("nvapi-***"):

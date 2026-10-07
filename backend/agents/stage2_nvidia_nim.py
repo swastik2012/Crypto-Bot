@@ -35,18 +35,32 @@ async def run_stage2_nvidia_nim(
     tp2 = thesis.get("take_profit_2", round(current_price * 1.078, 2))
     sl = thesis.get("stop_loss", round(current_price * 0.978, 2))
     
-    # Mathematical Calculations
-    reward = tp1 - entry
-    risk = entry - sl if entry > sl else 1.0
-    effective_rr = round(reward / risk, 2) if risk > 0 else 3.5
+    # Mathematical Calculations (Direction-Aware)
+    direction = str(thesis.get("direction", "LONG")).upper()
+    is_short = direction in ["SHORT", "SELL", "BEARISH"]
+
+    if is_short:
+        reward = entry - tp1 if entry > tp1 else abs(entry * 0.042)
+        risk = sl - entry if sl > entry else max(1.0, entry * 0.02)
+    else:
+        reward = tp1 - entry if tp1 > entry else abs(entry * 0.042)
+        risk = entry - sl if entry > sl else max(1.0, entry * 0.02)
+    effective_rr = round(reward / risk, 2) if risk > 0 else 2.1
     
-    # Monte Carlo Simulations
+    # Monte Carlo Simulations (Direction-Aware)
     random.seed(42)
-    volatility = stage1.atr_volatility.get("value", 1250.0) / current_price
-    drift = 0.005 if "bull" in str(stage1.initial_thesis).lower() else -0.002
+    vol_val = stage1.atr_volatility.get("value", current_price * 0.02) if hasattr(stage1, "atr_volatility") and isinstance(stage1.atr_volatility, dict) else current_price * 0.02
+    volatility = max(0.008, vol_val / current_price)
     
     simulations = 10000
-    win_count = sum(1 for _ in range(simulations) if random.gauss(drift, volatility) > 0)
+    if is_short:
+        drift = -0.005
+        # For SHORT trades, price moving DOWN (< 0 return) is a WIN!
+        win_count = sum(1 for _ in range(simulations) if random.gauss(drift, volatility) < 0)
+    else:
+        drift = 0.005
+        # For LONG trades, price moving UP (> 0 return) is a WIN!
+        win_count = sum(1 for _ in range(simulations) if random.gauss(drift, volatility) > 0)
     monte_carlo_win_rate = round(float(win_count / simulations * 100.0), 1)
 
     # Check cash sizing considering currently open positions

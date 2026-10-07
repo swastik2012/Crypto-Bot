@@ -144,9 +144,12 @@ async def run_tests():
     from backend.agents.stage4_openai_risk import run_stage4_openai_risk
     from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
 
+    stage1_long = analysis_res.stage1.model_copy(deep=True)
+    stage1_long.initial_thesis = {**analysis_res.stage1.initial_thesis, "direction": "LONG"}
+
     s4_audit, s4_msg = await run_stage4_openai_risk(
         symbol="SOL/USDT",
-        stage1=analysis_res.stage1,
+        stage1=stage1_long,
         stage2=analysis_res.stage2,
         stage3=analysis_res.stage3,
         current_price=175.0,
@@ -158,7 +161,7 @@ async def run_tests():
 
     s5_decision, s5_msg = await run_stage5_gemini_arbiter(
         symbol="SOL/USDT",
-        stage1=analysis_res.stage1,
+        stage1=stage1_long,
         stage2=analysis_res.stage2,
         stage3=analysis_res.stage3,
         stage4=s4_audit,

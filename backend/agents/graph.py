@@ -55,38 +55,38 @@ class MultiAgentConsensusPipeline:
         # MACROECONOMIC EVENT CIRCUIT BREAKER ENGINE (Phase 5: CPI, PPI, FOMC, NFP Lockouts)
         macro_status = macro_calendar_service.check_circuit_breaker()
 
-        # BTC MASTER GATEKEEPER ENGINE (Phase 2: Altcoin Protection Shield)
+        # Parallel Pre-Fetch: BTC Master Gatekeeper + Binance Derivatives Microstructure
         from backend.services.market_data import market_data_service
-        btc_gatekeeper = await market_data_service.check_btc_gatekeeper()
-
-        # DERIVATIVES MICROSTRUCTURE ENGINE (Binance Futures: Funding Rate, OI Delta, CVD)
         from backend.services.derivatives_service import derivatives_service
-        derivatives_data = await derivatives_service.get_derivatives_microstructure(
-            symbol=symbol,
-            current_price=current_price,
-            price_change_24h=0.0,
+        btc_gatekeeper, derivatives_data = await asyncio.gather(
+            market_data_service.check_btc_gatekeeper(),
+            derivatives_service.get_derivatives_microstructure(
+                symbol=symbol,
+                current_price=current_price,
+                price_change_24h=0.0,
+            ),
         )
 
-        # STAGE 1: Gemini Vision Ingestion
-        stage1_res, msg1 = await run_stage1_gemini_vision(
-            symbol=symbol,
-            timeframe=timeframe,
-            chart_image_base64=chart_image_base64,
-            current_price=current_price,
-            account_state=account_state,
-            api_key=gemini_key,
+        # Parallel Execution: STAGE 1 (Gemini Technical & 30D Candles) & STAGE 2 (NVIDIA News Sentiment)
+        (stage1_res, msg1), (stage2_res, msg2) = await asyncio.gather(
+            run_stage1_gemini_vision(
+                symbol=symbol,
+                timeframe=timeframe,
+                chart_image_base64=chart_image_base64,
+                current_price=current_price,
+                account_state=account_state,
+                api_key=gemini_key,
+            ),
+            run_stage2_news_sentiment(
+                symbol=symbol,
+                stage1_res=None,
+                current_price=current_price,
+                account_state=account_state,
+                api_key=nvidia_key,
+                macro_status=macro_status,
+            ),
         )
         debate_stream.append(msg1)
-
-        # STAGE 2: NVIDIA NIM News Ingestion (CoinDesk, Cointelegraph, CryptoSlate)
-        stage2_res, msg2 = await run_stage2_news_sentiment(
-            symbol=symbol,
-            stage1_res=stage1_res,
-            current_price=current_price,
-            account_state=account_state,
-            api_key=nvidia_key,
-            macro_status=macro_status,
-        )
         debate_stream.append(msg2)
 
         # STAGE 3: NVIDIA DeepSeek Reasoning & Macro Order Flow Engine (Ingests Stages 1-2 & Derivatives Order Flow)
@@ -177,12 +177,19 @@ class MultiAgentConsensusPipeline:
             wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
             discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
 
+            # Dynamic Leverage Scaling (>3x up to max_leverage):
+            plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
+            if not plan_lev or int(plan_lev) < 1:
+                plan_lev = 10 if stage5_res.consensus_confidence >= 88.0 else (7 if stage5_res.consensus_confidence >= 82.0 else 5)
+            max_sys_lev = getattr(paper_engine, "max_leverage", 20)
+            chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
+
             exec_latency_ms = round((time.time() - pipeline_start) * 1000, 1)
             order_req = PlacePaperOrderRequest(
                 symbol=symbol,
                 side=PositionSide.LONG if "BUY" in stage5_res.consensus_signal.value else PositionSide.SHORT,
                 size_usd=pos_size or default_fallback_size,
-                leverage=3,
+                leverage=chosen_leverage,
                 entry_price=entry_p,
                 order_type=order_type_val,
                 wholesale_limit_price=wholesale_limit,

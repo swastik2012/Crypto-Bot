@@ -344,8 +344,9 @@ async def run_stage4_openai_risk(
                 "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
                 "Content-Type": "application/json",
             }
+            nv_fast_model = settings.DEFAULT_NVIDIA_MODEL or "meta/llama-3.2-11b-vision-instruct"
             nv_payload = {
-                "model": "nvidia/nemotron-3.5-lightning-30b-a3b",
+                "model": nv_fast_model,
                 "messages": [
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt},
@@ -372,7 +373,7 @@ async def run_stage4_openai_risk(
                         macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
                         critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                         critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                        model_name = "nvidia/nemotron-3.5-lightning-30b-a3b"
+                        model_name = nv_fast_model
                         parsed_successfully = True
         except Exception:
             pass

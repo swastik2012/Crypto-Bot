@@ -3,7 +3,7 @@ import uuid
 import json
 import os
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Any
 from backend.models.schemas import (
     PaperAccountState,
     PaperPosition,
@@ -189,6 +189,34 @@ class VirtualPaperEngine:
             trade_history=self.trade_history[-50:],
         )
 
+    @property
+    def total_equity(self) -> float:
+        margin_used = sum(p.margin_used for p in self.open_positions.values())
+        unrealized_pnl = sum(p.unrealized_pnl for p in self.open_positions.values())
+        return round(self.cash_balance + margin_used + unrealized_pnl, 2)
+
+    def get_dynamic_max_positions(self) -> int:
+        """
+        Dynamically scale concurrent open positions capacity based on available capital/equity:
+        - <= $2,500: 3 positions (focused capital risk)
+        - <= $6,000: 5 positions
+        - <= $15,000: 8 positions
+        - <= $30,000: 10 positions
+        - > $30,000: 15 positions
+        """
+        eq = self.total_equity or self.cash_balance or 10000.0
+        if eq <= 2500.0:
+            slots = 3
+        elif eq <= 6000.0:
+            slots = 5
+        elif eq <= 15000.0:
+            slots = 8
+        elif eq <= 30000.0:
+            slots = 10
+        else:
+            slots = 15
+        return max(self.max_concurrent_positions, slots)
+
     def execute_order(
         self,
         order: PlacePaperOrderRequest,
@@ -200,9 +228,10 @@ class VirtualPaperEngine:
                 print(f"[PaperEngine Guard] Position in {order.symbol} already exists ({existing_id}). Preventing duplicate stacking.")
                 return existing_pos
 
-        # 2. Protection Guard: Max concurrent positions limit across portfolio (5 slots)
-        if len(self.open_positions) >= self.max_concurrent_positions:
-            print(f"[PaperEngine Guard] Max concurrent positions limit ({self.max_concurrent_positions}) reached. Skipping order on {order.symbol}.")
+        # 2. Protection Guard: Max concurrent positions limit across portfolio dynamically scaled to capital
+        effective_max = self.get_dynamic_max_positions()
+        if len(self.open_positions) >= effective_max:
+            print(f"[PaperEngine Guard] Max concurrent positions limit ({effective_max} slots based on ${self.total_equity:,.2f} equity) reached. Skipping order on {order.symbol}.")
             # Return first existing position as fallback
             return list(self.open_positions.values())[0]
 

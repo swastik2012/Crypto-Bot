@@ -137,19 +137,23 @@ async def run_stage5_gemini_arbiter(
         )
 
     # Phase 2: BTC Master Gatekeeper Shield (Altcoin Protection)
-    elif not symbol.upper().startswith("BTC") and btc_gatekeeper and not getattr(btc_gatekeeper, "altcoin_long_allowed", True):
+    elif not symbol.upper().startswith("BTC") and btc_gatekeeper and (
+        (direction in ["SHORT", "SELL", "BEARISH"] and not getattr(btc_gatekeeper, "altcoin_short_allowed", True)) or
+        (direction not in ["SHORT", "SELL", "BEARISH"] and not getattr(btc_gatekeeper, "altcoin_long_allowed", True))
+    ):
         veto_active = True
         signal = SignalAction.HOLD
         consensus_confidence = 36.0
         tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
         tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
         sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
-        reason = getattr(btc_gatekeeper, "gatekeeper_reason", "Bitcoin is breaking down")
-        invalidation_cond = f"ALTCOIN VETOED by BTC Gatekeeper: {reason}. Mandatory capital preservation."
+        dir_label = "SHORT" if direction in ["SHORT", "SELL", "BEARISH"] else "LONG"
+        reason = getattr(btc_gatekeeper, "gatekeeper_reason", "Bitcoin market condition precludes altcoin directional exposure")
+        invalidation_cond = f"ALTCOIN {dir_label} VETOED by BTC Gatekeeper: {reason}. Mandatory capital preservation."
         summary = (
-            f"⛔ BTC MASTER GATEKEEPER OVERRIDE: HOLD / STAND ASIDE for {symbol}. "
-            f"While isolated altcoin patterns indicated trading activity, {reason}. "
-            f"Historical analysis proves altcoins during an active Bitcoin sell-off suffer a >78% failure rate from market-wide liquidation contagion."
+            f"⛔ BTC MASTER GATEKEEPER OVERRIDE: HOLD / STAND ASIDE for {symbol} ({dir_label}). "
+            f"While isolated altcoin patterns indicated {dir_label} activity, {reason}. "
+            f"Chief Arbiter enforces capital preservation during cross-market volatility."
         )
 
     # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
@@ -217,7 +221,7 @@ async def run_stage5_gemini_arbiter(
                 (openai_score * 0.25),
                 1
             )
-            if consensus_confidence >= 88.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+            if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_SELL
             elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
                 signal = SignalAction.SELL
@@ -443,6 +447,25 @@ async def run_stage5_gemini_arbiter(
     order_type_rec = deriv_dict.get("recommended_order_type", "LIMIT")
     discount_pct_val = deriv_dict.get("sweep_discount_pct", 0.0)
 
+    # Dynamic Leverage Recommendation Engine:
+    # Scale between 3x and 10x based on Trade Grade, Consensus Conviction & Volatility:
+    rec_leverage = 3
+    if signal != SignalAction.HOLD:
+        if trade_grade == "A+" or consensus_confidence >= 88.0:
+            rec_leverage = 10
+        elif trade_grade == "A" or consensus_confidence >= 82.0:
+            rec_leverage = 7
+        elif consensus_confidence >= 75.0:
+            rec_leverage = 5
+        else:
+            rec_leverage = 3
+
+        atr_pct_val = float(atr_plan.get("atr_pct", 2.0)) if isinstance(atr_plan, dict) else 2.0
+        if atr_pct_val >= 3.5:
+            rec_leverage = min(rec_leverage, 5)
+    else:
+        rec_leverage = 1
+
     exec_plan = {
         "recommended_entry": entry,
         "take_profit_1": tp1,
@@ -467,7 +490,8 @@ async def run_stage5_gemini_arbiter(
         "ai_playbook_veto": playbook_veto.is_vetoed,
         "ai_playbook_rule": playbook_veto.rule_id,
         "ai_playbook_reason": playbook_veto.veto_reason,
-        "suggested_leverage": "3x - 5x Cross" if signal != SignalAction.HOLD else "None (Cash)",
+        "recommended_leverage": rec_leverage,
+        "suggested_leverage": f"{rec_leverage}x Cross" if signal != SignalAction.HOLD else "None (Cash)",
         "recommended_position_usd": suggested_pos,
         "kelly_fraction_pct": kelly_pct,
         "portfolio_heat_pct": portfolio_heat,

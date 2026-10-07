@@ -73,7 +73,7 @@ class AutoTradingScheduler:
             "next_run_timestamp": self.next_run_timestamp,
             "cycle_count": self.cycle_count,
             "active_positions_count": len(paper_engine.open_positions),
-            "max_positions_limit": getattr(paper_engine, "max_concurrent_positions", 5),
+            "max_positions_limit": paper_engine.get_dynamic_max_positions() if hasattr(paper_engine, "get_dynamic_max_positions") else getattr(paper_engine, "max_concurrent_positions", 5),
             "recent_logs": self.execution_logs[-15:],
         }
 
@@ -213,8 +213,14 @@ class AutoTradingScheduler:
                 # 🛑 RISK GUARD 3: Strict Single-Position & Trend Inversion
                 # ========================================================
                 existing_pos = next((p for p in paper_engine.open_positions.values() if p.symbol.upper() == pair.upper()), None)
-                max_slots = getattr(paper_engine, "max_concurrent_positions", 5)
-                portfolio_full = len(paper_engine.open_positions) >= max_slots
+                
+                # Dynamic Capital-Driven Open Position Slots:
+                account_eq = float(paper_engine.total_equity or paper_engine.cash_balance or 10000.0)
+                avail_cash = float(paper_engine.cash_balance or 0.0)
+                free_margin_ratio = (avail_cash / account_eq) if account_eq > 0 else 0.0
+                max_slots = paper_engine.get_dynamic_max_positions() if hasattr(paper_engine, "get_dynamic_max_positions") else getattr(paper_engine, "max_concurrent_positions", 5)
+                # Portfolio full only if slots saturated OR free cash buffer falls below 15%
+                portfolio_full = (len(paper_engine.open_positions) >= max_slots) or (free_margin_ratio < 0.15)
 
                 # Run the 5-Stage LangGraph multi-agent debate
                 pair_start_time = time.time()
@@ -335,12 +341,19 @@ class AutoTradingScheduler:
                     wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
                     discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
 
+                    # Dynamic Leverage Scaling (>3x up to max_leverage):
+                    plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
+                    if not plan_lev or int(plan_lev) < 1:
+                        plan_lev = 10 if confidence >= 88.0 else (7 if confidence >= 82.0 else 5)
+                    max_sys_lev = getattr(paper_engine, "max_leverage", 20)
+                    chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
+
                     exec_time_ms = round((time.time() - pair_start_time) * 1000, 1)
                     order_req = PlacePaperOrderRequest(
                         symbol=pair,
                         side=order_side,
                         size_usd=pos_size or default_auto_size,
-                        leverage=3,
+                        leverage=chosen_leverage,
                         entry_price=entry_p,
                         order_type=order_type_val,
                         wholesale_limit_price=wholesale_limit,
@@ -357,16 +370,15 @@ class AutoTradingScheduler:
                     pos = paper_engine.execute_order(order_req, current_price)
                     executed = True
                     pos_info = pos.dict()
-                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
+                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} with {chosen_leverage}x leverage in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
                 else:
                     skip_reason = None
                     if already_open:
                         skip_reason = "POSITION_ALREADY_OPEN"
                         print(f"[AutoTrader Guard] Skipped {pair}: Position already active in portfolio.")
                     elif portfolio_full:
-                        max_slots = getattr(paper_engine, "max_concurrent_positions", 5)
-                        skip_reason = f"PORTFOLIO_FULL ({len(paper_engine.open_positions)}/{max_slots} active positions occupied)"
-                        print(f"[AutoTrader Guard] Skipped {pair}: Portfolio full ({len(paper_engine.open_positions)}/{max_slots} maximum concurrent slots occupied).")
+                        skip_reason = f"PORTFOLIO_FULL ({len(paper_engine.open_positions)}/{max_slots} slots, {free_margin_ratio*100:.1f}% free margin)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Portfolio full ({len(paper_engine.open_positions)}/{max_slots} capital slots occupied, free margin: {free_margin_ratio*100:.1f}%).")
                     elif not deepseek_gate_pass:
                         skip_reason = "DEEPSEEK_ORDER_FLOW_VETO (toxic flow or lack of statistical edge)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Blocked by NVIDIA DeepSeek Order Flow reasoning gate.")
