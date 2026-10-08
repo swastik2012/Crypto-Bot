@@ -2,7 +2,7 @@ import asyncio
 import time
 from typing import Dict, Any, Tuple, Optional
 from backend.models.state import AgentGraphState
-from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema, BTCGatekeeperStatusSchema
+from backend.models.schemas import AnalyzeAndTradeResponse, PaperPosition, PlacePaperOrderRequest, PositionSide, MacroCalendarStatusSchema, BTCGatekeeperStatusSchema, RelativeStrengthSchema
 from backend.agents.stage1_gemini_vision import run_stage1_gemini_vision
 from backend.agents.stage2_news_sentiment import run_stage2_news_sentiment
 from backend.agents.stage3_nvidia_deepseek import run_stage3_nvidia_deepseek
@@ -11,6 +11,7 @@ from backend.agents.stage4_openai_risk import run_stage4_openai_risk
 from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
 from backend.services.paper_engine import paper_engine
 from backend.services.macro_calendar_service import macro_calendar_service
+from backend.services.market_data import market_data_service
 
 class MultiAgentConsensusPipeline:
     """
@@ -134,6 +135,9 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg4)
 
+        # Relative Strength (RS) Asset Quality Check (Phase 2)
+        relative_strength = await market_data_service.calculate_relative_strength(symbol=symbol)
+
         # STAGE 6: Gemini Consensus Arbiter (Reconciles System 1 & System 2 with Derivatives Order Flow)
         stage5_res, msg5 = await run_stage5_gemini_arbiter(
             symbol=symbol,
@@ -150,6 +154,7 @@ class MultiAgentConsensusPipeline:
             derivatives_data=derivatives_data,
             macro_status=macro_status,
             btc_gatekeeper=btc_gatekeeper,
+            relative_strength=relative_strength,
         )
         debate_stream.append(msg5)
 
@@ -160,12 +165,19 @@ class MultiAgentConsensusPipeline:
         is_alt = not symbol.upper().startswith("BTC")
         btc_block = is_alt and btc_gatekeeper and not btc_gatekeeper.altcoin_long_allowed and "BUY" in stage5_res.consensus_signal.value
         playbook_block = bool(stage5_res.playbook_veto and stage5_res.playbook_veto.is_vetoed)
+        rs_block = is_alt and relative_strength and (
+            (relative_strength.is_long_vetoed and "BUY" in stage5_res.consensus_signal.value) or
+            (relative_strength.is_short_vetoed and ("SELL" in stage5_res.consensus_signal.value or "SHORT" in stage5_res.consensus_signal.value))
+        )
 
-        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active and not btc_block and not playbook_block:
+        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active and not btc_block and not playbook_block and not rs_block:
             plan = stage5_res.execution_plan
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
-            default_fallback_size = max(100.0, round(account_eq * 0.08, 2))
-            pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
+            conf = stage5_res.consensus_confidence
+            target_pct = 0.15 if conf >= 88.0 else (0.11 if conf >= 82.0 else 0.08)
+            default_fallback_size = max(400.0, round(account_eq * target_pct, 2))
+            raw_pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
+            pos_size = max(default_fallback_size, raw_pos_size) if raw_pos_size > 0 else default_fallback_size
             entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
             tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
             tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
@@ -228,6 +240,7 @@ class MultiAgentConsensusPipeline:
             derivatives_data=derivatives_data,
             macro_status=MacroCalendarStatusSchema(**macro_status.to_schema()),
             btc_gatekeeper=BTCGatekeeperStatusSchema(**btc_gatekeeper.dict()) if btc_gatekeeper else None,
+            relative_strength=RelativeStrengthSchema(**relative_strength.dict()) if relative_strength else None,
             playbook_veto=stage5_res.playbook_veto,
             debate_stream=debate_stream,
             auto_executed=auto_executed,

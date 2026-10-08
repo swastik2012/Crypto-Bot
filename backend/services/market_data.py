@@ -294,6 +294,7 @@ class MarketDataService:
         sl_multiplier: float = 1.5,
         tp1_multiplier: float = 2.0,
         tp2_multiplier: float = 4.0,
+        override_atr: Optional[float] = None,
     ) -> Dict:
         """
         Calculates volatility-adaptive stop-loss and take-profit targets using 14-period ATR.
@@ -303,21 +304,24 @@ class MarketDataService:
         p = current_price or 78150.0
         prec = 4 if p < 1.0 else 2
 
-        # 1. Fetch recent klines to calculate fresh 14-period ATR
-        klines = await self.fetch_klines(symbol, timeframe, limit=20)
-        atr = 0.0
-        if klines and len(klines) >= 10:
-            highs = [float(k[2]) for k in klines]
-            lows = [float(k[3]) for k in klines]
-            closes = [float(k[4]) for k in klines]
-            atr = self._calculate_atr(highs, lows, closes, 14)
+        if override_atr and override_atr > 0.0:
+            atr = override_atr
+        else:
+            # 1. Fetch recent klines to calculate fresh 14-period ATR
+            klines = await self.fetch_klines(symbol, timeframe, limit=20)
+            atr = 0.0
+            if klines and len(klines) >= 10:
+                highs = [float(k[2]) for k in klines]
+                lows = [float(k[3]) for k in klines]
+                closes = [float(k[4]) for k in klines]
+                atr = self._calculate_atr(highs, lows, closes, 14)
 
-        # Fallback to cached MTF or asset default if klines unavailable
-        if atr <= 0.0:
-            clean_key = symbol.upper()
-            if clean_key in self._cache:
-                cached = self._cache[clean_key]["data"]
-                atr = cached.screen_15m.volatility_atr or cached.screen_4h.volatility_atr
+            # Fallback to cached MTF or asset default if klines unavailable
+            if atr <= 0.0:
+                clean_key = symbol.upper()
+                if clean_key in self._cache:
+                    cached = self._cache[clean_key]["data"]
+                    atr = cached.screen_15m.volatility_atr or cached.screen_4h.volatility_atr
             if atr <= 0.0:
                 atr = round(p * 0.022, prec)
 
@@ -331,16 +335,17 @@ class MarketDataService:
         else:
             vol_regime = "Normal Volatility"
 
-        # 3. Calculate distance with safety clamping (1.2% min SL distance, 5.5% max SL distance)
-        sl_distance = max(p * 0.012, min(p * 0.055, atr * sl_multiplier))
+        # 3. Calculate distance with safety clamping (1.0% min SL distance, strict 2.2% max SL distance)
+        # Prevents high-leverage outliers while maintaining volatility adaptation
+        sl_distance = max(p * 0.010, min(p * 0.022, atr * sl_multiplier))
         tp1_distance = max(p * 0.018, atr * tp1_multiplier)
-        tp2_distance = max(p * 0.035, atr * tp2_multiplier)
+        tp2_distance = max(p * 0.038, atr * tp2_multiplier)
 
-        # Guarantee asymmetric R:R (TP1 >= 1.25x SL, TP2 >= 2.5x SL)
-        if tp1_distance < (sl_distance * 1.25):
-            tp1_distance = round(sl_distance * 1.33, prec)
-        if tp2_distance < (sl_distance * 2.4):
-            tp2_distance = round(sl_distance * 2.67, prec)
+        # Guarantee strong asymmetric R:R (TP1 >= 1.33x SL, TP2 >= 2.67x SL)
+        if tp1_distance < (sl_distance * 1.33):
+            tp1_distance = round(sl_distance * 1.5, prec)
+        if tp2_distance < (sl_distance * 2.5):
+            tp2_distance = round(sl_distance * 3.0, prec)
 
         # 4. Synthesize Geometry based on direction
         dir_upper = direction.upper()
@@ -534,6 +539,125 @@ class MarketDataService:
         formatted_summary = "\n".join(lines)
         self._cache[cache_key] = {"data": formatted_summary, "timestamp": now}
         return formatted_summary
+
+    async def calculate_relative_strength(
+        self,
+        symbol: str,
+        benchmark: str = "BTC/USDT",
+        override_asset_change: Optional[float] = None,
+        override_benchmark_change: Optional[float] = None,
+    ) -> "RelativeStrengthInfo":
+        """
+        Calculates 24-hour Relative Strength (RS) against benchmark (BTC) to eliminate laggard drag.
+        Formula: RS = (1 + Return_Asset / 100) / (1 + Return_Benchmark / 100)
+        RS >= 1.04 -> Momentum Leader (+10% conviction bonus on Long; Short penalized)
+        RS < 0.95 -> Laggard Drag (-15% conviction penalty on Long; Short favored)
+        RS < 0.90 -> Deep Underperformer (HARD VETO on Longs)
+        """
+        clean_sym = symbol.replace("/", "").replace("-", "").upper()
+        clean_bench = benchmark.replace("/", "").replace("-", "").upper()
+        
+        # If asset IS the benchmark (e.g. BTC/USDT)
+        if "BTC" in clean_sym and ("BTC" in clean_bench or clean_bench == "BTCUSDT"):
+            return RelativeStrengthInfo(
+                symbol=symbol,
+                benchmark=benchmark,
+                rs_score=1.0,
+                asset_change_24h=0.0,
+                benchmark_change_24h=0.0,
+                status="BENCHMARK",
+                long_conviction_modifier=0.0,
+                short_conviction_modifier=0.0,
+                is_long_vetoed=False,
+                is_short_vetoed=False,
+                directive="Asset is the benchmark. Relative strength neutral."
+            )
+
+        asset_change = override_asset_change
+        bench_change = override_benchmark_change
+
+        if asset_change is None or bench_change is None:
+            try:
+                sym_to_fetch = clean_sym if clean_sym.endswith("USDT") else clean_sym + "USDT"
+                bench_to_fetch = clean_bench if clean_bench.endswith("USDT") else "BTCUSDT"
+                async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
+                    if asset_change is None:
+                        url_asset = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym_to_fetch}"
+                        resp = await client.get(url_asset)
+                        if resp.status_code == 200:
+                            asset_change = float(resp.json().get("priceChangePercent", 0.0))
+                    if bench_change is None:
+                        url_bench = f"https://api.binance.com/api/v3/ticker/24hr?symbol={bench_to_fetch}"
+                        resp_b = await client.get(url_bench)
+                        if resp_b.status_code == 200:
+                            bench_change = float(resp_b.json().get("priceChangePercent", 0.0))
+            except Exception as e:
+                print(f"[MarketDataService] RS ticker fetch notice ({symbol}): {e}")
+
+        if asset_change is None:
+            asset_change = 0.0
+        if bench_change is None:
+            bench_change = 0.0
+
+        rs_score = round((1.0 + (asset_change / 100.0)) / (1.0 + (bench_change / 100.0)), 4)
+
+        if rs_score >= 1.04:
+            status = "MOMENTUM_LEADER"
+            long_mod = 10.0
+            short_mod = -20.0
+            is_long_veto = False
+            is_short_veto = True
+            directive = f"⚡ MOMENTUM LEADER: Outperforming BTC by +{(rs_score - 1.0)*100:.1f}%. High priority for LONGs; SHORTS vetoed."
+        elif rs_score < 0.90:
+            status = "DEEP_UNDERPERFORMER"
+            long_mod = -30.0
+            short_mod = 15.0
+            is_long_veto = True
+            is_short_veto = False
+            directive = f"⛔ DEEP UNDERPERFORMER: Severely lagging BTC (RS {rs_score:.2f}). HARD VETO on LONGs; high priority for SHORTs."
+        elif rs_score < 0.95:
+            status = "LAGGARD_DRAG"
+            long_mod = -15.0
+            short_mod = 10.0
+            is_long_veto = False
+            is_short_veto = False
+            directive = f"⚠️ LAGGARD DRAG: Lagging BTC (RS {rs_score:.2f}). -15% conviction penalty on LONGs; favorable for SHORTs."
+        else:
+            status = "NEUTRAL"
+            long_mod = 0.0
+            short_mod = 0.0
+            is_long_veto = False
+            is_short_veto = False
+            directive = f"⚖️ NEUTRAL: Tracking BTC (RS {rs_score:.2f}). Standard conviction applied."
+
+        return RelativeStrengthInfo(
+            symbol=symbol,
+            benchmark=benchmark,
+            rs_score=rs_score,
+            asset_change_24h=round(asset_change, 2),
+            benchmark_change_24h=round(bench_change, 2),
+            status=status,
+            long_conviction_modifier=long_mod,
+            short_conviction_modifier=short_mod,
+            is_long_vetoed=is_long_veto,
+            is_short_vetoed=is_short_veto,
+            directive=directive
+        )
+
+
+class RelativeStrengthInfo(BaseModel):
+    symbol: str
+    benchmark: str = "BTC"
+    rs_score: float
+    asset_change_24h: float
+    benchmark_change_24h: float
+    status: str  # "MOMENTUM_LEADER", "NEUTRAL", "LAGGARD_DRAG", "DEEP_UNDERPERFORMER", "BENCHMARK"
+    long_conviction_modifier: float
+    short_conviction_modifier: float
+    is_long_vetoed: bool = False
+    is_short_vetoed: bool = False
+    directive: str
+    timestamp: float = Field(default_factory=time.time)
 
 
 class BTCGatekeeperStatus(BaseModel):

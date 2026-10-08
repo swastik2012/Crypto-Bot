@@ -254,14 +254,15 @@ class VirtualPaperEngine:
         
         # Determine exchange fee preset based on quote currency
         fee_preset = fee_service.determine_preset(self.quote_currency)
-        entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset)
+        is_maker_entry = is_wholesale_sniper or (getattr(order, "order_type", "MARKET") == "LIMIT")
+        entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset, is_maker=is_maker_entry)
         entry_fee = entry_fee_info["total_entry_fee_usd"]
 
         total_cash_needed = margin_required + entry_fee
         if total_cash_needed > self.cash_balance:
             margin_required = max(10.0, (self.cash_balance - entry_fee) * 0.95)
             size_usd = margin_required * leverage
-            entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset)
+            entry_fee_info = fee_service.calculate_entry_fee(size_usd, fee_preset, is_maker=is_maker_entry)
             entry_fee = entry_fee_info["total_entry_fee_usd"]
 
         self.cash_balance -= (margin_required + entry_fee)
@@ -367,9 +368,9 @@ class VirtualPaperEngine:
                     
                     gross_pnl = half_margin * half_pnl_pct
                     
-                    # Fee Calculation for 50% exit
+                    # Fee Calculation for 50% exit (Resting Take-Profit Limit order gets Maker execution)
                     fee_preset = fee_service.determine_preset(self.quote_currency)
-                    exit_fee_info = fee_service.calculate_exit_fee_and_tax(half_notional, fee_preset, is_closing_trade=True)
+                    exit_fee_info = fee_service.calculate_exit_fee_and_tax(half_notional, fee_preset, is_closing_trade=True, is_maker=True)
                     exit_fee = exit_fee_info["trading_fee_usd"]
                     tds_fee = exit_fee_info["tds_usd"]
                     total_exit_deduction = exit_fee_info["total_exit_deduction_usd"]
@@ -414,14 +415,21 @@ class VirtualPaperEngine:
                     pos.quantity = round(pos.quantity * 0.5, 6)
                     pos.margin_used = round(half_margin, 2)
                     pos.entry_fee_paid = round(pos.entry_fee_paid * 0.5, 4)
+                    tp1_target_executed = pos.take_profit_1
+                    pos.tp1_hit_price = tp1_target_executed
                     pos.take_profit_1 = None  # TP1 cleared, runner now tracks Chandelier trailing
                     pos.trailing_stop_active = True
 
-                    # 3. Lock Stop Loss at Break-Even + 0.1% buffer ($0 Risk Runner)
+                    # 3. Lock Stop Loss with Buffered Profit Cushion (Phase 1)
+                    # Secures 35% of the distance to TP1 above entry (or below entry for Short),
+                    # guaranteeing the runner exits in real net profit while giving 65% breathing room for retests.
+                    gain_tp1 = abs(tp1_target_executed - pos.entry_price)
+                    buffered_gain = gain_tp1 * 0.35
+                    prec = 4 if current_price < 1 else 2
                     if pos.side == PositionSide.LONG:
-                        pos.stop_loss = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
+                        pos.stop_loss = round(pos.entry_price + buffered_gain, prec)
                     else:
-                        pos.stop_loss = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
+                        pos.stop_loss = round(pos.entry_price - buffered_gain, prec)
 
             # ==============================================================
             # 🛡️ ADAPTIVE CHANDELIER ATR TRAILING STOP ENGINE (PHASE 1)
@@ -441,12 +449,18 @@ class VirtualPaperEngine:
             # Adaptive Chandelier Exit logic for active runners
             if is_runner:
                 pos.trailing_stop_active = True
+                prec = 4 if current_price < 1 else 2
                 if pos.side == PositionSide.LONG:
                     # Long Chandelier Exit = Highest Price Seen - (Multiplier * ATR)
                     high_water = pos.highest_price_seen or current_price
-                    chandelier_exit = round(high_water - (atr_val * multiplier), 4 if current_price < 1 else 2)
-                    # Never allow trailing stop to fall below the Break-Even lock
-                    be_floor = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
+                    chandelier_exit = round(high_water - (atr_val * multiplier), prec)
+                    # Runner floor: if TP1 was already taken, floor is buffered profit lock (35% of TP1 distance);
+                    # Otherwise, floor is entry break-even (1.001)
+                    if pos.tp1_hit_price:
+                        gain_tp1 = abs(pos.tp1_hit_price - pos.entry_price)
+                        be_floor = round(pos.entry_price + (gain_tp1 * 0.35), prec)
+                    else:
+                        be_floor = round(pos.entry_price * 1.001, prec)
                     target_stop = max(chandelier_exit, be_floor)
                     if pos.stop_loss:
                         pos.stop_loss = max(pos.stop_loss, target_stop)
@@ -456,9 +470,14 @@ class VirtualPaperEngine:
                 elif pos.side == PositionSide.SHORT:
                     # Short Chandelier Exit = Lowest Price Seen + (Multiplier * ATR)
                     low_water = pos.lowest_price_seen or current_price
-                    chandelier_exit = round(low_water + (atr_val * multiplier), 4 if current_price < 1 else 2)
-                    # Never allow trailing stop to rise above the Break-Even ceiling
-                    be_ceiling = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
+                    chandelier_exit = round(low_water + (atr_val * multiplier), prec)
+                    # Runner ceiling: if TP1 was already taken, ceiling is buffered profit lock (35% of TP1 distance);
+                    # Otherwise, ceiling is entry break-even (0.999)
+                    if pos.tp1_hit_price:
+                        gain_tp1 = abs(pos.tp1_hit_price - pos.entry_price)
+                        be_ceiling = round(pos.entry_price - (gain_tp1 * 0.35), prec)
+                    else:
+                        be_ceiling = round(pos.entry_price * 0.999, prec)
                     target_stop = min(chandelier_exit, be_ceiling)
                     if pos.stop_loss:
                         pos.stop_loss = min(pos.stop_loss, target_stop)
@@ -527,9 +546,10 @@ class VirtualPaperEngine:
 
         gross_realized_pnl = pos.margin_used * pnl_pct
         
-        # Real fee & TDS calculation
+        # Real fee & TDS calculation (Resting TP limit orders get Maker discount; SL/Chandelier market hits get Taker)
         fee_preset = fee_service.determine_preset(self.quote_currency)
-        exit_fee_info = fee_service.calculate_exit_fee_and_tax(pos.size_usd, fee_preset, is_closing_trade=True)
+        is_limit_exit = "TAKE_PROFIT" in str(reason).upper() or "LIMIT" in str(reason).upper()
+        exit_fee_info = fee_service.calculate_exit_fee_and_tax(pos.size_usd, fee_preset, is_closing_trade=True, is_maker=is_limit_exit)
         exit_fee = exit_fee_info["trading_fee_usd"]
         tds_fee = exit_fee_info["tds_usd"]
         total_exit_deduction = exit_fee_info["total_exit_deduction_usd"]

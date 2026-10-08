@@ -10,9 +10,9 @@ class FeeCalculatorService:
     Calculates authentic exchange transaction charges and taxes for Binance (USD) and CoinDCX (INR).
     """
 
-    # Binance Standard Retail Tier
-    BINANCE_TAKER_FEE_PCT = 0.0010     # 0.10%
-    BINANCE_MAKER_FEE_PCT = 0.0010     # 0.10%
+    # Binance Retail & Institutional Tier (Futures & Spot)
+    BINANCE_TAKER_FEE_PCT = 0.0005     # 0.05% Taker Fee
+    BINANCE_MAKER_FEE_PCT = 0.0002     # 0.02% Maker Fee (Resting Wholesale Limit Orders)
     BINANCE_TDS_PCT = 0.0000           # 0.0%
 
     # CoinDCX Retail Standard Tier
@@ -31,34 +31,39 @@ class FeeCalculatorService:
     def calculate_entry_fee(
         cls,
         notional_size_usd: float,
-        preset: ExchangeFeePreset = ExchangeFeePreset.BINANCE_USD
+        preset: ExchangeFeePreset = ExchangeFeePreset.BINANCE_USD,
+        is_maker: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculates fee deducted at entry (BUY order).
+        Wholesale limit orders enjoy Maker tier discounts.
         """
         if preset == ExchangeFeePreset.COINDCX_INR:
-            brokerage = notional_size_usd * cls.COINDCX_BROKERAGE_PCT
+            rate = cls.COINDCX_BROKERAGE_PCT if not is_maker else (cls.COINDCX_BROKERAGE_PCT * 0.75)
+            brokerage = notional_size_usd * rate
             gst = brokerage * cls.COINDCX_GST_ON_FEE_PCT
             total_fee = brokerage + gst
             return {
                 "exchange": "CoinDCX (INR)",
-                "fee_pct": round(cls.COINDCX_TOTAL_FEE_PCT * 100, 3),
+                "fee_pct": round((total_fee / notional_size_usd) * 100, 3) if notional_size_usd > 0 else 0.236,
                 "brokerage_usd": round(brokerage, 4),
                 "gst_usd": round(gst, 4),
                 "total_entry_fee_usd": round(total_fee, 4),
                 "tds_usd": 0.0,  # TDS only on sell
-                "description": f"CoinDCX 0.20% + 18% GST (${total_fee:,.2f})",
+                "description": f"CoinDCX {'Maker' if is_maker else 'Taker'} Fee (${total_fee:,.2f})",
             }
         else:
-            total_fee = notional_size_usd * cls.BINANCE_TAKER_FEE_PCT
+            fee_pct = cls.BINANCE_MAKER_FEE_PCT if is_maker else cls.BINANCE_TAKER_FEE_PCT
+            total_fee = notional_size_usd * fee_pct
+            fee_label = "0.02% Maker Fee (Wholesale)" if is_maker else "0.05% Taker Fee"
             return {
                 "exchange": "Binance (USD)",
-                "fee_pct": round(cls.BINANCE_TAKER_FEE_PCT * 100, 2),
+                "fee_pct": round(fee_pct * 100, 3),
                 "brokerage_usd": round(total_fee, 4),
                 "gst_usd": 0.0,
                 "total_entry_fee_usd": round(total_fee, 4),
                 "tds_usd": 0.0,
-                "description": f"Binance 0.10% Taker Fee (${total_fee:,.2f})",
+                "description": f"Binance {fee_label} (${total_fee:,.2f})",
             }
 
     @classmethod
@@ -67,34 +72,38 @@ class FeeCalculatorService:
         exit_notional_usd: float,
         preset: ExchangeFeePreset = ExchangeFeePreset.BINANCE_USD,
         is_closing_trade: bool = True,
+        is_maker: bool = False,
     ) -> Dict[str, Any]:
         """
         Calculates fee and 1% Indian TDS deducted at exit / sell.
+        Resting TP1 limit orders earn Maker execution rates.
         """
         if preset == ExchangeFeePreset.COINDCX_INR:
-            brokerage = exit_notional_usd * cls.COINDCX_BROKERAGE_PCT
+            rate = cls.COINDCX_BROKERAGE_PCT if not is_maker else (cls.COINDCX_BROKERAGE_PCT * 0.75)
+            brokerage = exit_notional_usd * rate
             gst = brokerage * cls.COINDCX_GST_ON_FEE_PCT
             trading_fee = brokerage + gst
-            # 1% Indian TDS on all crypto sell consideration
             tds = exit_notional_usd * cls.COINDCX_TDS_PCT if is_closing_trade else 0.0
             total_deduction = trading_fee + tds
             return {
                 "exchange": "CoinDCX (INR)",
-                "fee_pct": round(cls.COINDCX_TOTAL_FEE_PCT * 100, 3),
+                "fee_pct": round((trading_fee / exit_notional_usd) * 100, 3) if exit_notional_usd > 0 else 0.236,
                 "trading_fee_usd": round(trading_fee, 4),
                 "tds_usd": round(tds, 4),
                 "total_exit_deduction_usd": round(total_deduction, 4),
-                "description": f"CoinDCX 0.236% Fee (${trading_fee:,.2f}) + 1.0% TDS (${tds:,.2f})",
+                "description": f"CoinDCX {'Maker' if is_maker else 'Taker'} Fee (${trading_fee:,.2f}) + 1% TDS (${tds:,.2f})",
             }
         else:
-            trading_fee = exit_notional_usd * cls.BINANCE_TAKER_FEE_PCT
+            fee_pct = cls.BINANCE_MAKER_FEE_PCT if is_maker else cls.BINANCE_TAKER_FEE_PCT
+            trading_fee = exit_notional_usd * fee_pct
+            fee_label = "0.02% Maker Fee (Resting Limit)" if is_maker else "0.05% Taker Fee"
             return {
                 "exchange": "Binance (USD)",
-                "fee_pct": round(cls.BINANCE_TAKER_FEE_PCT * 100, 2),
+                "fee_pct": round(fee_pct * 100, 3),
                 "trading_fee_usd": round(trading_fee, 4),
                 "tds_usd": 0.0,
                 "total_exit_deduction_usd": round(trading_fee, 4),
-                "description": f"Binance 0.10% Taker Fee (${trading_fee:,.2f})",
+                "description": f"Binance {fee_label} (${trading_fee:,.2f})",
             }
 
 fee_service = FeeCalculatorService()

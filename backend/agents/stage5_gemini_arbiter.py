@@ -38,6 +38,7 @@ async def run_stage5_gemini_arbiter(
     derivatives_data: Optional[Any] = None,
     macro_status: Optional[Any] = None,
     btc_gatekeeper: Optional[Any] = None,
+    relative_strength: Optional[Any] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
@@ -154,6 +155,39 @@ async def run_stage5_gemini_arbiter(
             f"⛔ BTC MASTER GATEKEEPER OVERRIDE: HOLD / STAND ASIDE for {symbol} ({dir_label}). "
             f"While isolated altcoin patterns indicated {dir_label} activity, {reason}. "
             f"Chief Arbiter enforces capital preservation during cross-market volatility."
+        )
+
+    # Phase 2: Relative Strength (RS) Asset Quality Filter
+    elif relative_strength and getattr(relative_strength, "is_long_vetoed", False) and direction not in ["SHORT", "SELL", "BEARISH"]:
+        veto_active = True
+        signal = SignalAction.HOLD
+        consensus_confidence = 32.0
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        rs_score = getattr(relative_strength, "rs_score", 0.0)
+        directive = getattr(relative_strength, "directive", "Severe underperformance vs BTC")
+        invalidation_cond = f"RELATIVE STRENGTH VETO: RS={rs_score:.2f} severely lagging BTC. Stand aside on longs."
+        summary = (
+            f"⛔ RELATIVE STRENGTH VETO: HOLD / STAND ASIDE for {symbol} (LONG). "
+            f"Asset 24h RS score is {rs_score:.2f} (severely lagging BTC benchmark). "
+            f"{directive} Capital preservation rule blocks buying structural underperformers."
+        )
+
+    elif relative_strength and getattr(relative_strength, "is_short_vetoed", False) and direction in ["SHORT", "SELL", "BEARISH"]:
+        veto_active = True
+        signal = SignalAction.HOLD
+        consensus_confidence = 35.0
+        tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
+        tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
+        sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
+        rs_score = getattr(relative_strength, "rs_score", 0.0)
+        directive = getattr(relative_strength, "directive", "Momentum leader vs BTC")
+        invalidation_cond = f"RELATIVE STRENGTH VETO: RS={rs_score:.2f} outperforming BTC. Never short momentum leaders."
+        summary = (
+            f"⛔ RELATIVE STRENGTH VETO: HOLD / STAND ASIDE for {symbol} (SHORT). "
+            f"Asset 24h RS score is {rs_score:.2f} (outperforming BTC benchmark). "
+            f"{directive} Systemic momentum makes shorting an outperformer negative expectancy."
         )
 
     # PREDATORY DERIVATIVES FLOW VETO: If high liquidation risk detected, enforce strict HOLD
@@ -304,6 +338,13 @@ async def run_stage5_gemini_arbiter(
                 (openai_score * 0.25),
                 1
             )
+            # Apply Relative Strength conviction modifier (Phase 2)
+            if relative_strength and not veto_active:
+                if direction in ["SHORT", "SELL", "BEARISH"]:
+                    rs_mod = getattr(relative_strength, "short_conviction_modifier", 0.0)
+                else:
+                    rs_mod = getattr(relative_strength, "long_conviction_modifier", 0.0)
+                consensus_confidence = max(20.0, min(98.0, round(consensus_confidence + rs_mod, 1)))
             if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_BUY
             elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
@@ -430,10 +471,19 @@ async def run_stage5_gemini_arbiter(
 
     open_positions: List[Dict] = account_state.get("open_positions", [])
     equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
-    default_pos_size = max(100.0, round(equity * 0.08, 2))
+    
+    # Conviction-driven capital scaling (Phase 3)
+    if consensus_confidence >= 88.0:
+        target_pct = 0.15
+    elif consensus_confidence >= 82.0:
+        target_pct = 0.11
+    else:
+        target_pct = 0.08
+    default_pos_size = max(400.0, round(equity * target_pct, 2))
 
     adj = stage3.adjustments_proposed if isinstance(stage3.adjustments_proposed, dict) else {}
-    suggested_pos = adj.get("suggested_position_usd", default_pos_size) if signal != SignalAction.HOLD else 0.0
+    raw_suggested = adj.get("suggested_position_usd", default_pos_size) if signal != SignalAction.HOLD else 0.0
+    suggested_pos = max(default_pos_size, raw_suggested) if (signal != SignalAction.HOLD and raw_suggested > 0) else raw_suggested
     kelly_pct = adj.get("kelly_fraction_pct", round((suggested_pos / equity) * 100, 1)) if signal != SignalAction.HOLD else 0.0
     portfolio_heat = adj.get("portfolio_heat_pct", 0.0)
     expected_val = adj.get("expected_value", 0.0)

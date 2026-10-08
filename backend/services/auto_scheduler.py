@@ -291,6 +291,19 @@ class AutoTradingScheduler:
                     playbook_gate_pass = False
                     print(f"[AutoTrader AI Playbook Gate] {pair} entry blocked: {getattr(playbook_status, 'veto_reason', 'Negative rule triggered')}")
 
+                # ========================================================
+                # 🛑 RISK GUARD 7: Relative Strength (RS) Asset Quality Shield
+                # ========================================================
+                rs_gate_pass = True
+                rs_status = getattr(response, "relative_strength", None)
+                if rs_status:
+                    if is_buy and getattr(rs_status, "is_long_vetoed", False):
+                        rs_gate_pass = False
+                        print(f"[AutoTrader RS Guard] {pair} LONG blocked: RS={rs_status.rs_score:.2f} (Deep underperformer vs BTC benchmark).")
+                    elif is_short and getattr(rs_status, "is_short_vetoed", False):
+                        rs_gate_pass = False
+                        print(f"[AutoTrader RS Guard] {pair} SHORT blocked: RS={rs_status.rs_score:.2f} (Momentum leader vs BTC benchmark).")
+
                 can_execute = (
                     confidence >= 78.0 and
                     (is_buy or is_short) and
@@ -298,18 +311,34 @@ class AutoTradingScheduler:
                     not portfolio_full and
                     deepseek_gate_pass and
                     btc_gate_pass and
-                    playbook_gate_pass
+                    playbook_gate_pass and
+                    rs_gate_pass
                 )
 
                 if can_execute:
                     plan = response.stage5.execution_plan
-                    eq = float(paper_engine.cash_balance or 10000.0)
-                    default_auto_size = max(100.0, round(eq * 0.08, 2))
-                    pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
+                    eq = float(paper_engine.total_equity or paper_engine.cash_balance or 10000.0)
+                    avail_cash = float(paper_engine.cash_balance or 0.0)
+                    target_pct = 0.15 if confidence >= 88.0 else (0.11 if confidence >= 82.0 else 0.08)
+                    default_auto_size = max(400.0, round(eq * target_pct, 2))
+                    raw_pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
+                    pos_size = max(default_auto_size, raw_pos_size) if raw_pos_size > 0 else default_auto_size
+
+                    # Maintain 15% cash reserve buffer for margin stability
+                    safe_cash_buffer = eq * 0.15
+                    usable_cash = max(100.0, avail_cash - safe_cash_buffer)
+                    plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
+                    if not plan_lev or int(plan_lev) < 1:
+                        plan_lev = 10 if confidence >= 88.0 else (7 if confidence >= 82.0 else 5)
+                    max_sys_lev = getattr(paper_engine, "max_leverage", 20)
+                    chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
+                    if (pos_size / chosen_leverage) > usable_cash:
+                        pos_size = round(usable_cash * chosen_leverage, 2)
+
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
-                    kelly_pct = plan.get("kelly_fraction_pct") if isinstance(plan, dict) else getattr(plan, "kelly_fraction_pct", None)
+                    kelly_pct = round((pos_size / eq) * 100, 1) if eq > 0 else 8.0
                     sizing_regime = plan.get("sizing_regime", "BALANCED_HALF_KELLY") if isinstance(plan, dict) else getattr(plan, "sizing_regime", "BALANCED_HALF_KELLY")
-                    print(f"[AutoTrader Kelly Sizing] {pair} allocated ${pos_size:,.2f} ({kelly_pct}% equity) via {sizing_regime}.")
+                    print(f"[AutoTrader Dynamic Sizing] {pair} allocated ${pos_size:,.2f} ({kelly_pct}% equity) via {sizing_regime}.")
                     
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG

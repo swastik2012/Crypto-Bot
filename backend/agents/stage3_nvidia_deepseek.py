@@ -183,7 +183,7 @@ async def run_stage3_nvidia_deepseek(
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
     if not parsed_json:
         is_bullish = direction == "LONG" and news_sentiment_score >= 48.0 and not has_mtf_warning
-        is_bearish = direction == "SHORT" and news_sentiment_score <= 52.0
+        is_bearish = direction == "SHORT" and (news_sentiment_score <= 82.0 or has_mtf_warning)
         toxic_flag = (pred_risk in ["HIGH", "EXTREME"]) or (funding_rate > 0.05 and direction == "LONG") or (funding_rate < -0.05 and direction == "SHORT")
 
         bias = "BUY" if is_bullish and not toxic_flag else ("SELL" if is_bearish and not toxic_flag else "NEUTRAL")

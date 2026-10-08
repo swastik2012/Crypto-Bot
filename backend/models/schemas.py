@@ -83,6 +83,7 @@ class PaperPosition(BaseModel):
     trailing_stop_active: bool = False
     chandelier_atr: Optional[float] = None
     chandelier_multiplier: float = 2.5
+    tp1_hit_price: Optional[float] = None
     order_type: str = "MARKET"
     wholesale_entry_sniper: bool = False
     spread_savings_usd: float = 0.0
@@ -460,6 +461,20 @@ class BTCGatekeeperStatusSchema(BaseModel):
         if not self.btc_trend_4h:
             self.btc_trend_4h = self.btc_4h_trend
 
+class RelativeStrengthSchema(BaseModel):
+    symbol: str
+    benchmark: str = "BTC"
+    rs_score: float
+    asset_change_24h: float
+    benchmark_change_24h: float
+    status: str  # "MOMENTUM_LEADER", "NEUTRAL", "LAGGARD_DRAG", "DEEP_UNDERPERFORMER", "BENCHMARK"
+    long_conviction_modifier: float
+    short_conviction_modifier: float
+    is_long_vetoed: bool = False
+    is_short_vetoed: bool = False
+    directive: str
+    timestamp: float = Field(default_factory=time.time)
+
 class AnalyzeAndTradeResponse(BaseModel):
     symbol: str
     timeframe: str
@@ -475,6 +490,7 @@ class AnalyzeAndTradeResponse(BaseModel):
     derivatives_data: Optional[DerivativesMicrostructureSchema] = None
     macro_status: Optional[MacroCalendarStatusSchema] = None
     btc_gatekeeper: Optional[BTCGatekeeperStatusSchema] = None
+    relative_strength: Optional[RelativeStrengthSchema] = None
     playbook_veto: Optional[PlaybookVetoSchema] = None
     debate_stream: List[DebateMessageSchema]
     auto_executed: bool
