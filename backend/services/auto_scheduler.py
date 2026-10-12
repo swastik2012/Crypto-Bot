@@ -222,7 +222,36 @@ class AutoTradingScheduler:
                 # Portfolio full only if slots saturated OR free cash buffer falls below 15%
                 portfolio_full = (len(paper_engine.open_positions) >= max_slots) or (free_margin_ratio < 0.15)
 
-                # Run the 5-Stage LangGraph multi-agent debate
+                if portfolio_full and not existing_pos:
+                    print(f"[AutoTrader Portfolio Full] Capital slots saturated ({len(paper_engine.open_positions)}/{max_slots}) or cash buffer < 15%. Skipping {pair}.")
+                    continue
+
+                # ========================================================
+                # ⚡ FAST TECHNICAL PRE-SCREENER (Sub-Millisecond Pre-Filter)
+                # ========================================================
+                # Skip heavy 6-stage cloud LLMs if the coin is in dead chop or volume starvation (saves 15-25s per coin!)
+                from backend.services.market_data import market_data_service
+                screen_res = await market_data_service.fast_screen_candidate(pair)
+                if not screen_res.get("passed", True) and not existing_pos:
+                    reason = screen_res.get("reason", "NO_EDGE")
+                    print(f"[AutoTrader Fast Screener] ⏩ {pair} skipped in 0.005s: {reason}")
+                    report_entry = {
+                        "cycle": self.cycle_count,
+                        "timestamp": time.time(),
+                        "pair": pair,
+                        "price": current_price,
+                        "signal": "PREFILTER_SKIPPED",
+                        "confidence": 0.0,
+                        "executed": False,
+                        "position": None,
+                        "already_open": False,
+                        "screen_reason": reason,
+                    }
+                    cycle_results.append(report_entry)
+                    self.execution_logs.append(report_entry)
+                    continue
+
+                # Run the 5-Stage LangGraph multi-agent debate on qualified candidate
                 pair_start_time = time.time()
                 response = await consensus_pipeline.run(
                     symbol=pair,
@@ -232,6 +261,7 @@ class AutoTradingScheduler:
                     account_state=paper_engine.get_state().dict(),
                     strategy_preset="Swing Trading",
                     auto_execute=False,
+                    indicators=screen_res.get("indicators"),
                 )
                 analysis_cache.set(pair, response)
                 
@@ -263,6 +293,7 @@ class AutoTradingScheduler:
                 # ========================================================
                 deepseek_stage = getattr(response, "stage_deepseek", None) or getattr(response, "stage_jev", None)
                 deepseek_gate_pass = True
+                directional_gate_pass = True
                 if deepseek_stage:
                     if getattr(deepseek_stage.toxic_flow_detected, "value", False):
                         deepseek_gate_pass = False
@@ -270,6 +301,15 @@ class AutoTradingScheduler:
                     elif not getattr(deepseek_stage.high_probability_edge, "value", True):
                         deepseek_gate_pass = False
                         print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek found no statistically significant edge.")
+
+                    # Directional Agreement Guard between System 1 (DeepSeek) & System 2 (Arbiter):
+                    deepseek_bias = str(getattr(deepseek_stage.execution_bias, "value", "NEUTRAL")).upper()
+                    if is_buy and deepseek_bias in ["SELL", "BEARISH"]:
+                        directional_gate_pass = False
+                        print(f"[AutoTrader Consensus Gate] {pair} BUY blocked: System 1 (DeepSeek: {deepseek_bias}) conflicts with System 2 (Arbiter: {signal.value}).")
+                    elif is_short and deepseek_bias in ["BUY", "BULLISH"]:
+                        directional_gate_pass = False
+                        print(f"[AutoTrader Consensus Gate] {pair} SHORT blocked: System 1 (DeepSeek: {deepseek_bias}) conflicts with System 2 (Arbiter: {signal.value}).")
 
                 # ========================================================
                 # 🛑 RISK GUARD 5: BTC Master Gatekeeper (Altcoin Protection Shield)
@@ -304,15 +344,41 @@ class AutoTradingScheduler:
                         rs_gate_pass = False
                         print(f"[AutoTrader RS Guard] {pair} SHORT blocked: RS={rs_status.rs_score:.2f} (Momentum leader vs BTC benchmark).")
 
+                # ========================================================
+                # 🛑 RISK GUARD 8: Loss-Streak Quarantine & Cooldown Engine
+                # ========================================================
+                from backend.services.learning_memory import learning_memory_service
+                quarantine_status = learning_memory_service.check_asset_quarantine(pair)
+                quarantine_gate_pass = True
+                if quarantine_status.get("is_quarantined", False):
+                    min_conf_req = quarantine_status.get("min_confidence_required", 84.0)
+                    min_vol_req = quarantine_status.get("min_volume_required", 1.25)
+                    curr_vol = float(screen_res.get("indicators", {}).get("volume_ratio", 1.0))
+                    if confidence < min_conf_req or curr_vol < min_vol_req:
+                        quarantine_gate_pass = False
+                        print(f"[AutoTrader Quarantine Gate] {pair} entry blocked: {quarantine_status['reason']} (Current Conf={confidence}%, Vol={curr_vol:.2f}x)")
+
+                # ========================================================
+                # 🛑 RISK GUARD 9: Minimum Risk-to-Reward Ratio (>= 1.50x)
+                # ========================================================
+                plan = response.stage5.execution_plan
+                plan_rr = float(plan.get("risk_reward_ratio", 1.5) if isinstance(plan, dict) else getattr(plan, "risk_reward_ratio", 1.5) or 1.5)
+                rr_gate_pass = plan_rr >= 1.50
+                if not rr_gate_pass:
+                    print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.50x requirement.")
+
                 can_execute = (
-                    confidence >= 78.0 and
+                    confidence >= 82.0 and
                     (is_buy or is_short) and
                     not already_open and
                     not portfolio_full and
                     deepseek_gate_pass and
+                    directional_gate_pass and
                     btc_gate_pass and
                     playbook_gate_pass and
-                    rs_gate_pass
+                    rs_gate_pass and
+                    quarantine_gate_pass and
+                    rr_gate_pass
                 )
 
                 if can_execute:

@@ -39,6 +39,7 @@ class MultiAgentConsensusPipeline:
         typesafe_key: str = "",
         jev_key: str = "",
         account_state: Optional[Dict[str, Any]] = None,
+        indicators: Optional[Dict[str, Any]] = None,
     ) -> AnalyzeAndTradeResponse:
         if account_state is None:
             account_state = paper_engine.get_state().dict()
@@ -56,16 +57,17 @@ class MultiAgentConsensusPipeline:
         # MACROECONOMIC EVENT CIRCUIT BREAKER ENGINE (Phase 5: CPI, PPI, FOMC, NFP Lockouts)
         macro_status = macro_calendar_service.check_circuit_breaker()
 
-        # Parallel Pre-Fetch: BTC Master Gatekeeper + Binance Derivatives Microstructure
+        # Parallel Pre-Fetch: BTC Master Gatekeeper + Binance Derivatives Microstructure + Relative Strength
         from backend.services.market_data import market_data_service
         from backend.services.derivatives_service import derivatives_service
-        btc_gatekeeper, derivatives_data = await asyncio.gather(
+        btc_gatekeeper, derivatives_data, relative_strength = await asyncio.gather(
             market_data_service.check_btc_gatekeeper(),
             derivatives_service.get_derivatives_microstructure(
                 symbol=symbol,
                 current_price=current_price,
                 price_change_24h=0.0,
             ),
+            market_data_service.calculate_relative_strength(symbol=symbol),
         )
 
         # Parallel Execution: STAGE 1 (Gemini Technical & 30D Candles) & STAGE 2 (NVIDIA News Sentiment)
@@ -90,34 +92,33 @@ class MultiAgentConsensusPipeline:
         debate_stream.append(msg1)
         debate_stream.append(msg2)
 
-        # STAGE 3: NVIDIA DeepSeek Reasoning & Macro Order Flow Engine (Ingests Stages 1-2 & Derivatives Order Flow)
-        stage_deepseek_res, msg_deepseek = await run_stage3_nvidia_deepseek(
-            symbol=symbol,
-            stage1_res=stage1_res,
-            stage2_res=stage2_res,
-            current_price=current_price,
-            account_state=account_state,
-            api_key=active_deepseek_key,
-            derivatives_data=derivatives_data,
-            macro_status=macro_status,
+        # High-Speed Concurrency: STAGE 3 (NVIDIA DeepSeek Reasoning) & STAGE 4 (NVIDIA Quant Stress Test)
+        (stage_deepseek_res, msg_deepseek), (stage3_res, msg3) = await asyncio.gather(
+            run_stage3_nvidia_deepseek(
+                symbol=symbol,
+                stage1_res=stage1_res,
+                stage2_res=stage2_res,
+                current_price=current_price,
+                account_state=account_state,
+                api_key=active_deepseek_key,
+                derivatives_data=derivatives_data,
+                macro_status=macro_status,
+            ),
+            run_stage3_nvidia_nim(
+                symbol=symbol,
+                stage1=stage1_res,
+                stage2=stage2_res,
+                current_price=current_price,
+                account_state=account_state,
+                api_key=nvidia_key,
+                derivatives_data=derivatives_data,
+            ),
         )
         debate_stream.append(msg_deepseek)
+        debate_stream.append(msg3)
 
         # Backward compatibility reference for downstream stages
         stage_jev_res = stage_deepseek_res
-
-        # STAGE 4: NVIDIA NIM Quantitative Stress Test (Ingests Stages 1, 2 & Jev System 1)
-        stage3_res, msg3 = await run_stage3_nvidia_nim(
-            symbol=symbol,
-            stage1=stage1_res,
-            stage2=stage2_res,
-            current_price=current_price,
-            account_state=account_state,
-            api_key=nvidia_key,
-            stage_jev=stage_jev_res,
-            derivatives_data=derivatives_data,
-        )
-        debate_stream.append(msg3)
 
         # STAGE 5: OpenAI Risk & Counter-Trend Validator (Ingests Stages 1-4, Jev & Derivatives Microstructure)
         stage4_res, msg4 = await run_stage4_openai_risk(
@@ -132,11 +133,9 @@ class MultiAgentConsensusPipeline:
             derivatives_data=derivatives_data,
             macro_status=macro_status,
             btc_gatekeeper=btc_gatekeeper,
+            indicators=indicators,
         )
         debate_stream.append(msg4)
-
-        # Relative Strength (RS) Asset Quality Check (Phase 2)
-        relative_strength = await market_data_service.calculate_relative_strength(symbol=symbol)
 
         # STAGE 6: Gemini Consensus Arbiter (Reconciles System 1 & System 2 with Derivatives Order Flow)
         stage5_res, msg5 = await run_stage5_gemini_arbiter(
@@ -155,10 +154,11 @@ class MultiAgentConsensusPipeline:
             macro_status=macro_status,
             btc_gatekeeper=btc_gatekeeper,
             relative_strength=relative_strength,
+            indicators=indicators,
         )
         debate_stream.append(msg5)
 
-        # Execution Hook: If auto_execute is requested, consensus score >= 80%, macro lockout is NOT active, AND BTC Gatekeeper permits
+        # Execution Hook: If auto_execute is requested, consensus score >= 82%, macro lockout is NOT active, BTC Gatekeeper permits, and System 1/System 2 directionally agree
         executed_position: Optional[PaperPosition] = None
         auto_executed = False
 
@@ -170,8 +170,25 @@ class MultiAgentConsensusPipeline:
             (relative_strength.is_short_vetoed and ("SELL" in stage5_res.consensus_signal.value or "SHORT" in stage5_res.consensus_signal.value))
         )
 
-        if auto_execute and stage5_res.consensus_confidence >= 80.0 and not macro_status.lockout_active and not btc_block and not playbook_block and not rs_block:
-            plan = stage5_res.execution_plan
+        # Dual-Brain Directional Consensus Check:
+        deepseek_bias = str(getattr(stage_jev_res.execution_bias, "value", "NEUTRAL")).upper() if stage_jev_res else "NEUTRAL"
+        is_buy_sig = "BUY" in stage5_res.consensus_signal.value
+        is_sell_sig = "SELL" in stage5_res.consensus_signal.value or "SHORT" in stage5_res.consensus_signal.value
+        directional_conflict = (is_buy_sig and deepseek_bias in ["SELL", "BEARISH"]) or (is_sell_sig and deepseek_bias in ["BUY", "BULLISH"])
+
+        plan = stage5_res.execution_plan
+        plan_rr = float(plan.get("risk_reward_ratio", 1.5) if isinstance(plan, dict) else getattr(plan, "risk_reward_ratio", 1.5) or 1.5)
+
+        if (
+            auto_execute and
+            stage5_res.consensus_confidence >= 82.0 and
+            plan_rr >= 1.50 and
+            not directional_conflict and
+            not macro_status.lockout_active and
+            not btc_block and
+            not playbook_block and
+            not rs_block
+        ):
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
             conf = stage5_res.consensus_confidence
             target_pct = 0.15 if conf >= 88.0 else (0.11 if conf >= 82.0 else 0.08)

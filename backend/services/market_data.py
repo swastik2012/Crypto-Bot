@@ -644,6 +644,120 @@ class MarketDataService:
             directive=directive
         )
 
+    async def fast_screen_candidate(self, symbol: str) -> Dict[str, Any]:
+        """
+        Sub-millisecond mathematical screening to pre-qualify pairs before running heavy cloud LLMs.
+        Evaluates 1H klines for volume expansion, trend direction, ATR volatility, and wick rejection.
+        Returns:
+            passed: bool
+            reason: str
+            setup_direction: "LONG" | "SHORT" | "NONE"
+            score: float (0.0 to 100.0)
+            indicators: Dict (rsi, volume_ratio, atr_pct, upper_wick_ratio, lower_wick_ratio, ema_gap_pct)
+        """
+        klines = await self.fetch_klines(symbol, "1h", limit=30)
+        if not klines or len(klines) < 15:
+            return {
+                "passed": True,
+                "reason": "FALLBACK_INSUFFICIENT_KLINES",
+                "setup_direction": "NONE",
+                "score": 50.0,
+                "indicators": {"rsi": 50.0, "volume_ratio": 1.0, "atr_pct": 1.5, "upper_wick_ratio": 0.1, "lower_wick_ratio": 0.1},
+            }
+
+        closes = [float(k[4]) for k in klines]
+        highs = [float(k[2]) for k in klines]
+        lows = [float(k[3]) for k in klines]
+        volumes = [float(k[5]) for k in klines]
+        p = closes[-1]
+
+        ema_20 = self._calculate_ema(closes, 20)
+        ema_50 = self._calculate_ema(closes, min(len(closes), 50))
+        rsi = self._calculate_rsi(closes, 14)
+        atr = self._calculate_atr(highs, lows, closes, 14)
+        vol_avg = sum(volumes[-20:]) / min(len(volumes), 20)
+        vol_ratio = volumes[-1] / vol_avg if vol_avg > 0 else 1.0
+        atr_pct = (atr / p) * 100.0 if p > 0 else 1.5
+
+        bar_range = highs[-1] - lows[-1]
+        upper_wick_ratio = 0.0
+        lower_wick_ratio = 0.0
+        if bar_range > 0:
+            upper_wick_ratio = (highs[-1] - max(closes[-1], float(klines[-1][1]))) / bar_range
+            lower_wick_ratio = (min(closes[-1], float(klines[-1][1])) - lows[-1]) / bar_range
+
+        ema_gap_pct = abs(ema_20 - ema_50) / p * 100.0 if p > 0 else 0.0
+
+        indicators = {
+            "rsi": round(rsi, 2),
+            "volume_ratio": round(vol_ratio, 2),
+            "atr_pct": round(atr_pct, 2),
+            "upper_wick_ratio": round(upper_wick_ratio, 3),
+            "lower_wick_ratio": round(lower_wick_ratio, 3),
+            "ema_gap_pct": round(ema_gap_pct, 3),
+            "current_price": p,
+            "ema_20": round(ema_20, 2),
+            "ema_50": round(ema_50, 2),
+        }
+
+        # 1. Pre-filter Filter A: Dead Low-Volatility Chop
+        if atr_pct < 0.65 and vol_ratio < 1.10:
+            return {
+                "passed": False,
+                "reason": f"DEAD_CHOP: ATR is ultra-compressed ({atr_pct:.2f}% < 0.65%) with flat volume ({vol_ratio:.2f}x).",
+                "setup_direction": "NONE",
+                "score": 25.0,
+                "indicators": indicators,
+            }
+
+        # 2. Pre-filter Filter B: Severe Volume Starvation
+        if vol_ratio < 0.60:
+            return {
+                "passed": False,
+                "reason": f"VOLUME_STARVATION: Current volume is only {vol_ratio*100:.1f}% of 20h average.",
+                "setup_direction": "NONE",
+                "score": 30.0,
+                "indicators": indicators,
+            }
+
+        # 3. Check Potential Setup
+        is_bullish = p >= ema_20 and ema_20 >= ema_50 and rsi >= 45.0 and rsi <= 72.0 and upper_wick_ratio <= 0.45
+        is_bearish = p <= ema_20 and ema_20 <= ema_50 and rsi >= 28.0 and rsi <= 55.0 and lower_wick_ratio <= 0.45
+
+        recent_10_high = max(highs[-11:-1])
+        recent_10_low = min(lows[-11:-1])
+        if p >= recent_10_high and rsi >= 48.0 and vol_ratio >= 0.85:
+            is_bullish = True
+        elif p <= recent_10_low and rsi <= 52.0 and vol_ratio >= 0.85:
+            is_bearish = True
+
+        if is_bullish:
+            score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p > ema_20 else 0.0)
+            return {
+                "passed": True,
+                "reason": f"BULLISH_CANDIDATE: Price (${p:,.2f}) holding above EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x.",
+                "setup_direction": "LONG",
+                "score": round(min(98.0, score), 1),
+                "indicators": indicators,
+            }
+        elif is_bearish:
+            score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p < ema_20 else 0.0)
+            return {
+                "passed": True,
+                "reason": f"BEARISH_CANDIDATE: Price (${p:,.2f}) holding below EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x.",
+                "setup_direction": "SHORT",
+                "score": round(min(98.0, score), 1),
+                "indicators": indicators,
+            }
+
+        return {
+            "passed": False,
+            "reason": f"NO_CLEAR_EDGE: Price inside moving average band (EMA20=${ema_20:,.2f}, EMA50=${ema_50:,.2f}, RSI={rsi:.1f}).",
+            "setup_direction": "NONE",
+            "score": 40.0,
+            "indicators": indicators,
+        }
+
 
 class RelativeStrengthInfo(BaseModel):
     symbol: str

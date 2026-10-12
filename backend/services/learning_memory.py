@@ -526,23 +526,132 @@ class LearningMemoryService:
                 actionable_directive="Avoid market breakout buy; wait for retail stop hunt below support to snipe wholesale discount.",
             )
 
+        # Parse technical indicators from fast screener or Stage 1
+        ind = indicators or {}
+        rsi = float(ind.get("rsi", 50.0))
+        vol_ratio = float(ind.get("volume_ratio", 1.0))
+        atr_pct = float(ind.get("atr_pct", 1.5))
+        upper_wick = float(ind.get("upper_wick_ratio", 0.0))
+        lower_wick = float(ind.get("lower_wick_ratio", 0.0))
+
+        # Check 4: Rejection Wick / Turtle Soup Trap (Phase 2 & 3)
+        if upper_wick >= 0.40 and side_upper in ["BUY", "LONG"]:
+            return PlaybookVetoSchema(
+                is_vetoed=True,
+                rule_id="trap_upper_wick_40",
+                rule_type="AVOID_TRAP",
+                rule_text="Do not buy when candle upper rejection wick exceeds 40% of range (bearish pinbar / supply wall).",
+                target_asset=clean_sym,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_upper_wick_40]: {clean_sym} formed massive upper rejection wick ({upper_wick*100:.1f}%). Bull trap / supply dump detected.",
+                confidence_penalty=45.0,
+                actionable_directive="Wait for clean price absorption of overhead supply before going long.",
+            )
+        if lower_wick >= 0.40 and side_upper in ["SELL", "SHORT"]:
+            return PlaybookVetoSchema(
+                is_vetoed=True,
+                rule_id="trap_lower_wick_40",
+                rule_type="AVOID_TRAP",
+                rule_text="Do not short when candle lower rejection wick exceeds 40% of range (bullish pinbar / demand wall).",
+                target_asset=clean_sym,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_lower_wick_40]: {clean_sym} formed massive lower rejection wick ({lower_wick*100:.1f}%). Bear trap / demand wall detected.",
+                confidence_penalty=45.0,
+                actionable_directive="Wait for clean breakdown below demand floor before shorting.",
+            )
+
+        # Check 5: Severe RSI Exhaustion Climax Boundaries
+        if rsi >= 75.0 and side_upper in ["BUY", "LONG"]:
+            return PlaybookVetoSchema(
+                is_vetoed=True,
+                rule_id="trap_rsi_overbought_75",
+                rule_type="AVOID_TRAP",
+                rule_text="Do not buy into severely overbought 14-period RSI (RSI >= 75) to prevent retail climax top traps.",
+                target_asset=clean_sym,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_overbought_75]: {clean_sym} 14-period RSI={rsi:.1f} is severely overbought (>= 75.0). Buying climax top hazard.",
+                confidence_penalty=42.0,
+                actionable_directive="Wait for RSI mean reversion before attempting long entries.",
+            )
+        if rsi <= 25.0 and side_upper in ["SELL", "SHORT"]:
+            return PlaybookVetoSchema(
+                is_vetoed=True,
+                rule_id="trap_rsi_oversold_25",
+                rule_type="AVOID_TRAP",
+                rule_text="Do not short into severely oversold 14-period RSI (RSI <= 25) to prevent short squeeze liquidations.",
+                target_asset=clean_sym,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_oversold_25]: {clean_sym} 14-period RSI={rsi:.1f} is severely oversold (<= 25.0). Short squeeze hazard.",
+                confidence_penalty=42.0,
+                actionable_directive="Wait for relief bounce before attempting short entries.",
+            )
+
         # Check Evolving Playbook dynamic rules
         for rule in self.playbook_rules:
             if rule.rule_type == "AVOID_TRAP" and (rule.target_asset == clean_sym or rule.target_asset == "ALL"):
-                # If rule specifies overbought RSI
-                if indicators:
-                    rsi = float(indicators.get("rsi", 50.0))
-                    if "RSI > 75" in rule.rule_text and rsi > 75.0 and side_upper in ["BUY", "LONG"]:
+                rule_lower = rule.rule_text.lower()
+
+                # A. Overbought / Oversold Trap
+                if ("rsi >" in rule_lower or "overbought" in rule_lower) and side_upper in ["BUY", "LONG"] and rsi > 70.0:
+                    return PlaybookVetoSchema(
+                        is_vetoed=True,
+                        rule_id=rule.rule_id,
+                        rule_type=rule.rule_type,
+                        rule_text=rule.rule_text,
+                        target_asset=rule.target_asset,
+                        veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} 14-period RSI={rsi:.1f} violates learned failure threshold (RSI > 70/75).",
+                        confidence_penalty=40.0,
+                        actionable_directive="Wait for RSI mean reversion before attempting long entries.",
+                    )
+                if ("rsi <" in rule_lower or "oversold" in rule_lower) and side_upper in ["SELL", "SHORT"] and rsi < 30.0:
+                    return PlaybookVetoSchema(
+                        is_vetoed=True,
+                        rule_id=rule.rule_id,
+                        rule_type=rule.rule_type,
+                        rule_text=rule.rule_text,
+                        target_asset=rule.target_asset,
+                        veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} RSI={rsi:.1f} is severely oversold. High risk of short squeeze.",
+                        confidence_penalty=40.0,
+                        actionable_directive="Never short oversold RSI.",
+                    )
+
+                # B. Volume Starvation on Breakouts
+                if ("volume increase" in rule_lower or "volume below" in rule_lower or "average volume" in rule_lower) and side_upper in ["BUY", "LONG"]:
+                    req_vol = 1.20 if "20%" in rule.rule_text else 1.05
+                    if vol_ratio < req_vol:
                         return PlaybookVetoSchema(
                             is_vetoed=True,
                             rule_id=rule.rule_id,
                             rule_type=rule.rule_type,
                             rule_text=rule.rule_text,
                             target_asset=rule.target_asset,
-                            veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} 14-period RSI={rsi:.1f} violates learned failure threshold (RSI > 75).",
-                            confidence_penalty=40.0,
-                            actionable_directive="Wait for RSI mean reversion before attempting long entries.",
+                            veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} volume ratio {vol_ratio:.2f}x fails minimum learned threshold ({req_vol:.2f}x). High fakeout risk.",
+                            confidence_penalty=35.0,
+                            actionable_directive=f"Wait for institutional volume expansion (>={req_vol:.2f}x) before entering.",
                         )
+
+                # C. Aggressive breakout without confirmation (e.g. DOGE rule_1791143808_doge)
+                if ("avoid aggressive" in rule_lower or "breakout entries" in rule_lower) and side_upper in ["BUY", "LONG"]:
+                    if upper_wick > 0.28 or vol_ratio < 1.15:
+                        return PlaybookVetoSchema(
+                            is_vetoed=True,
+                            rule_id=rule.rule_id,
+                            rule_type=rule.rule_type,
+                            rule_text=rule.rule_text,
+                            target_asset=rule.target_asset,
+                            veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: Avoid aggressive breakout entries on {clean_sym} without volume expansion and candle confirmation close.",
+                            confidence_penalty=42.0,
+                            actionable_directive="Wait for 15M/1H confirmation candle close with expanding volume.",
+                        )
+
+                # D. Momentum Hurdle (e.g. ADA rule_1791323343_ada: RSI above 55)
+                if "rsi is above 55" in rule_lower and side_upper in ["BUY", "LONG"] and rsi < 55.0:
+                    return PlaybookVetoSchema(
+                        is_vetoed=True,
+                        rule_id=rule.rule_id,
+                        rule_type=rule.rule_type,
+                        rule_text=rule.rule_text,
+                        target_asset=rule.target_asset,
+                        veto_reason=f"⛔ AI PLAYBOOK VETO [{rule.rule_id}]: {clean_sym} LONG requires momentum RSI >= 55. Current RSI={rsi:.1f}.",
+                        confidence_penalty=38.0,
+                        actionable_directive="Wait for bullish momentum expansion (RSI >= 55).",
+                    )
 
         # No negative rule triggered
         return PlaybookVetoSchema(
@@ -551,5 +660,84 @@ class LearningMemoryService:
             veto_reason="Clear - No active playbook failure traps triggered.",
             confidence_penalty=0.0,
         )
+
+    def check_asset_quarantine(self, symbol: str) -> Dict[str, Any]:
+        """
+        Phase 3: Loss-Streak Quarantine & Cooldown System.
+        Enforces:
+        - 1 recent loss: 2-hour cooldown requiring higher conviction (>= 84%) and >= 1.25x volume
+        - 2+ consecutive losses: 4-hour strict quarantine requiring >= 86% conviction and >= 1.4x volume.
+        """
+        clean_sym = symbol.split("/")[0].upper()
+        now = time.time()
+
+        asset_trades = [l for l in self.learnings if clean_sym in l.symbol.upper()]
+        asset_trades.sort(key=lambda x: getattr(x, "timestamp", 0), reverse=True)
+
+        if not asset_trades:
+            return {
+                "is_quarantined": False,
+                "tier": 0,
+                "reason": "No recent loss history for asset.",
+                "min_confidence_required": 82.0,
+                "min_volume_required": 1.0,
+                "cooldown_remaining_secs": 0,
+            }
+
+        consecutive_losses = 0
+        last_loss_time = 0.0
+        for tr in asset_trades:
+            if tr.outcome == "LOSS":
+                consecutive_losses += 1
+                if last_loss_time == 0.0:
+                    last_loss_time = float(getattr(tr, "timestamp", now))
+            else:
+                break
+
+        if consecutive_losses == 0 or last_loss_time == 0.0:
+            return {
+                "is_quarantined": False,
+                "tier": 0,
+                "reason": "Last closed trade was a WIN or BREAKEVEN.",
+                "min_confidence_required": 82.0,
+                "min_volume_required": 1.0,
+                "cooldown_remaining_secs": 0,
+            }
+
+        elapsed = now - last_loss_time
+
+        if consecutive_losses >= 2:
+            quarantine_duration = 4.0 * 3600  # 4 hours
+            if elapsed < quarantine_duration:
+                remaining = int(quarantine_duration - elapsed)
+                return {
+                    "is_quarantined": True,
+                    "tier": 2,
+                    "reason": f"🛑 {clean_sym} STRICT QUARANTINE: {consecutive_losses} consecutive losses. Cooldown remaining: {remaining//60}m. Requires >= 86% conviction & >= 1.4x volume.",
+                    "min_confidence_required": 86.0,
+                    "min_volume_required": 1.4,
+                    "cooldown_remaining_secs": remaining,
+                }
+        elif consecutive_losses == 1:
+            cooldown_duration = 2.0 * 3600  # 2 hours
+            if elapsed < cooldown_duration:
+                remaining = int(cooldown_duration - elapsed)
+                return {
+                    "is_quarantined": True,
+                    "tier": 1,
+                    "reason": f"⚠️ {clean_sym} POST-LOSS COOLDOWN: 1 recent stop-out. Cooldown remaining: {remaining//60}m. Requires >= 84% conviction & >= 1.25x volume.",
+                    "min_confidence_required": 84.0,
+                    "min_volume_required": 1.25,
+                    "cooldown_remaining_secs": remaining,
+                }
+
+        return {
+            "is_quarantined": False,
+            "tier": 0,
+            "reason": "Quarantine cooldown period expired.",
+            "min_confidence_required": 82.0,
+            "min_volume_required": 1.0,
+            "cooldown_remaining_secs": 0,
+        }
 
 learning_memory_service = LearningMemoryService()

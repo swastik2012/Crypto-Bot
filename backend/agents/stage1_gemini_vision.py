@@ -224,7 +224,7 @@ async def run_stage1_gemini_vision(
             else:
                 msg = HumanMessage(content=f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}")
 
-            response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=8.0)
+            response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=3.5)
             raw_text = response.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()

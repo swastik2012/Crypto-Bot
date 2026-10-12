@@ -42,6 +42,7 @@ async def run_stage4_openai_risk(
     derivatives_data: Optional[Any] = None,
     macro_status: Optional[Any] = None,
     btc_gatekeeper: Optional[Any] = None,
+    indicators: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Stage4OpenAIRiskResult, DebateMessageSchema]:
     """
     Stage 5: OpenAI Flagship (GPT-4o / o1) Risk Guard & Fakeout Validator
@@ -72,6 +73,12 @@ async def run_stage4_openai_risk(
     funding_reg = deriv_dict.get("funding_regime", "NEUTRAL")
     funding_rate = deriv_dict.get("funding_rate_8h_pct", 0.01)
 
+    ind_dict = {}
+    if stage1 and hasattr(stage1, "rsi_status") and isinstance(stage1.rsi_status, dict):
+        ind_dict["rsi"] = stage1.rsi_status.get("value", 50.0)
+    if indicators:
+        ind_dict.update(indicators)
+
     # Dynamic risk calculations based on Macro Proximity, Stage 1, MTF, Stage 3, and Derivatives
     playbook_veto = learning_memory_service.evaluate_setup_against_playbook(
         symbol=symbol,
@@ -79,6 +86,7 @@ async def run_stage4_openai_risk(
         current_price=current_price,
         derivatives_data=derivatives_data,
         mtf_data=mtf,
+        indicators=ind_dict,
     )
 
     if macro_status and getattr(macro_status, "lockout_active", False):
@@ -272,7 +280,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "max_tokens": 450,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(4.5, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
                 resp = await client.post(
                     "https://integrate.api.nvidia.com/v1/chat/completions",
                     headers=headers,
@@ -354,7 +362,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "max_tokens": 600,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=nv_headers,

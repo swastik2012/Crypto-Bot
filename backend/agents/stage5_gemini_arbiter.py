@@ -39,6 +39,7 @@ async def run_stage5_gemini_arbiter(
     macro_status: Optional[Any] = None,
     btc_gatekeeper: Optional[Any] = None,
     relative_strength: Optional[Any] = None,
+    indicators: Optional[Dict[str, Any]] = None,
 ) -> Tuple[Stage5GeminiArbiterResult, DebateMessageSchema]:
     """
     Stage 6: Google Gemini 3.7 Flash Consensus Arbiter & Trade Synthesizer
@@ -84,6 +85,12 @@ async def run_stage5_gemini_arbiter(
     nvidia_score = float(getattr(stage3, "stress_test_score", 60.0) or 60.0)
     openai_score = float(getattr(stage4, "safety_score", 60.0) or 60.0)
 
+    ind_dict = {}
+    if stage1 and hasattr(stage1, "rsi_status") and isinstance(stage1.rsi_status, dict):
+        ind_dict["rsi"] = stage1.rsi_status.get("value", 50.0)
+    if indicators:
+        ind_dict.update(indicators)
+
     # Phase 6: AI Trade Learner Negative Rule Veto Engine
     playbook_veto = learning_memory_service.evaluate_setup_against_playbook(
         symbol=symbol,
@@ -91,6 +98,7 @@ async def run_stage5_gemini_arbiter(
         current_price=current_price,
         derivatives_data=derivatives_data,
         mtf_data=mtf,
+        indicators=ind_dict,
     )
 
     # MACROECONOMIC EVENT CIRCUIT BREAKER VETO: Phase 5 Institutional Event Lockout
@@ -398,7 +406,7 @@ async def run_stage5_gemini_arbiter(
             from langchain_core.messages import HumanMessage
             target_engine = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
-            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=3.5)
             raw_text = resp.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()

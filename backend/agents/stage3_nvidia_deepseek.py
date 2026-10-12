@@ -100,14 +100,11 @@ async def run_stage3_nvidia_deepseek(
     provider_name = "DeepSeek Official" if is_official_deepseek else "NVIDIA NIM (DeepSeek / Reasoning)"
 
     if is_official_deepseek:
-        candidate_models = ["deepseek-reasoner", "deepseek-chat"]
+        candidate_models = ["deepseek-reasoner"]
     else:
         # Verified live high-speed models on NVIDIA NIM: meta/llama-3.2-11b-vision-instruct
         candidate_models = [
             settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
-            "meta/llama-3.2-11b-vision-instruct",
-            "openai/gpt-oss-20b",
-            settings.NVIDIA_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
         ]
 
     model_used = candidate_models[0]
@@ -132,7 +129,7 @@ async def run_stage3_nvidia_deepseek(
                     "max_tokens": 1500,  # Needs >=1200 tokens because reasoning models consume ~600 CoT tokens before emitting JSON
                 }
                 req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=4.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
                     resp = await client.post(
                         api_endpoint,
                         headers=headers,
@@ -176,9 +173,10 @@ async def run_stage3_nvidia_deepseek(
                         break
                     else:
                         print(f"[Stage 3 Reasoning Candidate {cand}] Status {resp.status_code}: {resp.text[:120]}")
+                        break
             except Exception as e:
                 print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {e}")
-                continue
+                break
 
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
     if not parsed_json:

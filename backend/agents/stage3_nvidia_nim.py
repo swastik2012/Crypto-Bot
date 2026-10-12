@@ -393,7 +393,7 @@ async def run_stage3_nvidia_nim(
                 "temperature": 0.1,
                 "max_tokens": 1000,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(3.5, connect=1.5)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -423,7 +423,7 @@ async def run_stage3_nvidia_nim(
             from langchain_core.messages import HumanMessage
             gemini_model = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
+            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=3.0)
             raw_text = resp.content
             if "```json" in raw_text:
                 json_str = raw_text.split("```json")[1].split("```")[0].strip()
