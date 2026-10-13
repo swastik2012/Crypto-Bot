@@ -1,3 +1,4 @@
+from typing import Optional
 from fastapi import APIRouter, HTTPException
 from backend.models.schemas import (
     InitializePaperAccountRequest,
@@ -24,11 +25,11 @@ async def initialize_account(req: InitializePaperAccountRequest):
     return state
 
 @router.get("/state", response_model=PaperAccountState)
-async def get_account_state():
+async def get_account_state(limit: Optional[int] = None):
     """
-    Returns live portfolio balance, open positions, unrealized PnL, win rate, and recent trade logs.
+    Returns live portfolio balance, open positions, unrealized PnL, win rate, and trade logs.
     """
-    return paper_engine.get_state()
+    return paper_engine.get_state(limit=limit)
 
 @router.post("/order", response_model=PaperPosition)
 async def place_order(order: PlacePaperOrderRequest):

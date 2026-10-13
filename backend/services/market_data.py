@@ -100,13 +100,22 @@ class MarketDataService:
         if len(closes) < 2:
             return 0.0
         tr_list = []
-        for i in range(1, min(len(closes), period + 1)):
+        start_idx = max(1, len(closes) - period)
+        for i in range(start_idx, len(closes)):
             h = highs[i]
             l = lows[i]
             prev_c = closes[i - 1]
             tr = max(h - l, abs(h - prev_c), abs(l - prev_c))
             tr_list.append(tr)
-        return round(sum(tr_list) / len(tr_list), 2) if tr_list else round(closes[-1] * 0.02, 2)
+        if not tr_list:
+            return round(closes[-1] * 0.02, 4)
+        atr_val = sum(tr_list) / len(tr_list)
+        last_p = closes[-1]
+        if last_p < 1.0:
+            return round(atr_val, 6)
+        elif last_p < 100.0:
+            return round(atr_val, 4)
+        return round(atr_val, 2)
 
     def _analyze_timeframe(self, klines: List[List], tf_label: str, current_price: float) -> TimeframeScreen:
         if not klines or len(klines) < 10:
@@ -675,8 +684,16 @@ class MarketDataService:
         ema_50 = self._calculate_ema(closes, min(len(closes), 50))
         rsi = self._calculate_rsi(closes, 14)
         atr = self._calculate_atr(highs, lows, closes, 14)
-        vol_avg = sum(volumes[-20:]) / min(len(volumes), 20)
-        vol_ratio = volumes[-1] / vol_avg if vol_avg > 0 else 1.0
+        vol_avg = sum(volumes[-21:-1]) / min(len(volumes) - 1, 20) if len(volumes) > 1 else 1.0
+        vol_closed_ratio = volumes[-2] / vol_avg if vol_avg > 0 and len(volumes) >= 2 else 1.0
+
+        # Time-normalized projected volume for current in-progress candle
+        candle_open_ms = float(klines[-1][0])
+        now_ms = time.time() * 1000.0
+        elapsed_mins = max(1.0, min(60.0, (now_ms - candle_open_ms) / 60000.0))
+        vol_projected = (volumes[-1] * (60.0 / elapsed_mins))
+        vol_curr_ratio = vol_projected / vol_avg if vol_avg > 0 else 1.0
+        vol_ratio = max(vol_closed_ratio, vol_curr_ratio)
         atr_pct = (atr / p) * 100.0 if p > 0 else 1.5
 
         bar_range = highs[-1] - lows[-1]
@@ -701,17 +718,17 @@ class MarketDataService:
         }
 
         # 1. Pre-filter Filter A: Dead Low-Volatility Chop
-        if atr_pct < 0.65 and vol_ratio < 1.10:
+        if atr_pct < 0.35 and vol_ratio < 0.80:
             return {
                 "passed": False,
-                "reason": f"DEAD_CHOP: ATR is ultra-compressed ({atr_pct:.2f}% < 0.65%) with flat volume ({vol_ratio:.2f}x).",
+                "reason": f"DEAD_CHOP: ATR is ultra-compressed ({atr_pct:.2f}% < 0.35%) with flat volume ({vol_ratio:.2f}x).",
                 "setup_direction": "NONE",
                 "score": 25.0,
                 "indicators": indicators,
             }
 
         # 2. Pre-filter Filter B: Severe Volume Starvation
-        if vol_ratio < 0.60:
+        if vol_ratio < 0.35:
             return {
                 "passed": False,
                 "reason": f"VOLUME_STARVATION: Current volume is only {vol_ratio*100:.1f}% of 20h average.",
@@ -721,15 +738,22 @@ class MarketDataService:
             }
 
         # 3. Check Potential Setup
-        is_bullish = p >= ema_20 and ema_20 >= ema_50 and rsi >= 45.0 and rsi <= 72.0 and upper_wick_ratio <= 0.45
-        is_bearish = p <= ema_20 and ema_20 <= ema_50 and rsi >= 28.0 and rsi <= 55.0 and lower_wick_ratio <= 0.45
+        is_bullish = p >= ema_20 and ema_20 >= ema_50 and rsi >= 44.0 and rsi <= 72.0 and upper_wick_ratio <= 0.45
+        is_bearish = p <= ema_20 and ema_20 <= ema_50 and rsi >= 28.0 and rsi <= 56.0 and lower_wick_ratio <= 0.45
 
         recent_10_high = max(highs[-11:-1])
         recent_10_low = min(lows[-11:-1])
-        if p >= recent_10_high and rsi >= 48.0 and vol_ratio >= 0.85:
+        if p >= recent_10_high and rsi >= 46.0 and vol_ratio >= 0.70:
             is_bullish = True
-        elif p <= recent_10_low and rsi <= 52.0 and vol_ratio >= 0.85:
+        elif p <= recent_10_low and rsi <= 54.0 and vol_ratio >= 0.70:
             is_bearish = True
+
+        # Mean-reversion pullback support / resistance retest
+        if not is_bullish and not is_bearish:
+            if p >= ema_20 and rsi >= 42.0 and rsi <= 68.0 and lower_wick_ratio >= 0.15:
+                is_bullish = True
+            elif p <= ema_20 and rsi >= 32.0 and rsi <= 58.0 and upper_wick_ratio >= 0.15:
+                is_bearish = True
 
         if is_bullish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p > ema_20 else 0.0)

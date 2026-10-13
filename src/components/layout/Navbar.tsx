@@ -94,7 +94,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     if (!isRunning) return;
 
     const timer = setInterval(() => {
-      setLocalSecondsLeft((prev) => (prev > 0 ? prev - 1 : intervalSecs));
+      if (!document.hidden) {
+        setLocalSecondsLeft((prev) => (prev > 0 ? prev - 1 : intervalSecs));
+      }
     }, 1000);
 
     return () => clearInterval(timer);

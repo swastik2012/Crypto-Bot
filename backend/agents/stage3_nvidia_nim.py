@@ -416,12 +416,12 @@ async def run_stage3_nvidia_nim(
 
     from backend.services.gemini_guard import GeminiQuotaGuard
 
-    # If NVIDIA NIM didn't return 200, invoke Google Gemini 3.7 Flash if quota available
-    if not parsed_successfully and settings.GEMINI_API_KEY and GeminiQuotaGuard.is_available():
+    # If NVIDIA NIM didn't return 200, invoke Google Gemini if quota available
+    gemini_model = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
+    if not parsed_successfully and settings.GEMINI_API_KEY and gemini_model:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            gemini_model = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
             resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=3.0)
             raw_text = resp.content
@@ -443,7 +443,7 @@ async def run_stage3_nvidia_nim(
                 parsed_successfully = True
         except Exception as e:
             if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e))
+                GeminiQuotaGuard.mark_exhausted(str(e), model=gemini_model)
             else:
                 print(f"[Stage 3 LLM Quant Notice]: {e}")
 

@@ -238,6 +238,23 @@ export const api = {
     return false;
   },
 
+  // 6. Fetch Live Multi-Agent Recent Consensus Signals
+  async fetchRecentConsensusSignals(): Promise<{
+    signals: any[];
+    win_rate: number;
+    total_count: number;
+  } | null> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/consensus/recent-signals?limit=10`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] Failed to fetch live consensus signals:', e);
+    }
+    return null;
+  },
+
   async triggerAutoTraderNow() {
     try {
       const res = await fetch(`${API_BASE_URL}/api/auto-trader/trigger-now`, { method: 'POST' });

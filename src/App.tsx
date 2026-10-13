@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { LiquidBackground } from './components/common/LiquidBackground';
 import { Navbar } from './components/layout/Navbar';
 import { Footer } from './components/layout/Footer';
@@ -25,12 +25,14 @@ import type {
   AgentConfigState,
   FullDebatePipelineData,
   MacroCalendarStatus,
+  LiveSignalRecord,
 } from './types';
 
 const STORAGE_KEYS = {
   CASH_BALANCE: 'aethertrade_cash_balance_v2',
   OPEN_POSITIONS: 'aethertrade_open_positions_v2',
   TRADE_HISTORY: 'aethertrade_trade_history_v2',
+  RECENT_SIGNALS: 'aethertrade_recent_signals_v2',
 };
 
 export const App: React.FC = () => {
@@ -116,94 +118,194 @@ export const App: React.FC = () => {
     }
   });
 
-  // 1. Poll Auto-Trader Status & Backend Paper Account State
+  const [recentSignals, setRecentSignals] = useState<LiveSignalRecord[]>(() => {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEYS.RECENT_SIGNALS);
+      return saved ? JSON.parse(saved) : RECENT_SIGNALS_FEED;
+    } catch {
+      return RECENT_SIGNALS_FEED;
+    }
+  });
+  const [signalsWinRate, setSignalsWinRate] = useState<number>(91.2);
+  const [isRefreshingSignals, setIsRefreshingSignals] = useState<boolean>(false);
+
+  // 1. Memory-Optimized Poll Auto-Trader Status, Paper Account, and Live Consensus Signals
   useEffect(() => {
     let isMounted = true;
+    let pollInterval: ReturnType<typeof setInterval> | null = null;
+
     const fetchStatusAndAccount = async () => {
       try {
-        const [st, acc] = await Promise.all([
+        const [st, acc, sigData] = await Promise.all([
           api.getAutoTraderStatus(),
           api.getPaperAccountState(),
+          api.fetchRecentConsensusSignals(),
         ]);
 
         if (isMounted) {
-          if (st) setAutoTraderStatus(st);
+          if (st) {
+            setAutoTraderStatus((prev) => {
+              if (
+                prev &&
+                prev.is_running === st.is_running &&
+                prev.active_positions_count === st.active_positions_count &&
+                prev.cycle_count === st.cycle_count &&
+                Math.abs((prev.seconds_until_next_cycle || 0) - (st.seconds_until_next_cycle || 0)) <= 3
+              ) {
+                return prev;
+              }
+              return st;
+            });
+          }
+
           if (acc) {
-            if (acc.cash_balance !== undefined) setCashBalance(acc.cash_balance);
-            if (acc.open_positions && Array.isArray(acc.open_positions)) {
-              const mappedPositions: OpenPositionItem[] = acc.open_positions.map((p: any) => ({
-                position_id: p.position_id,
-                symbol: p.symbol,
-                side: p.side,
-                entry_price: p.entry_price,
-                current_price: p.current_price,
-                size_usd: p.size_usd,
-                quantity: p.quantity,
-                leverage: p.leverage,
-                margin_used: p.margin_used,
-                liquidation_price: p.liquidation_price,
-                take_profit_1: p.take_profit_1,
-                take_profit_2: p.take_profit_2,
-                stop_loss: p.stop_loss,
-                trailing_stop_active: p.trailing_stop_active,
-                highest_price_seen: p.highest_price_seen,
-                lowest_price_seen: p.lowest_price_seen,
-                unrealized_pnl: p.unrealized_pnl,
-                unrealized_pnl_pct: p.unrealized_pnl_pct,
-                entry_fee_paid: p.entry_fee_paid || 0,
-                exchange_model: p.exchange_model || 'Binance (USD: 0.10%)',
-                opened_at: typeof p.opened_at === 'number' ? p.opened_at : Math.floor(Date.now() / 1000),
-                opened_at_iso: p.opened_at_iso,
-                execution_time_ms: p.execution_time_ms,
-                opened_by: p.opened_by || 'AutoTrader',
-              }));
-              setOpenPositions(mappedPositions);
+            if (acc.cash_balance !== undefined) {
+              setCashBalance((prev) => (prev === acc.cash_balance ? prev : acc.cash_balance));
             }
+
+            if (acc.open_positions && Array.isArray(acc.open_positions)) {
+              setOpenPositions((prev) => {
+                if (prev.length === 0 && acc.open_positions.length === 0) return prev;
+                if (prev.length === acc.open_positions.length) {
+                  const unchanged = prev.every((p, idx) => {
+                    const n = acc.open_positions[idx];
+                    return (
+                      n &&
+                      p.position_id === n.position_id &&
+                      p.current_price === n.current_price &&
+                      p.unrealized_pnl === n.unrealized_pnl &&
+                      p.size_usd === n.size_usd
+                    );
+                  });
+                  if (unchanged) return prev;
+                }
+
+                return acc.open_positions.map((p: any) => ({
+                  position_id: p.position_id,
+                  symbol: p.symbol,
+                  side: p.side,
+                  entry_price: p.entry_price,
+                  current_price: p.current_price,
+                  size_usd: p.size_usd,
+                  quantity: p.quantity,
+                  leverage: p.leverage,
+                  margin_used: p.margin_used,
+                  liquidation_price: p.liquidation_price,
+                  take_profit_1: p.take_profit_1,
+                  take_profit_2: p.take_profit_2,
+                  stop_loss: p.stop_loss,
+                  trailing_stop_active: p.trailing_stop_active,
+                  highest_price_seen: p.highest_price_seen,
+                  lowest_price_seen: p.lowest_price_seen,
+                  unrealized_pnl: p.unrealized_pnl,
+                  unrealized_pnl_pct: p.unrealized_pnl_pct,
+                  entry_fee_paid: p.entry_fee_paid || 0,
+                  exchange_model: p.exchange_model || 'Binance (USD: 0.10%)',
+                  opened_at: typeof p.opened_at === 'number' ? p.opened_at : Math.floor(Date.now() / 1000),
+                  opened_at_iso: p.opened_at_iso,
+                  execution_time_ms: p.execution_time_ms,
+                  opened_by: p.opened_by || 'AutoTrader',
+                }));
+              });
+            }
+
             if (acc.trade_history && Array.isArray(acc.trade_history)) {
-              const mappedHistory: TradeHistoryItem[] = acc.trade_history.map((t: any) => ({
-                trade_id: t.trade_id,
-                symbol: t.symbol,
-                side: t.side,
-                entry_price: t.entry_price,
-                exit_price: t.exit_price,
-                size_usd: t.size_usd,
-                leverage: t.leverage,
-                realized_pnl: t.realized_pnl,
-                realized_pnl_pct: t.realized_pnl_pct,
-                entry_fee: t.entry_fee || 0,
-                exit_fee: t.exit_fee || 0,
-                tds_deducted: t.tds_deducted || 0,
-                net_realized_pnl: t.net_realized_pnl !== undefined ? t.net_realized_pnl : t.realized_pnl,
-                exchange_name: t.exchange_name || 'Binance (USD)',
-                exit_reason: t.exit_reason || 'TAKE_PROFIT_HIT',
-                opened_at: typeof t.opened_at === 'number' ? t.opened_at : Math.floor(Date.now() / 1000) - 3600,
-                closed_at: typeof t.closed_at === 'number' ? t.closed_at : Math.floor(Date.now() / 1000),
-                opened_at_iso: t.opened_at_iso,
-                closed_at_iso: t.closed_at_iso,
-                duration_seconds: t.duration_seconds,
-                execution_time_ms: t.execution_time_ms,
-                opened_by: t.opened_by || 'AutoTrader',
-              }));
-              setTradeHistory(mappedHistory);
+              setTradeHistory((prev) => {
+                if (prev.length === acc.trade_history.length) {
+                  const prevLastId = prev.length > 0 ? prev[prev.length - 1]?.trade_id : null;
+                  const accLastId = acc.trade_history.length > 0 ? acc.trade_history[acc.trade_history.length - 1]?.trade_id : null;
+                  if (prev.length === 0 || prevLastId === accLastId) {
+                    return prev;
+                  }
+                }
+
+                return acc.trade_history.map((t: any) => ({
+                  trade_id: t.trade_id,
+                  symbol: t.symbol,
+                  side: t.side,
+                  entry_price: t.entry_price,
+                  exit_price: t.exit_price,
+                  size_usd: t.size_usd,
+                  leverage: t.leverage,
+                  realized_pnl: t.realized_pnl,
+                  realized_pnl_pct: t.realized_pnl_pct,
+                  entry_fee: t.entry_fee || 0,
+                  exit_fee: t.exit_fee || 0,
+                  tds_deducted: t.tds_deducted || 0,
+                  net_realized_pnl: t.net_realized_pnl !== undefined ? t.net_realized_pnl : t.realized_pnl,
+                  exchange_name: t.exchange_name || 'Binance (USD)',
+                  exit_reason: t.exit_reason || 'TAKE_PROFIT_HIT',
+                  opened_at: typeof t.opened_at === 'number' ? t.opened_at : Math.floor(Date.now() / 1000) - 3600,
+                  closed_at: typeof t.closed_at === 'number' ? t.closed_at : Math.floor(Date.now() / 1000),
+                  opened_at_iso: t.opened_at_iso,
+                  closed_at_iso: t.closed_at_iso,
+                  duration_seconds: t.duration_seconds,
+                  execution_time_ms: t.execution_time_ms,
+                  opened_by: t.opened_by || 'AutoTrader',
+                }));
+              });
             }
           }
-        }
 
-        // Fetch Macro Calendar Circuit Breaker Status
-        const macro = await api.fetchMacroCalendarStatus();
-        if (macro && isMounted) {
-          setMacroStatus(macro);
+          if (sigData && Array.isArray(sigData.signals) && sigData.signals.length > 0 && isMounted) {
+            setRecentSignals((prev) => {
+              if (prev.length === sigData.signals.length) {
+                const same = prev.every((s, idx) => {
+                  const n = sigData.signals[idx];
+                  return (
+                    n &&
+                    s.id === n.id &&
+                    s.pnlPercent === n.pnlPercent &&
+                    s.status === n.status &&
+                    s.time === n.time
+                  );
+                });
+                if (same) return prev;
+              }
+              try {
+                localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(sigData.signals));
+              } catch {}
+              return sigData.signals;
+            });
+
+            if (typeof sigData.win_rate === 'number') {
+              setSignalsWinRate(sigData.win_rate);
+            }
+          }
+
+          // Fetch Macro Calendar Circuit Breaker Status
+          const macro = await api.fetchMacroCalendarStatus();
+          if (macro && isMounted) {
+            setMacroStatus((prev) => (prev?.status === macro.status && prev?.lockout_active === macro.lockout_active ? prev : macro));
+          }
         }
       } catch (err) {
         console.warn('[Sync Error]', err);
       }
     };
 
+    const startPolling = () => {
+      if (pollInterval) clearInterval(pollInterval);
+      const delay = document.hidden ? 60000 : 8000;
+      pollInterval = setInterval(fetchStatusAndAccount, delay);
+    };
+
     fetchStatusAndAccount();
-    const interval = setInterval(fetchStatusAndAccount, 3000);
+    startPolling();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        fetchStatusAndAccount();
+      }
+      startPolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (pollInterval) clearInterval(pollInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, []);
 
@@ -225,30 +327,91 @@ export const App: React.FC = () => {
     }
   }, []);
 
-  // Sync real-time live price for selected asset
+  // Sync real-time live price for selected asset with background throttling
   useEffect(() => {
     let isMounted = true;
+    let priceInterval: ReturnType<typeof setInterval> | null = null;
+
     const fetchLive = async () => {
+      if (document.hidden) return; // Save memory and CPU when tab is in background
+
       const ticker = await api.fetchLiveTicker(selectedAsset.symbol);
       if (ticker && isMounted) {
-        setSelectedAsset((prev) => ({
-          ...prev,
-          price: ticker.price,
-          change24h: ticker.change24h,
-          high24h: ticker.high24h,
-          low24h: ticker.low24h,
-          volume24h: ticker.volume24h,
-        }));
+        setSelectedAsset((prev) => {
+          if (
+            prev.price === ticker.price &&
+            prev.change24h === ticker.change24h &&
+            prev.volume24h === ticker.volume24h
+          ) {
+            return prev;
+          }
+          return {
+            ...prev,
+            price: ticker.price,
+            change24h: ticker.change24h,
+            high24h: ticker.high24h,
+            low24h: ticker.low24h,
+            volume24h: ticker.volume24h,
+          };
+        });
       }
     };
 
+    const startPricePolling = () => {
+      if (priceInterval) clearInterval(priceInterval);
+      const delay = document.hidden ? 60000 : 6000;
+      priceInterval = setInterval(fetchLive, delay);
+    };
+
     fetchLive();
-    const interval = setInterval(fetchLive, 5000);
+    startPricePolling();
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) fetchLive();
+      startPricePolling();
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
     return () => {
       isMounted = false;
-      clearInterval(interval);
+      if (priceInterval) clearInterval(priceInterval);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
   }, [selectedAsset.symbol]);
+
+  // Load and refresh real-time multi-agent consensus signals
+  const loadRecentSignals = useCallback(async () => {
+    try {
+      setIsRefreshingSignals(true);
+      const res = await api.fetchRecentConsensusSignals();
+      if (res && res.signals && res.signals.length > 0) {
+        setRecentSignals(res.signals);
+        if (typeof res.win_rate === 'number') {
+          setSignalsWinRate(res.win_rate);
+        }
+        try {
+          localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(res.signals));
+        } catch {}
+      }
+    } catch (e) {
+      console.warn('[App] Error loading recent consensus signals:', e);
+    } finally {
+      setIsRefreshingSignals(false);
+    }
+  }, []);
+
+  // Quick-switch to asset clicked in Recent Signals Feed
+  const handleSelectSignalSymbol = useCallback((symbol: string) => {
+    const cleanBase = symbol.split('/')[0].toUpperCase();
+    const found = SUPPORTED_ASSETS.find(
+      (a) => a.pair.toUpperCase() === symbol.toUpperCase() || a.symbol.toUpperCase() === cleanBase
+    );
+    if (found) {
+      setSelectedAsset(found);
+      window.scrollTo({ top: 120, behavior: 'smooth' });
+    }
+  }, []);
 
   // Agent Config State
   const [agentConfig, setAgentConfig] = useState<AgentConfigState>({
@@ -288,17 +451,36 @@ export const App: React.FC = () => {
     riskTolerance: 'Balanced',
   });
 
-  // Auto-persist paper state changes to localStorage
+  // Auto-persist paper state changes to localStorage only when contents actually change
+  const lastCashRef = useRef<string>('');
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.CASH_BALANCE, cashBalance.toString());
+    const val = cashBalance.toString();
+    if (val !== lastCashRef.current) {
+      lastCashRef.current = val;
+      try { localStorage.setItem(STORAGE_KEYS.CASH_BALANCE, val); } catch {}
+    }
   }, [cashBalance]);
 
+  const lastPositionsRef = useRef<string>('');
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.OPEN_POSITIONS, JSON.stringify(openPositions));
+    try {
+      const val = JSON.stringify(openPositions);
+      if (val !== lastPositionsRef.current) {
+        lastPositionsRef.current = val;
+        localStorage.setItem(STORAGE_KEYS.OPEN_POSITIONS, val);
+      }
+    } catch {}
   }, [openPositions]);
 
+  const lastHistoryRef = useRef<string>('');
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.TRADE_HISTORY, JSON.stringify(tradeHistory));
+    try {
+      const val = JSON.stringify(tradeHistory);
+      if (val !== lastHistoryRef.current) {
+        lastHistoryRef.current = val;
+        localStorage.setItem(STORAGE_KEYS.TRADE_HISTORY, val);
+      }
+    } catch {}
   }, [tradeHistory]);
 
   // Modals State
@@ -339,15 +521,22 @@ export const App: React.FC = () => {
     return () => { isMounted = false; };
   }, [selectedAsset.symbol, timeInterval]);
 
-  // Update Open Positions Real-time PnL when market price ticks
+  // Update Open Positions Real-time PnL when market price ticks (zero allocations when 0 positions or identical price)
   useEffect(() => {
-    setOpenPositions((prevPositions) =>
-      prevPositions.map((pos) => {
+    setOpenPositions((prevPositions) => {
+      if (!prevPositions || prevPositions.length === 0) return prevPositions;
+
+      let hasChange = false;
+      const updated = prevPositions.map((pos) => {
         const cleanSymbol = pos.symbol.split('/')[0].toUpperCase();
-        const currentPrice = (selectedAsset.symbol.toUpperCase() === cleanSymbol || pos.symbol.includes(selectedAsset.symbol))
-          ? selectedAsset.price
-          : pos.current_price;
-        
+        const isTarget = selectedAsset.symbol.toUpperCase() === cleanSymbol || pos.symbol.includes(selectedAsset.symbol);
+        const currentPrice = isTarget ? selectedAsset.price : pos.current_price;
+
+        if (currentPrice === pos.current_price) {
+          return pos;
+        }
+
+        hasChange = true;
         const deltaPct = pos.side === 'SHORT'
           ? (pos.entry_price - currentPrice) / pos.entry_price
           : (currentPrice - pos.entry_price) / pos.entry_price;
@@ -361,8 +550,10 @@ export const App: React.FC = () => {
           unrealized_pnl: Math.round(pnlUsd * 100) / 100,
           unrealized_pnl_pct: Math.round(pnlPct * 100) / 100,
         };
-      })
-    );
+      });
+
+      return hasChange ? updated : prevPositions;
+    });
   }, [selectedAsset.price, selectedAsset.symbol]);
 
   // Compute Total Equity & Overall PnL %
@@ -838,6 +1029,36 @@ export const App: React.FC = () => {
       if (res && res.stage1 && res.stage5) {
         const mappedData = mapBackendToPipelineData(res, selectedAsset, timeInterval);
         setPipelineData(mappedData);
+
+        // Instantly prepend fresh consensus signal to Recent Signals Feed
+        const rawSig = res.stage5.consensus_signal;
+        const sigVal = (typeof rawSig === 'object' ? rawSig?.value : rawSig) || 'HOLD';
+        const confVal = typeof res.stage5.consensus_confidence === 'number' ? res.stage5.consensus_confidence : 85.0;
+        const entryPrice = res.stage5?.execution_plan?.recommended_entry || selectedAsset.price;
+        const tp1 = res.stage5?.execution_plan?.take_profit_1 || (entryPrice * 1.05);
+        const pnl = selectedAsset.change24h || 0.0;
+
+        const freshRecord: LiveSignalRecord = {
+          id: `sig_${selectedAsset.symbol.toLowerCase()}_${Date.now()}`,
+          symbol: selectedAsset.pair,
+          time: 'Just now',
+          timeframe: timeInterval,
+          signal: sigVal as any,
+          consensusScore: Number(confVal.toFixed(1)),
+          entry: Number(entryPrice.toFixed(2)),
+          target: Number(tp1.toFixed(2)),
+          status: 'In Progress',
+          pnlPercent: Number(pnl.toFixed(2)),
+        };
+
+        setRecentSignals((prev) => {
+          const filtered = prev.filter((s) => s.symbol !== selectedAsset.pair);
+          const updated = [freshRecord, ...filtered].slice(0, 15);
+          try {
+            localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(updated));
+          } catch {}
+          return updated;
+        });
       }
     } catch (e) {
       console.warn('[Analysis Error]', e);
@@ -932,7 +1153,13 @@ export const App: React.FC = () => {
 
             {/* Bottom Section: Recent AI Consensus Signals Feed */}
             <section>
-              <RecentSignalsFeed signals={RECENT_SIGNALS_FEED} />
+              <RecentSignalsFeed
+                signals={recentSignals}
+                winRate={signalsWinRate}
+                onSelectSymbol={handleSelectSignalSymbol}
+                onRefresh={loadRecentSignals}
+                isRefreshing={isRefreshingSignals}
+              />
             </section>
           </>
         )}

@@ -1,3 +1,19 @@
+import warnings
+import logging
+
+# Suppress LangChain / Google GenAI Automatic Function Calling (AFC) SDK logger warning
+warnings.filterwarnings("ignore", message=".*Direct use of automatic function calling.*")
+warnings.filterwarnings("ignore", category=RuntimeWarning, message=".*ClientResponse.json.*")
+try:
+    from google.genai.models import Models, AsyncModels
+    Models._logged_afc_warning = True
+    AsyncModels._logged_afc_warning = True
+except Exception:
+    pass
+
+logging.getLogger("google.genai").setLevel(logging.ERROR)
+logging.getLogger("google_genai").setLevel(logging.ERROR)
+
 import uvicorn
 import time
 from typing import Optional

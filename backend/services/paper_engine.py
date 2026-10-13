@@ -130,7 +130,7 @@ class VirtualPaperEngine:
         self._save_to_disk()
         return self.get_state()
 
-    def get_state(self, current_prices: Optional[Dict[str, float]] = None) -> PaperAccountState:
+    def get_state(self, current_prices: Optional[Dict[str, float]] = None, limit: Optional[int] = None) -> PaperAccountState:
         # Fetch real-time live price map from symbol_resolver
         from backend.services.symbol_resolver import symbol_resolver
         try:
@@ -186,7 +186,7 @@ class VirtualPaperEngine:
             win_rate_pct=round(win_rate, 1),
             total_trades_count=total_closed,
             open_positions=list(self.open_positions.values()),
-            trade_history=self.trade_history[-50:],
+            trade_history=self.trade_history if (limit is None or limit <= 0) else self.trade_history[-limit:],
         )
 
     @property

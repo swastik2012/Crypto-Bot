@@ -61,7 +61,7 @@ async def test_dual_sided_counter_trend_veto(btc_confluence):
     print(f"\n🧪 TEST A: Proposing ALIGNED Trade ({aligned_dir} with 1D {trend_1d} Macro Tide)")
     stage1_aligned = Stage1GeminiVisionResult(
         agent_name="Gemini Vision",
-        model="gemini-3.7-flash",
+        model="gemini-2.5-flash",
         latency_ms=120,
         patterns=[TechnicalPattern(name="Aligned Impulse", type="bullish" if aligned_dir == "LONG" else "bearish", timeframe="15m", reliability=92.0, description="With-trend continuation")],
         key_levels=[SupportResistanceLevel(price=curr_p * 0.98, type="support", strength="major", description="Demand")],
@@ -104,7 +104,7 @@ async def test_dual_sided_counter_trend_veto(btc_confluence):
     print(f"\n🧪 TEST B: Proposing COUNTER-TREND Trade ({counter_dir} AGAINST 1D {trend_1d} Macro Tide)")
     stage1_counter = Stage1GeminiVisionResult(
         agent_name="Gemini Vision",
-        model="gemini-3.7-flash",
+        model="gemini-2.5-flash",
         latency_ms=120,
         patterns=[TechnicalPattern(name="Counter-Trend Reversal", type="bearish" if counter_dir == "SHORT" else "bullish", timeframe="15m", reliability=70.0, description="Attempting counter-trend scalp")],
         key_levels=[SupportResistanceLevel(price=curr_p * 0.98, type="support", strength="minor", description="Local pivot")],

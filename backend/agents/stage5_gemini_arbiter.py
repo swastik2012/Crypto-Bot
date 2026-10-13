@@ -48,7 +48,7 @@ async def run_stage5_gemini_arbiter(
     - Synthesizes final actionable consensus verdict, confidence score, and execution plan.
     """
     gemini_key = api_key or settings.GEMINI_API_KEY
-    model_name = settings.GEMINI_MODEL or "gemini-3.7-flash"
+    model_name = settings.GEMINI_MODEL or "gemini-2.5-flash"
     
     thesis = stage1.initial_thesis or {}
     direction = str(thesis.get("direction", "LONG")).upper()
@@ -400,11 +400,11 @@ async def run_stage5_gemini_arbiter(
 
     # If Gemini API Key is present and quota is available, invoke Gemini LLM for dynamic synthesis
     parsed_arbiter = False
-    if gemini_key and not gemini_key.startswith("AIzaSy***") and GeminiQuotaGuard.is_available():
+    target_engine = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
+    if gemini_key and not gemini_key.startswith("AIzaSy***") and target_engine:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
-            target_engine = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(model=target_engine, google_api_key=gemini_key, temperature=0.1, max_retries=0)
             resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=3.5)
             raw_text = resp.content
@@ -432,7 +432,7 @@ async def run_stage5_gemini_arbiter(
                 parsed_arbiter = True
         except Exception as e:
             if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e))
+                GeminiQuotaGuard.mark_exhausted(str(e), model=target_engine)
             else:
                 print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback: {e}")
 

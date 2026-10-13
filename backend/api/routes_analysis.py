@@ -39,7 +39,7 @@ async def analyze_and_trade(req: AnalyzeAndTradeRequest):
         typesafe_key=req.custom_typesafe_key or req.custom_jev_key or "",
         jev_key=req.custom_jev_key or req.custom_typesafe_key or "",
     )
-    analysis_cache.set(req.symbol, response)
+    analysis_cache.set(req.symbol, response, timeframe=req.timeframe)
     return response
 
 @router.get("/analysis/latest/{symbol}")
@@ -51,4 +51,11 @@ async def get_latest_analysis(symbol: str):
     if not data:
         raise HTTPException(status_code=404, detail=f"No cached analysis found for {symbol}")
     return {"status": "success", "symbol": symbol, "data": data}
+
+@router.get("/consensus/recent-signals")
+async def get_recent_consensus_signals(limit: int = 10):
+    """
+    Returns live multi-agent consensus signals feed with dynamically updated prices and PnL.
+    """
+    return analysis_cache.get_recent_signals(limit=limit)
 

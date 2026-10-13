@@ -179,13 +179,13 @@ async def run_stage1_gemini_vision(
 
     from backend.services.gemini_guard import GeminiQuotaGuard
 
-    # If API key is present and Gemini quota is active, invoke Google Gemini 3.7 Flash
-    if effective_key and GeminiQuotaGuard.is_available():
+    # If API key is present and Gemini quota is active, invoke Google Gemini (with cascading model fallback)
+    target_engine = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
+    if effective_key and target_engine:
         try:
             from langchain_google_genai import ChatGoogleGenerativeAI
             from langchain_core.messages import HumanMessage
             
-            target_engine = settings.GEMINI_MODEL or "gemini-3.7-flash"
             llm = ChatGoogleGenerativeAI(
                 model=target_engine,
                 google_api_key=effective_key,
@@ -296,7 +296,7 @@ async def run_stage1_gemini_vision(
                 return result, debate_msg
         except Exception as e:
             if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e))
+                GeminiQuotaGuard.mark_exhausted(str(e), model=target_engine)
             else:
                 print(f"[Stage 1 Gemini Warning] LLM call fallback: {e}")
 

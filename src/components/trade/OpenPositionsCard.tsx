@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   TrendingUp,
@@ -12,6 +12,8 @@ import {
   Clock,
   Zap,
   Timer,
+  ArrowUpDown,
+  Filter,
 } from 'lucide-react';
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
@@ -114,6 +116,33 @@ interface OpenPositionsCardProps {
   onResetAccount?: () => void;
 }
 
+const PositionDurationTicker: React.FC<{ openedAt: number }> = React.memo(({ openedAt }) => {
+  const [duration, setDuration] = useState<number>(() => {
+    const startMs = openedAt > 1e11 ? openedAt : openedAt * 1000;
+    return Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+  });
+
+  useEffect(() => {
+    const startMs = openedAt > 1e11 ? openedAt : openedAt * 1000;
+    const update = () => {
+      if (!document.hidden) {
+        setDuration(Math.max(0, Math.floor((Date.now() - startMs) / 1000)));
+      }
+    };
+    const timer = setInterval(update, 1000);
+    const handleVisibility = () => {
+      if (!document.hidden) update();
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
+  }, [openedAt]);
+
+  return <>{formatDuration(duration)}</>;
+});
+
 export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
   positions,
   history,
@@ -122,12 +151,40 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
 }) => {
   const { formatPrice } = useCurrency();
   const [activeTab, setActiveTab] = useState<'OPEN' | 'HISTORY'>('OPEN');
-  const [now, setNow] = useState<number>(Date.now());
+  const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');
+  const [historyLimit, setHistoryLimit] = useState<number | 'ALL'>('ALL');
+  const [historySortOrder, setHistorySortOrder] = useState<'NEWEST' | 'OLDEST'>('NEWEST');
 
-  useEffect(() => {
-    const timer = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(timer);
-  }, []);
+  // Sorted and filtered trade history (Newest trades on top by default)
+  const processedHistory = useMemo(() => {
+    let list = [...history];
+
+    if (selectedAssetFilter !== 'ALL') {
+      list = list.filter((t) => t.symbol.toUpperCase().includes(selectedAssetFilter.toUpperCase()));
+    }
+
+    list.sort((a, b) => {
+      const timeA = typeof a.closed_at === 'number' ? (a.closed_at > 1e11 ? a.closed_at / 1000 : a.closed_at) : 0;
+      const timeB = typeof b.closed_at === 'number' ? (b.closed_at > 1e11 ? b.closed_at / 1000 : b.closed_at) : 0;
+      return historySortOrder === 'NEWEST' ? timeB - timeA : timeA - timeB;
+    });
+
+    if (historyLimit !== 'ALL') {
+      list = list.slice(0, historyLimit);
+    }
+
+    return list;
+  }, [history, selectedAssetFilter, historySortOrder, historyLimit]);
+
+  // Unique symbols in history for quick filter buttons
+  const availableSymbols = useMemo(() => {
+    const syms = new Set<string>();
+    history.forEach((t) => {
+      const clean = t.symbol.split('/')[0].toUpperCase();
+      syms.add(clean);
+    });
+    return Array.from(syms);
+  }, [history]);
 
   if (positions.length === 0 && history.length === 0) return null;
 
@@ -297,7 +354,7 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                           <Timer className="w-3.5 h-3.5 text-indigo-500 dark:text-indigo-400 shrink-0" />
                           <span className="text-[10px] uppercase font-bold text-slate-500 dark:text-slate-400">Holding Time:</span>
                           <span className="font-bold text-indigo-700 dark:text-indigo-300 font-mono">
-                            {formatDuration(Math.max(0, Math.floor((now - (pos.opened_at > 1e11 ? pos.opened_at : pos.opened_at * 1000)) / 1000)))}
+                            <PositionDurationTicker openedAt={pos.opened_at} />
                           </span>
                         </div>
                       </div>
@@ -365,9 +422,80 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
             </div>
           ) : (
             <>
+              {/* History Filter & Limit Controls Bar */}
+              <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-xl bg-slate-100/90 dark:bg-dark-900/90 border border-slate-200 dark:border-white/5 text-xs">
+                
+                {/* Left: Asset Filter Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[10px] text-slate-400 uppercase font-bold flex items-center gap-1 mr-1">
+                    <Filter className="w-3 h-3 text-cyan-500" />
+                    Asset:
+                  </span>
+                  <button
+                    onClick={() => setSelectedAssetFilter('ALL')}
+                    className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                      selectedAssetFilter === 'ALL'
+                        ? 'bg-cyan-500 text-white shadow-xs'
+                        : 'bg-slate-200/70 dark:bg-dark-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                    }`}
+                  >
+                    ALL ({history.length})
+                  </button>
+                  {availableSymbols.map((sym) => {
+                    const count = history.filter((t) => t.symbol.toUpperCase().includes(sym)).length;
+                    return (
+                      <button
+                        key={sym}
+                        onClick={() => setSelectedAssetFilter(sym)}
+                        className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all ${
+                          selectedAssetFilter === sym
+                            ? 'bg-cyan-500 text-white shadow-xs'
+                            : 'bg-slate-200/70 dark:bg-dark-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {sym} ({count})
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Right: Limit and Sort Controls */}
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 bg-slate-200/60 dark:bg-dark-800 p-0.5 rounded-lg text-[10px] font-bold">
+                    <span className="px-1 text-slate-400">Show:</span>
+                    {([50, 100, 200, 'ALL'] as const).map((l) => (
+                      <button
+                        key={l}
+                        onClick={() => setHistoryLimit(l)}
+                        className={`px-1.5 py-0.5 rounded transition-all ${
+                          historyLimit === l
+                            ? 'bg-cyan-500 text-white'
+                            : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200'
+                        }`}
+                      >
+                        {l}
+                      </button>
+                    ))}
+                  </div>
+
+                  <button
+                    onClick={() => setHistorySortOrder((prev) => (prev === 'NEWEST' ? 'OLDEST' : 'NEWEST'))}
+                    className="flex items-center gap-1 px-2 py-1 rounded-lg bg-slate-200/60 dark:bg-dark-800 text-[10px] font-bold text-slate-700 dark:text-slate-300 hover:text-cyan-500 transition-colors"
+                    title="Toggle Sort Order"
+                  >
+                    <ArrowUpDown className="w-3 h-3 text-cyan-500" />
+                    <span>{historySortOrder === 'NEWEST' ? 'Newest First' : 'Oldest First'}</span>
+                  </button>
+
+                  <span className="text-[10px] text-slate-400 hidden lg:inline">
+                    Showing <b>{processedHistory.length}</b> of <b>{history.length}</b>
+                  </span>
+                </div>
+              </div>
+
               {/* Mobile Card View (Screens < sm) */}
               <div className="sm:hidden space-y-2.5">
-                {history.map((item) => {
+                {processedHistory.map((item) => {
                   const grossPnl = item.realized_pnl;
                   const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
                   const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);
@@ -445,7 +573,7 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-white/5">
-                    {history.map((item) => {
+                    {processedHistory.map((item) => {
                       const grossPnl = item.realized_pnl;
                       const netPnl = item.net_realized_pnl !== undefined ? item.net_realized_pnl : grossPnl;
                       const totalFees = (item.entry_fee || 0) + (item.exit_fee || 0) + (item.tds_deducted || 0);

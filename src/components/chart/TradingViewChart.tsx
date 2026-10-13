@@ -34,22 +34,51 @@ const TradingViewChartComponent: React.FC<TradingViewChartProps> = ({
   const containerRef = useRef<HTMLDivElement>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
+  // Safe teardown helper to destroy WebGL and WebWorker instances within iframes
+  const teardownWidget = (container: HTMLDivElement | null) => {
+    if (!container) return;
+    try {
+      const iframes = container.querySelectorAll('iframe');
+      iframes.forEach((iframe) => {
+        try {
+          iframe.src = 'about:blank';
+          if (iframe.contentWindow) {
+            iframe.contentWindow.document?.write('');
+            iframe.contentWindow.close();
+          }
+        } catch {}
+        try {
+          iframe.remove();
+        } catch {}
+      });
+      const scripts = container.querySelectorAll('script');
+      scripts.forEach((s) => {
+        try {
+          s.remove();
+        } catch {}
+      });
+      container.replaceChildren();
+    } catch {
+      container.innerHTML = '';
+    }
+  };
+
   useEffect(() => {
     setIsLoading(true);
     const container = containerRef.current;
     if (!container) return;
 
-    // Clean up any previous widget script/iframe before injecting
-    container.innerHTML = '';
+    // 1. Thoroughly terminate previous widget instances to release WebKit GPU & WebWorker RAM
+    teardownWidget(container);
 
-    // Create wrapper div required by TradingView Advanced Chart Widget
+    // 2. Create wrapper div required by TradingView Advanced Chart Widget
     const widgetContainer = document.createElement('div');
     widgetContainer.className = 'tradingview-widget-container__widget';
     widgetContainer.style.height = '100%';
     widgetContainer.style.width = '100%';
     container.appendChild(widgetContainer);
 
-    // Create and inject TradingView official script
+    // 3. Create and inject TradingView official script
     const script = document.createElement('script');
     script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-advanced-chart.js';
     script.type = 'text/javascript';
@@ -90,12 +119,10 @@ const TradingViewChartComponent: React.FC<TradingViewChartProps> = ({
       setIsLoading(false);
     }, 1200);
 
-    // Cleanup function to prevent duplicate script tags or memory leaks
+    // Cleanup function: explicitly destroy iframes and unhook WebGL
     return () => {
       clearTimeout(timer);
-      if (container) {
-        container.innerHTML = '';
-      }
+      teardownWidget(container);
     };
   }, [symbol, interval, theme, autosize, timezone, locale, hideTopToolbar, hideLegend, saveImage]);
 

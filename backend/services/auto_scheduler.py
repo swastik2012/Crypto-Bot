@@ -263,7 +263,7 @@ class AutoTradingScheduler:
                     auto_execute=False,
                     indicators=screen_res.get("indicators"),
                 )
-                analysis_cache.set(pair, response)
+                analysis_cache.set(pair, response, timeframe="1H")
                 
                 signal = response.stage5.consensus_signal
                 confidence = response.stage5.consensus_confidence
