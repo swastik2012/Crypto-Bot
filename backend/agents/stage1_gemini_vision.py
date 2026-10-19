@@ -180,125 +180,136 @@ async def run_stage1_gemini_vision(
     from backend.services.gemini_guard import GeminiQuotaGuard
 
     # If API key is present and Gemini quota is active, invoke Google Gemini (with cascading model fallback)
-    target_engine = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
+    target_engine = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
     if effective_key and target_engine:
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-            
-            llm = ChatGoogleGenerativeAI(
-                model=target_engine,
-                google_api_key=effective_key,
-                temperature=0.3,
-                max_retries=0,
-            )
-            
-            prompt_text = (
-                f"Analyze {symbol} on primary timeframe {timeframe}.\n"
-                f"- Current Live Price: ${current_price:,.2f}\n"
-                f"- 24h Price Change: {change_24h:+.2f}%\n"
-                f"- 24h High: ${high_24h:,.2f} | 24h Low: ${low_24h:,.2f}\n\n"
-                f"{monthly_candles}\n\n"
-                f"DYNAMIC ATR VOLATILITY GEOMETRY (Binance 14-Period):\n"
-                f"• Volatility Regime: {atr_targets['volatility_regime']} (ATR: ${atr_targets['atr_14']:,.2f} / {atr_targets['atr_pct']}% of price)\n"
-                f"• Recommended Dynamic SL: ${atr_targets['stop_loss']:,.2f} ({atr_targets['sl_distance']:,.2f} buffer)\n"
-                f"• Recommended Dynamic TP1: ${atr_targets['take_profit_1']:,.2f} (1:{atr_targets['risk_reward_tp1']} R:R)\n"
-                f"• Recommended Dynamic TP2: ${atr_targets['take_profit_2']:,.2f} (1:{atr_targets['risk_reward_tp2']} R:R)\n\n"
-                f"TRIPLE-SCREEN MULTI-TIMEFRAME CONFLUENCE (Binance Live):\n"
-                f"• Screen 1 (1D Macro Tide): {mtf_raw.screen_1d.trend} (RSI: {mtf_raw.screen_1d.rsi_14}, {mtf_raw.screen_1d.structure_signal})\n"
-                f"• Screen 2 (4H Structural Wave): {mtf_raw.screen_4h.trend} (Demand: ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, Supply: ${mtf_raw.screen_4h.key_supply_zone[1]:,.2f})\n"
-                f"• Screen 3 (15M Precision Trigger): {mtf_raw.screen_15m.trend} (RSI: {mtf_raw.screen_15m.rsi_14}, {mtf_raw.screen_15m.structure_signal})\n"
-                f"• MTF Alignment Score: {mtf_raw.alignment_score} ({mtf_raw.confluence_direction})\n"
-                f"• MTF Institutional Directive: {mtf_raw.recommended_action}\n\n"
-                f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
-                f"Portfolio & Past Trade Context:\n{portfolio_ctx}\n"
-            )
-
-            if chart_image_base64:
-                msg = HumanMessage(
-                    content=[
-                        {"type": "text", "text": f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}"},
-                        {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{chart_image_base64}"}},
-                    ]
-                )
-            else:
-                msg = HumanMessage(content=f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}")
-
-            response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=3.5)
-            raw_text = response.content
-            if "```json" in raw_text:
-                json_str = raw_text.split("```json")[1].split("```")[0].strip()
-                data = json.loads(json_str)
-            elif "{" in raw_text:
-                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
-                data = json.loads(json_str)
-            else:
-                data = None
+        candidate_models = [target_engine] + [m for m in GeminiQuotaGuard.DEFAULT_CASCADE_ORDER if m != target_engine]
+        for candidate_model in candidate_models:
+            if not GeminiQuotaGuard.is_available(candidate_model):
+                continue
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                from langchain_core.messages import HumanMessage
                 
-            if data and "patterns" in data:
-                latency = int((time.time() - start_time) * 1000)
-                patterns = [TechnicalPattern(**p) for p in data.get("patterns", [])]
-                levels = [SupportResistanceLevel(**lvl) for lvl in data.get("key_levels", [])]
-                thesis = data.get("initial_thesis", {})
-                dir_val = thesis.get("direction", "NEUTRAL")
-                
-                result = Stage1GeminiVisionResult(
-                    agent_name="Agent 1: Gemini 3.7 Flash Vision Analyzer",
-                    model=model_name,
-                    latency_ms=latency,
-                    patterns=patterns,
-                    key_levels=levels,
-                    rsi_status=data.get("rsi_status", {"value": 54.0, "condition": "neutral", "signal": "HOLD"}),
-                    volume_analysis=data.get("volume_analysis", f"Live 24h volume on {symbol} reflecting {change_24h:+.2f}% momentum."),
-                    initial_thesis=thesis,
-                    multi_timeframe_confluence=mtf_schema,
+                llm = ChatGoogleGenerativeAI(
+                    model=candidate_model,
+                    google_api_key=effective_key,
+                    temperature=0.3,
+                    max_retries=0,
                 )
-                debate_msg = DebateMessageSchema(
-                    id="msg_st1_01",
-                    stage_number=1,
-                    agent_id="agent_gemini_vision",
-                    agent_name="Gemini 3.7 Flash Vision",
-                    agent_badge="Visual Technical Analyzer",
-                    avatar_color="from-blue-500 to-cyan-400",
-                    model=model_name,
-                    timestamp="Stage 1 • Visual Ingestion",
-                    content=f"Gemini 3.7 Flash verified {mtf_raw.alignment_score} for {symbol} [{timeframe}]. 1D Macro Tide is {mtf_raw.screen_1d.trend}, 4H Structure at ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, 15M Trigger: {mtf_raw.screen_15m.structure_signal}. Proposing {dir_val} setup.",
-                    highlightPills=[f"Gemini 3.7 Flash ({dir_val})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
+                
+                prompt_text = (
+                    f"Analyze {symbol} on primary timeframe {timeframe}.\n"
+                    f"- Current Live Price: ${current_price:,.2f}\n"
+                    f"- 24h Price Change: {change_24h:+.2f}%\n"
+                    f"- 24h High: ${high_24h:,.2f} | 24h Low: ${low_24h:,.2f}\n\n"
+                    f"{monthly_candles}\n\n"
+                    f"DYNAMIC ATR VOLATILITY GEOMETRY (Binance 14-Period):\n"
+                    f"• Volatility Regime: {atr_targets['volatility_regime']} (ATR: ${atr_targets['atr_14']:,.2f} / {atr_targets['atr_pct']}% of price)\n"
+                    f"• Recommended Dynamic SL: ${atr_targets['stop_loss']:,.2f} ({atr_targets['sl_distance']:,.2f} buffer)\n"
+                    f"• Recommended Dynamic TP1: ${atr_targets['take_profit_1']:,.2f} (1:{atr_targets['risk_reward_tp1']} R:R)\n"
+                    f"• Recommended Dynamic TP2: ${atr_targets['take_profit_2']:,.2f} (1:{atr_targets['risk_reward_tp2']} R:R)\n\n"
+                    f"TRIPLE-SCREEN MULTI-TIMEFRAME CONFLUENCE (Binance Live):\n"
+                    f"• Screen 1 (1D Macro Tide): {mtf_raw.screen_1d.trend} (RSI: {mtf_raw.screen_1d.rsi_14}, {mtf_raw.screen_1d.structure_signal})\n"
+                    f"• Screen 2 (4H Structural Wave): {mtf_raw.screen_4h.trend} (Demand: ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, Supply: ${mtf_raw.screen_4h.key_supply_zone[1]:,.2f})\n"
+                    f"• Screen 3 (15M Precision Trigger): {mtf_raw.screen_15m.trend} (RSI: {mtf_raw.screen_15m.rsi_14}, {mtf_raw.screen_15m.structure_signal})\n"
+                    f"• MTF Alignment Score: {mtf_raw.alignment_score} ({mtf_raw.confluence_direction})\n"
+                    f"• MTF Institutional Directive: {mtf_raw.recommended_action}\n\n"
+                    f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
+                    f"Portfolio & Past Trade Context:\n{portfolio_ctx}\n"
                 )
 
-                # Record Telemetry Call with complete Prompt & Return payload
-                from backend.services.telemetry import telemetry_service
-                telemetry_service.record_call(
-                    provider="Google Gemini (Vision)",
-                    model=model_name,
-                    stage="Stage 1: Gemini 3.7 Flash Vision",
-                    status="SUCCESS",
-                    status_code=200,
-                    latency_ms=latency,
-                    endpoint="https://generativelanguage.googleapis.com/v1beta/models",
-                    prompt_text=f"{STAGE1_SYSTEM_PROMPT}\n\n=== INPUT PAYLOAD ===\n{prompt_text}",
-                    response_text=json.dumps(result.dict(), indent=2),
-                    request_summary={
-                        "symbol": symbol,
-                        "timeframe": timeframe,
-                        "current_price": current_price,
-                        "has_chart_image": bool(chart_image_base64),
-                        "mtf_alignment": mtf_raw.alignment_score,
-                    },
-                    response_summary={
-                        "direction": dir_val,
-                        "patterns_detected": [pat.name for pat in patterns],
-                        "take_profit_1": thesis.get("take_profit_1"),
-                        "stop_loss": thesis.get("stop_loss"),
-                        "mtf_confluence": mtf_raw.alignment_score,
-                    },
-                )
-                return result, debate_msg
-        except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e), model=target_engine)
-            else:
-                print(f"[Stage 1 Gemini Warning] LLM call fallback: {e}")
+                if chart_image_base64:
+                    msg = HumanMessage(
+                        content=[
+                            {"type": "text", "text": f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}"},
+                            {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{chart_image_base64}"}},
+                        ]
+                    )
+                else:
+                    msg = HumanMessage(content=f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}")
+
+                response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=12.0)
+                raw_text = response.content
+                if "```json" in raw_text:
+                    json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                    data = json.loads(json_str)
+                elif "{" in raw_text:
+                    json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                    data = json.loads(json_str)
+                else:
+                    data = None
+                    
+                if data and "patterns" in data:
+                    latency = int((time.time() - start_time) * 1000)
+                    patterns = [TechnicalPattern(**p) for p in data.get("patterns", [])]
+                    levels = [SupportResistanceLevel(**lvl) for lvl in data.get("key_levels", [])]
+                    thesis = data.get("initial_thesis", {})
+                    dir_val = thesis.get("direction", "NEUTRAL")
+                    
+                    result = Stage1GeminiVisionResult(
+                        agent_name="Agent 1: Gemini 3.7 Flash Vision Analyzer",
+                        model=candidate_model,
+                        latency_ms=latency,
+                        patterns=patterns,
+                        key_levels=levels,
+                        rsi_status=data.get("rsi_status", {"value": 54.0, "condition": "neutral", "signal": "HOLD"}),
+                        volume_analysis=data.get("volume_analysis", f"Live 24h volume on {symbol} reflecting {change_24h:+.2f}% momentum."),
+                        initial_thesis=thesis,
+                        multi_timeframe_confluence=mtf_schema,
+                    )
+                    debate_msg = DebateMessageSchema(
+                        id="msg_st1_01",
+                        stage_number=1,
+                        agent_id="agent_gemini_vision",
+                        agent_name="Gemini 3.7 Flash Vision",
+                        agent_badge="Visual Technical Analyzer",
+                        avatar_color="from-blue-500 to-cyan-400",
+                        model=candidate_model,
+                        timestamp="Stage 1 • Visual Ingestion",
+                        content=f"Gemini verified {mtf_raw.alignment_score} for {symbol} [{timeframe}]. 1D Macro Tide is {mtf_raw.screen_1d.trend}, 4H Structure at ${mtf_raw.screen_4h.key_demand_zone[0]:,.2f}, 15M Trigger: {mtf_raw.screen_15m.structure_signal}. Proposing {dir_val} setup.",
+                        highlightPills=[f"Gemini ({dir_val})", f"{mtf_raw.alignment_score}", f"1D: {mtf_raw.screen_1d.trend}", f"15M: {mtf_raw.screen_15m.trend}"],
+                    )
+
+                    # Record Telemetry Call with complete Prompt & Return payload
+                    from backend.services.telemetry import telemetry_service
+                    telemetry_service.record_call(
+                        provider="Google Gemini (Vision)",
+                        model=candidate_model,
+                        stage="Stage 1: Gemini Vision",
+                        status="SUCCESS",
+                        status_code=200,
+                        latency_ms=latency,
+                        endpoint="https://generativelanguage.googleapis.com/v1beta/models",
+                        prompt_text=f"{STAGE1_SYSTEM_PROMPT}\n\n=== INPUT PAYLOAD ===\n{prompt_text}",
+                        response_text=json.dumps(result.dict(), indent=2),
+                        request_summary={
+                            "symbol": symbol,
+                            "timeframe": timeframe,
+                            "current_price": current_price,
+                            "has_chart_image": bool(chart_image_base64),
+                            "mtf_alignment": mtf_raw.alignment_score,
+                        },
+                        response_summary={
+                            "direction": dir_val,
+                            "patterns_detected": [pat.name for pat in patterns],
+                            "take_profit_1": thesis.get("take_profit_1"),
+                            "stop_loss": thesis.get("stop_loss"),
+                            "mtf_confluence": mtf_raw.alignment_score,
+                        },
+                    )
+                    return result, debate_msg
+            except Exception as e:
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    continue
+                elif "503" in str(e) or "UNAVAILABLE" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    print(f"[Stage 1 Gemini Notice] {candidate_model} 503 high demand, cascading to next model...")
+                    continue
+                else:
+                    err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+                    print(f"[Stage 1 Gemini Warning] LLM call fallback ({candidate_model}): {err_msg}")
+                    continue
 
     # Dynamic High-Fidelity Technical Calculation based on live market metrics & Fibonacci pivots
     p = current_price or 78150.0

@@ -12,6 +12,7 @@ from backend.agents.stage5_gemini_arbiter import run_stage5_gemini_arbiter
 from backend.services.paper_engine import paper_engine
 from backend.services.macro_calendar_service import macro_calendar_service
 from backend.services.market_data import market_data_service
+from backend.config import settings
 
 class MultiAgentConsensusPipeline:
     """
@@ -181,7 +182,7 @@ class MultiAgentConsensusPipeline:
 
         if (
             auto_execute and
-            stage5_res.consensus_confidence >= 82.0 and
+            stage5_res.consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and
             plan_rr >= 1.50 and
             not directional_conflict and
             not macro_status.lockout_active and

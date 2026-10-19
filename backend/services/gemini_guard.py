@@ -32,9 +32,10 @@ class GeminiQuotaGuard:
     If all models are exhausted, routes gracefully to NVIDIA NIM or deterministic institutional TA.
     """
     DEFAULT_CASCADE_ORDER: List[str] = [
-        "gemini-2.5-flash",
-        "gemini-3.5-flash",
         "gemini-flash-lite-latest",
+        "gemini-3.5-flash-lite",
+        "gemini-3.5-flash",
+        "gemini-2.5-flash",
         "gemini-3.7-flash",
     ]
     
@@ -103,8 +104,9 @@ class GeminiQuotaGuard:
             if sec_match:
                 retry_delay = float(sec_match.group(1))
             else:
-                # If transient rate limit without explicit duration, keep short to avoid locking bot
-                if "per_minute" in error_msg.lower() or "rpm" in error_msg.lower():
+                if "503" in error_msg or "unavailable" in error_msg.lower():
+                    retry_delay = 60.0
+                elif "per_minute" in error_msg.lower() or "rpm" in error_msg.lower():
                     retry_delay = 20.0
                 elif "limit: 20" in error_msg or "daily" in error_msg.lower():
                     retry_delay = 12000.0  # ~3.3 hours default for daily cap

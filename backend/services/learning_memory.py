@@ -535,49 +535,50 @@ class LearningMemoryService:
         lower_wick = float(ind.get("lower_wick_ratio", 0.0))
 
         # Check 4: Rejection Wick / Turtle Soup Trap (Phase 2 & 3)
-        if upper_wick >= 0.40 and side_upper in ["BUY", "LONG"]:
+        if upper_wick >= 0.45 and side_upper in ["BUY", "LONG"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_upper_wick_40",
+                rule_id="trap_upper_wick_45",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not buy when candle upper rejection wick exceeds 40% of range (bearish pinbar / supply wall).",
+                rule_text="Do not buy when candle upper rejection wick exceeds 45% of range (bearish pinbar / supply wall).",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_upper_wick_40]: {clean_sym} formed massive upper rejection wick ({upper_wick*100:.1f}%). Bull trap / supply dump detected.",
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_upper_wick_45]: {clean_sym} formed massive upper rejection wick ({upper_wick*100:.1f}%). Bull trap / supply dump detected.",
                 confidence_penalty=45.0,
                 actionable_directive="Wait for clean price absorption of overhead supply before going long.",
             )
-        if lower_wick >= 0.40 and side_upper in ["SELL", "SHORT"]:
+        if lower_wick >= 0.45 and side_upper in ["SELL", "SHORT"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_lower_wick_40",
+                rule_id="trap_lower_wick_45",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not short when candle lower rejection wick exceeds 40% of range (bullish pinbar / demand wall).",
+                rule_text="Do not short when candle lower rejection wick exceeds 45% of range (bullish pinbar / demand wall).",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_lower_wick_40]: {clean_sym} formed massive lower rejection wick ({lower_wick*100:.1f}%). Bear trap / demand wall detected.",
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_lower_wick_45]: {clean_sym} formed massive lower rejection wick ({lower_wick*100:.1f}%). Bear trap / demand wall detected.",
                 confidence_penalty=45.0,
                 actionable_directive="Wait for clean breakdown below demand floor before shorting.",
             )
 
         # Check 5: Severe RSI Exhaustion Climax Boundaries
-        if rsi >= 75.0 and side_upper in ["BUY", "LONG"]:
+        # In crypto bull expansions, RSI 70-82 indicates sustained trend momentum. Climax exhaustion traps occur at RSI >= 85.0.
+        if rsi >= 85.0 and side_upper in ["BUY", "LONG"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_rsi_overbought_75",
+                rule_id="trap_rsi_overbought_85",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not buy into severely overbought 14-period RSI (RSI >= 75) to prevent retail climax top traps.",
+                rule_text="Do not buy into severely overbought climax RSI (RSI >= 85) to prevent retail exhaustion top traps.",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_overbought_75]: {clean_sym} 14-period RSI={rsi:.1f} is severely overbought (>= 75.0). Buying climax top hazard.",
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_overbought_85]: {clean_sym} 14-period RSI={rsi:.1f} is in extreme exhaustion climax (>= 85.0). Buying climax top hazard.",
                 confidence_penalty=42.0,
                 actionable_directive="Wait for RSI mean reversion before attempting long entries.",
             )
-        if rsi <= 25.0 and side_upper in ["SELL", "SHORT"]:
+        if rsi <= 18.0 and side_upper in ["SELL", "SHORT"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_rsi_oversold_25",
+                rule_id="trap_rsi_oversold_18",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not short into severely oversold 14-period RSI (RSI <= 25) to prevent short squeeze liquidations.",
+                rule_text="Do not short into severely oversold climax RSI (RSI <= 18) to prevent short squeeze liquidations.",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_oversold_25]: {clean_sym} 14-period RSI={rsi:.1f} is severely oversold (<= 25.0). Short squeeze hazard.",
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_rsi_oversold_18]: {clean_sym} 14-period RSI={rsi:.1f} is in extreme panic oversold (<= 18.0). Short squeeze hazard.",
                 confidence_penalty=42.0,
                 actionable_directive="Wait for relief bounce before attempting short entries.",
             )

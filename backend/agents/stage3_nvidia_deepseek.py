@@ -126,10 +126,10 @@ async def run_stage3_nvidia_deepseek(
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.2,
-                    "max_tokens": 1500,  # Needs >=1200 tokens because reasoning models consume ~600 CoT tokens before emitting JSON
+                    "max_tokens": 500,
                 }
                 req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=4.0)) as client:
                     resp = await client.post(
                         api_endpoint,
                         headers=headers,
@@ -175,8 +175,9 @@ async def run_stage3_nvidia_deepseek(
                         print(f"[Stage 3 Reasoning Candidate {cand}] Status {resp.status_code}: {resp.text[:120]}")
                         break
             except Exception as e:
-                print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {e}")
-                break
+                err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+                print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {err_msg}")
+                continue
 
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
     if not parsed_json:

@@ -49,7 +49,7 @@ async def get_latest_analysis(symbol: str):
     """
     data = analysis_cache.get(symbol)
     if not data:
-        raise HTTPException(status_code=404, detail=f"No cached analysis found for {symbol}")
+        return {"status": "not_found", "symbol": symbol, "data": None}
     return {"status": "success", "symbol": symbol, "data": data}
 
 @router.get("/consensus/recent-signals")

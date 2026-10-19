@@ -325,7 +325,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.0, connect=1.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -342,8 +342,11 @@ async def run_stage4_openai_risk(
                     critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
                     model_name = "gpt-4o"
                     parsed_successfully = True
-        except Exception:
-            pass
+                elif resp.status_code == 429:
+                    print("[Stage 4 OpenAI Notice]: OpenAI credits exhausted (429), failing over to NVIDIA NIM Risk Officer...")
+        except Exception as e:
+            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+            print(f"[Stage 4 OpenAI Notice]: {err_msg}")
 
     # 2. Secondary Failover: NVIDIA NIM Risk Analysis
     if not parsed_successfully and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
@@ -360,9 +363,9 @@ async def run_stage4_openai_risk(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.2,
-                "max_tokens": 600,
+                "max_tokens": 350,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=nv_headers,
@@ -383,42 +386,54 @@ async def run_stage4_openai_risk(
                         critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
                         model_name = nv_fast_model
                         parsed_successfully = True
-        except Exception:
-            pass
+        except Exception as e:
+            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+            print(f"[Stage 4 NVIDIA Risk Officer Notice]: {err_msg}")
 
     from backend.services.gemini_guard import GeminiQuotaGuard
 
     # 3. Tertiary Failover: Google Gemini (Cascading)
-    gemini_model = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
-    if not parsed_successfully and settings.GEMINI_API_KEY and gemini_model:
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-            llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
-            raw_text = resp.content
-            if "```json" in raw_text:
-                json_str = raw_text.split("```json")[1].split("```")[0].strip()
-                parsed = json.loads(json_str)
-            elif "{" in raw_text:
-                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
-                parsed = json.loads(json_str)
-            else:
-                parsed = {}
-            if parsed and "safety_score" in parsed:
-                safety_score = float(parsed.get("safety_score", safety_score))
-                false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
-                order_block_status = parsed.get("order_block_status", order_block_status)
-                macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
-                critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
-                critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                model_name = gemini_model
-                parsed_successfully = True
-        except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e), model=gemini_model)
-            else:
-                print(f"[Stage 4 LLM Risk Notice]: {e}")
+    target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
+    if not parsed_successfully and settings.GEMINI_API_KEY and target_gemini:
+        cascade_models = [target_gemini] + [m for m in GeminiQuotaGuard.DEFAULT_CASCADE_ORDER if m != target_gemini]
+        for candidate_model in cascade_models:
+            if not GeminiQuotaGuard.is_available(candidate_model):
+                continue
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                from langchain_core.messages import HumanMessage
+                llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=12.0)
+                raw_text = resp.content
+                if "```json" in raw_text:
+                    json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                    parsed = json.loads(json_str)
+                elif "{" in raw_text:
+                    json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                    parsed = json.loads(json_str)
+                else:
+                    parsed = {}
+                if parsed and "safety_score" in parsed:
+                    safety_score = float(parsed.get("safety_score", safety_score))
+                    false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                    order_block_status = parsed.get("order_block_status", order_block_status)
+                    macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                    critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                    critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                    model_name = candidate_model
+                    parsed_successfully = True
+                    break
+            except Exception as e:
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    continue
+                elif "503" in str(e) or "UNAVAILABLE" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    continue
+                else:
+                    err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+                    print(f"[Stage 4 LLM Risk Notice]: {err_msg}")
+                    continue
 
     # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime
     proposed_dir = stage1.initial_thesis.get("direction", "NEUTRAL") if stage1.initial_thesis else "NEUTRAL"

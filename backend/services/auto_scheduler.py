@@ -368,7 +368,7 @@ class AutoTradingScheduler:
                     print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.50x requirement.")
 
                 can_execute = (
-                    confidence >= 82.0 and
+                    confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and
                     (is_buy or is_short) and
                     not already_open and
                     not portfolio_full and
@@ -481,9 +481,9 @@ class AutoTradingScheduler:
                         btc_trend = getattr(btc_status, "btc_trend_1h", "BEARISH") if btc_status else "BEARISH"
                         skip_reason = f"BTC_GATEKEEPER_VETO (BTC trend {btc_trend} blocks altcoin longs)"
                         print(f"[AutoTrader Guard] Skipped {pair}: Blocked by BTC Master Gatekeeper ({btc_trend}).")
-                    elif confidence < 78.0:
-                        skip_reason = f"LOW_CONFIDENCE ({confidence:.1f}% < 78.0%)"
-                        print(f"[AutoTrader Guard] Skipped {pair}: Confidence {confidence:.1f}% below minimum 78.0% threshold.")
+                    elif confidence < settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
+                        skip_reason = f"LOW_CONFIDENCE ({confidence:.1f}% < {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}%)"
+                        print(f"[AutoTrader Guard] Skipped {pair}: Confidence {confidence:.1f}% below minimum {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}% threshold.")
                     elif not (is_buy or is_short):
                         skip_reason = f"NEUTRAL_SIGNAL ({signal.value})"
                     else:

@@ -34,11 +34,11 @@ class Settings(BaseSettings):
     NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "meta/llama-3.2-11b-vision-instruct")
     NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "meta/llama-3.2-11b-vision-instruct")
     NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "meta/llama-3.2-11b-vision-instruct")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Model Defaults
-    DEFAULT_GEMINI_MODEL: str = "gemini-2.5-flash"
+    DEFAULT_GEMINI_MODEL: str = "gemini-flash-lite-latest"
     DEFAULT_NVIDIA_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"

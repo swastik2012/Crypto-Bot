@@ -164,11 +164,21 @@ class MarketDataService:
             alignment = "Golden Alignment (20>50)"
             struct_sig = "Bullish Break of Structure (BOS)" if p >= highs[-2] else "Higher Low Demand Retest"
             desc = f"{tf_label} in strong bullish expansion with price (${p:,.2f}) holding above EMA 20 (${ema_20:,.2f})."
+        elif p > ema_20 and p > ema_50 and rsi >= 54.0:
+            trend = "BULLISH"
+            alignment = "Bullish Momentum Reversal (Price > 20 & 50)"
+            struct_sig = "Bullish Break of Structure (BOS)" if p >= highs[-2] else "Momentum Reclamation"
+            desc = f"{tf_label} bullish momentum expansion: price (${p:,.2f}) reclaimed both EMA 20 (${ema_20:,.2f}) and EMA 50 (${ema_50:,.2f}) with RSI {rsi:.1f}."
         elif p < ema_20 and ema_20 <= ema_50 and rsi < 50:
             trend = "BEARISH"
             alignment = "Death Alignment (20<50)"
             struct_sig = "Bearish Breakdown (BOS)" if p <= lows[-2] else "Lower High Supply Rejection"
             desc = f"{tf_label} in bearish distribution with supply overhead at EMA 20 (${ema_20:,.2f})."
+        elif p < ema_20 and p < ema_50 and rsi <= 46.0:
+            trend = "BEARISH"
+            alignment = "Bearish Breakdown (Price < 20 & 50)"
+            struct_sig = "Bearish Breakdown (BOS)" if p <= lows[-2] else "Supply Breakdown"
+            desc = f"{tf_label} bearish distribution: price (${p:,.2f}) lost both EMA 20 (${ema_20:,.2f}) and EMA 50 (${ema_50:,.2f}) with RSI {rsi:.1f}."
         else:
             trend = "NEUTRAL"
             alignment = "Mixed / Mean-Reverting"
@@ -699,7 +709,9 @@ class MarketDataService:
         bar_range = highs[-1] - lows[-1]
         upper_wick_ratio = 0.0
         lower_wick_ratio = 0.0
-        if bar_range > 0:
+        # Meaningful rejection wick must occur on a candle with substantive range (>= 40% of ATR)
+        # Otherwise newly opened or narrow in-progress candles create false 60%+ wicks on tiny noise
+        if bar_range >= (atr * 0.40) and bar_range > 0:
             upper_wick_ratio = (highs[-1] - max(closes[-1], float(klines[-1][1]))) / bar_range
             lower_wick_ratio = (min(closes[-1], float(klines[-1][1])) - lows[-1]) / bar_range
 
@@ -738,24 +750,57 @@ class MarketDataService:
             }
 
         # 3. Check Potential Setup
-        is_bullish = p >= ema_20 and ema_20 >= ema_50 and rsi >= 44.0 and rsi <= 72.0 and upper_wick_ratio <= 0.45
-        is_bearish = p <= ema_20 and ema_20 <= ema_50 and rsi >= 28.0 and rsi <= 56.0 and lower_wick_ratio <= 0.45
+        # A. Bullish Trend Expansion (Holding above key EMAs with healthy or strong momentum)
+        is_bullish_trend = (
+            p >= ema_20 and ema_20 >= ema_50 and
+            42.0 <= rsi <= 84.0 and
+            upper_wick_ratio <= 0.40
+        )
 
+        # B. Bullish Breakout or Reversal (Price above both EMAs, or breaking 10-period high)
         recent_10_high = max(highs[-11:-1])
         recent_10_low = min(lows[-11:-1])
-        if p >= recent_10_high and rsi >= 46.0 and vol_ratio >= 0.70:
-            is_bullish = True
-        elif p <= recent_10_low and rsi <= 54.0 and vol_ratio >= 0.70:
-            is_bearish = True
+        is_bullish_breakout = (
+            (p >= recent_10_high or (p >= ema_20 and p >= ema_50)) and
+            46.0 <= rsi <= 85.0 and
+            vol_ratio >= 0.65 and
+            upper_wick_ratio <= 0.45
+        )
 
-        # Mean-reversion pullback support / resistance retest
-        if not is_bullish and not is_bearish:
-            if p >= ema_20 and rsi >= 42.0 and rsi <= 68.0 and lower_wick_ratio >= 0.15:
-                is_bullish = True
-            elif p <= ema_20 and rsi >= 32.0 and rsi <= 58.0 and upper_wick_ratio >= 0.15:
-                is_bearish = True
+        # C. Mean-reversion pullback support / dip buy
+        is_bullish_pullback = (
+            p >= min(ema_20, ema_50) * 0.998 and
+            40.0 <= rsi <= 72.0 and
+            lower_wick_ratio >= 0.15
+        )
 
-        if is_bullish:
+        is_bullish = is_bullish_trend or is_bullish_breakout or is_bullish_pullback
+
+        # A. Bearish Trend Distribution
+        is_bearish_trend = (
+            p <= ema_20 and ema_20 <= ema_50 and
+            18.0 <= rsi <= 58.0 and
+            lower_wick_ratio <= 0.40
+        )
+
+        # B. Bearish Breakdown
+        is_bearish_breakdown = (
+            (p <= recent_10_low or (p <= ema_20 and p <= ema_50)) and
+            16.0 <= rsi <= 54.0 and
+            vol_ratio >= 0.65 and
+            lower_wick_ratio <= 0.45
+        )
+
+        # C. Bearish Relief Rally Rejection
+        is_bearish_pullback = (
+            p <= max(ema_20, ema_50) * 1.002 and
+            30.0 <= rsi <= 60.0 and
+            upper_wick_ratio >= 0.15
+        )
+
+        is_bearish = is_bearish_trend or is_bearish_breakdown or is_bearish_pullback
+
+        if is_bullish and not is_bearish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p > ema_20 else 0.0)
             return {
                 "passed": True,
@@ -764,7 +809,7 @@ class MarketDataService:
                 "score": round(min(98.0, score), 1),
                 "indicators": indicators,
             }
-        elif is_bearish:
+        elif is_bearish and not is_bullish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p < ema_20 else 0.0)
             return {
                 "passed": True,
@@ -774,9 +819,37 @@ class MarketDataService:
                 "indicators": indicators,
             }
 
+        # Clear diagnostic return reasons if not passed
+        if min(ema_20, ema_50) <= p <= max(ema_20, ema_50):
+            return {
+                "passed": False,
+                "reason": f"CHOP_INSIDE_BAND: Price (${p:,.2f}) compressed inside EMA20 (${ema_20:,.2f}) - EMA50 (${ema_50:,.2f}) band.",
+                "setup_direction": "NONE",
+                "score": 40.0,
+                "indicators": indicators,
+            }
+
+        if rsi > 85.0:
+            return {
+                "passed": False,
+                "reason": f"OVERBOUGHT_CLIMAX: RSI={rsi:.1f} (> 85.0) presents high risk of exhaustion wick / mean-reversion trap.",
+                "setup_direction": "NONE",
+                "score": 38.0,
+                "indicators": indicators,
+            }
+
+        if rsi < 18.0:
+            return {
+                "passed": False,
+                "reason": f"OVERSOLD_CLIMAX: RSI={rsi:.1f} (< 18.0) presents high risk of short squeeze bounce.",
+                "setup_direction": "NONE",
+                "score": 38.0,
+                "indicators": indicators,
+            }
+
         return {
             "passed": False,
-            "reason": f"NO_CLEAR_EDGE: Price inside moving average band (EMA20=${ema_20:,.2f}, EMA50=${ema_50:,.2f}, RSI={rsi:.1f}).",
+            "reason": f"NO_CLEAR_EDGE: Equilibrium structure without directional momentum (EMA20=${ema_20:,.2f}, EMA50=${ema_50:,.2f}, RSI={rsi:.1f}).",
             "setup_direction": "NONE",
             "score": 40.0,
             "indicators": indicators,

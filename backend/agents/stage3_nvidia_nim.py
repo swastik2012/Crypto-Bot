@@ -391,9 +391,9 @@ async def run_stage3_nvidia_nim(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 1000,
+                "max_tokens": 350,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(3.5, connect=1.5)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(14.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -402,8 +402,11 @@ async def run_stage3_nvidia_nim(
                 if resp.status_code == 200:
                     data = resp.json()
                     raw_content = data["choices"][0]["message"]["content"]
-                    cleaned_content = raw_content.replace("```json", "").replace("```", "").strip()
-                    parsed = json.loads(cleaned_content)
+                    clean_text = raw_content.strip()
+                    if "{" in clean_text and "}" in clean_text:
+                        parsed = json.loads(clean_text[clean_text.find("{"):clean_text.rfind("}")+1])
+                    else:
+                        parsed = json.loads(clean_text)
                     stress_score = float(parsed.get("stress_test_score", stress_score))
                     calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
                     mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
@@ -411,41 +414,54 @@ async def run_stage3_nvidia_nim(
                     adjustments = parsed.get("adjustments_proposed", adjustments)
                     math_proof = parsed.get("mathematical_proof", math_proof)
                     parsed_successfully = True
-        except Exception:
-            pass
+        except Exception as e:
+            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+            print(f"[Stage 3 NVIDIA Quant Notice]: {err_msg}")
 
     from backend.services.gemini_guard import GeminiQuotaGuard
 
     # If NVIDIA NIM didn't return 200, invoke Google Gemini if quota available
-    gemini_model = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-2.5-flash")
-    if not parsed_successfully and settings.GEMINI_API_KEY and gemini_model:
-        try:
-            from langchain_google_genai import ChatGoogleGenerativeAI
-            from langchain_core.messages import HumanMessage
-            llm = ChatGoogleGenerativeAI(model=gemini_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-            resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=3.0)
-            raw_text = resp.content
-            if "```json" in raw_text:
-                json_str = raw_text.split("```json")[1].split("```")[0].strip()
-                parsed = json.loads(json_str)
-            elif "{" in raw_text:
-                json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
-                parsed = json.loads(json_str)
-            else:
-                parsed = {}
-            if parsed and "stress_test_score" in parsed:
-                stress_score = float(parsed.get("stress_test_score", stress_score))
-                calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
-                mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
-                verdict = parsed.get("verdict", verdict)
-                adjustments = parsed.get("adjustments_proposed", adjustments)
-                math_proof = parsed.get("mathematical_proof", math_proof)
-                parsed_successfully = True
-        except Exception as e:
-            if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
-                GeminiQuotaGuard.mark_exhausted(str(e), model=gemini_model)
-            else:
-                print(f"[Stage 3 LLM Quant Notice]: {e}")
+    target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
+    if not parsed_successfully and settings.GEMINI_API_KEY and target_gemini:
+        cascade_models = [target_gemini] + [m for m in GeminiQuotaGuard.DEFAULT_CASCADE_ORDER if m != target_gemini]
+        for candidate_model in cascade_models:
+            if not GeminiQuotaGuard.is_available(candidate_model):
+                continue
+            try:
+                from langchain_google_genai import ChatGoogleGenerativeAI
+                from langchain_core.messages import HumanMessage
+                llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=12.0)
+                raw_text = resp.content
+                if "```json" in raw_text:
+                    json_str = raw_text.split("```json")[1].split("```")[0].strip()
+                    parsed = json.loads(json_str)
+                elif "{" in raw_text:
+                    json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
+                    parsed = json.loads(json_str)
+                else:
+                    parsed = {}
+                if parsed and "stress_test_score" in parsed:
+                    stress_score = float(parsed.get("stress_test_score", stress_score))
+                    calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
+                    mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
+                    verdict = parsed.get("verdict", verdict)
+                    adjustments = parsed.get("adjustments_proposed", adjustments)
+                    math_proof = parsed.get("mathematical_proof", math_proof)
+                    parsed_successfully = True
+                    model_name = candidate_model
+                    break
+            except Exception as e:
+                if "RESOURCE_EXHAUSTED" in str(e) or "429" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    continue
+                elif "503" in str(e) or "UNAVAILABLE" in str(e):
+                    GeminiQuotaGuard.mark_exhausted(str(e), model=candidate_model)
+                    continue
+                else:
+                    err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+                    print(f"[Stage 3 LLM Quant Notice]: {err_msg}")
+                    continue
 
     latency_ms = int((time.time() - start_time) * 1000)
     if latency_ms < 100:
