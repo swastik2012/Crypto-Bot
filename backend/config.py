@@ -28,22 +28,25 @@ class Settings(BaseSettings):
 
     # Aliases & Model Settings
     NVIDIA_NIM_API_KEY: Optional[str] = os.getenv("NVIDIA_API_KEY", "")
-    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "meta/llama-3.2-11b-vision-instruct")
+    NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
-    NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "meta/llama-3.2-11b-vision-instruct")
-    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "meta/llama-3.2-11b-vision-instruct")
-    NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "meta/llama-3.2-11b-vision-instruct")
-    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "meta/llama-3.2-11b-vision-instruct")
+    NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_RISK_MODEL: str = os.getenv("NVIDIA_RISK_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Model Defaults
     DEFAULT_GEMINI_MODEL: str = "gemini-flash-lite-latest"
-    DEFAULT_NVIDIA_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+    DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    DEFAULT_NVIDIA_FLAGSHIP_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    DEFAULT_NVIDIA_RISK_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
-    DEFAULT_DEEPSEEK_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
-    DEFAULT_KIMI_MODEL: str = "meta/llama-3.2-11b-vision-instruct"
+    DEFAULT_DEEPSEEK_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    DEFAULT_KIMI_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
     
     # Paper Trading Defaults
     DEFAULT_STARTING_BALANCE: float = 10000.0
@@ -52,7 +55,7 @@ class Settings(BaseSettings):
     DEFAULT_MAX_LEVERAGE: int = 20
     
     # Consensus Threshold for Auto-Execution
-    AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 80.0
+    AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 75.0
 
     class Config:
         env_file = str(backend_env) if backend_env.exists() else None

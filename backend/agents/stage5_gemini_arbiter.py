@@ -23,6 +23,14 @@ def _get_mtf_trend_1d(mtf: Any) -> str:
         return "N/A"
     return getattr(screen_1d, "trend", "N/A") if not isinstance(screen_1d, dict) else screen_1d.get("trend", "N/A")
 
+def _get_mtf_trend_4h(mtf: Any) -> str:
+    if not mtf:
+        return "N/A"
+    screen_4h = getattr(mtf, "screen_4h", None) if not isinstance(mtf, dict) else mtf.get("screen_4h")
+    if not screen_4h:
+        return "N/A"
+    return getattr(screen_4h, "trend", "N/A") if not isinstance(screen_4h, dict) else screen_4h.get("trend", "N/A")
+
 async def run_stage5_gemini_arbiter(
     symbol: str,
     stage1: Stage1GeminiVisionResult,
@@ -60,6 +68,7 @@ async def run_stage5_gemini_arbiter(
     has_mtf_warning = getattr(mtf, "counter_trend_warning", False) if not isinstance(mtf, dict) else mtf.get("counter_trend_warning", False)
     mtf_align = getattr(mtf, "alignment_score", "3/3 FULL CONFLUENCE") if not isinstance(mtf, dict) else mtf.get("alignment_score", "3/3 FULL CONFLUENCE")
     trend_1d = _get_mtf_trend_1d(mtf)
+    trend_4h = _get_mtf_trend_4h(mtf)
 
     from backend.services.market_data import market_data_service
     atr_plan = await market_data_service.calculate_dynamic_atr_targets(
@@ -237,8 +246,8 @@ async def run_stage5_gemini_arbiter(
         )
 
     elif direction in ["SHORT", "BEARISH"]:
-        # STRICT ANTI-COUNTER-TREND GUARD: NEVER SHORT in a 1D BULLISH Trend
-        if trend_1d == "BULLISH":
+        # STRICT ANTI-COUNTER-TREND GUARD: NEVER SHORT into Dual-Macro Bullish Uptrend (1D Bullish AND 4H Bullish)
+        if trend_1d == "BULLISH" and trend_4h == "BULLISH":
             veto_active = True
             signal = SignalAction.HOLD
             consensus_confidence = 48.0
@@ -320,19 +329,19 @@ async def run_stage5_gemini_arbiter(
                 f"While isolated altcoin patterns indicated buying pressure, {reason}. "
                 f"Historical analysis proves altcoin longs during an active Bitcoin sell-off suffer a >78% failure rate from market-wide liquidation contagion."
             )
-        # STRICT ANTI-COUNTER-TREND GUARD: NEVER LONG in a 1D BEARISH Trend
-        elif trend_1d == "BEARISH":
+        # STRICT ANTI-COUNTER-TREND GUARD: NEVER LONG into Dual-Macro Downtrend (Both 1D AND 4H actively Bearish)
+        elif trend_1d == "BEARISH" and trend_4h == "BEARISH":
             veto_active = True
             signal = SignalAction.HOLD
             consensus_confidence = 48.0
             tp1 = thesis.get("take_profit_1") or atr_plan["take_profit_1"]
             tp2 = thesis.get("take_profit_2") or atr_plan["take_profit_2"]
             sl = thesis.get("stop_loss") or atr_plan["stop_loss"]
-            invalidation_cond = "LONG vetoed by Arbiter: 1D Macro Trend is BEARISH. Counter-trend longing into macro downtrend is strictly prohibited."
+            invalidation_cond = "LONG vetoed by Arbiter: Both 1D and 4H Macro Trends are BEARISH. Dual-macro counter-trend longing is strictly prohibited."
             summary = (
                 f"6-Stage Arbiter Override: HOLD (Capital Preservation) for {symbol}. "
-                f"While low-timeframe noise showed temporary buying bounce, 1D Macro Tide is BEARISH. "
-                f"Anti-Counter-Trend Risk Rule suppresses longing into a macro bear trend. Waiting for short-on-rebound setup."
+                f"While low-timeframe noise showed temporary buying bounce, both 1D and 4H Macro Tides are BEARISH. "
+                f"Dual-Macro Anti-Counter-Trend Risk Rule suppresses longing into a dual bear trend. Waiting for 4H structural reclamation."
             )
         else:
             gemini_score = 94.5
@@ -450,10 +459,12 @@ async def run_stage5_gemini_arbiter(
                     print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback ({candidate_model}): {err_msg}")
                     continue
 
+    from backend.services.gemini_guard import GeminiQuotaGuard, extract_llm_json
+
     # Fallback to NVIDIA NIM for consensus arbitration if Gemini is unavailable
     if not parsed_arbiter and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
         try:
-            nv_model = settings.DEFAULT_NVIDIA_MODEL or "meta/llama-3.2-11b-vision-instruct"
+            nv_model = settings.NVIDIA_FLAGSHIP_MODEL or settings.DEFAULT_NVIDIA_MODEL or "nvidia/nemotron-3.5-super-vl-120b-a12b"
             nv_headers = {
                 "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
                 "Content-Type": "application/json",
@@ -465,9 +476,9 @@ async def run_stage5_gemini_arbiter(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 500,
+                "max_tokens": 1200,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=nv_headers,
@@ -476,25 +487,19 @@ async def run_stage5_gemini_arbiter(
                 if resp.status_code == 200:
                     data = resp.json()
                     choice = data.get("choices", [{}])[0].get("message", {})
-                    raw_content = choice.get("content") or choice.get("reasoning_content") or ""
-                    clean_text = raw_content.strip()
-                    if "```json" in clean_text:
-                        clean_text = clean_text.split("```json")[1].split("```")[0].strip()
-                    elif "```" in clean_text:
-                        clean_text = clean_text.split("```")[1].split("```")[0].strip()
-                    if "{" in clean_text and "}" in clean_text:
-                        parsed = json.loads(clean_text[clean_text.find("{"):clean_text.rfind("}")+1])
-                        if "consensus_signal" in parsed and not veto_active:
-                            sig_str = parsed.get("consensus_signal", signal.value).upper()
-                            for sa in SignalAction:
-                                if sa.value == sig_str:
-                                    signal = sa
-                                    break
-                            consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
-                            summary = parsed.get("executive_summary", summary)
-                            invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
-                            model_name = nv_model
-                            parsed_arbiter = True
+                    parsed = extract_llm_json(choice)
+                    if parsed and "consensus_signal" in parsed and not veto_active:
+                        sig_str = parsed.get("consensus_signal", signal.value).upper()
+                        for sa in SignalAction:
+                            if sa.value == sig_str:
+                                signal = sa
+                                break
+                        consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
+                        summary = parsed.get("executive_summary", summary)
+                        invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+                        model_name = nv_model
+                        parsed_arbiter = True
+                        print(f"[Stage 5 NVIDIA Reroute Success]: Arbitrated via {nv_model} ({signal.value}, {consensus_confidence}%)")
         except Exception as e:
             err_msg = str(e) or f"{type(e).__name__} (request timed out)"
             print(f"[Stage 5 NVIDIA Notice]: {err_msg}")
@@ -552,6 +557,7 @@ async def run_stage5_gemini_arbiter(
         "take_profit_2": tp2,
         "stop_loss": sl,
         "effective_rr": atr_plan.get("risk_reward_tp1", stage3.risk_reward_ratio),
+        "risk_reward_ratio": atr_plan.get("risk_reward_tp1", stage3.risk_reward_ratio),
         "atr_14": atr_plan.get("atr_14"),
         "atr_pct": atr_plan.get("atr_pct"),
         "volatility_regime": atr_plan.get("volatility_regime"),

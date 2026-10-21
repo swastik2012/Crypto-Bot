@@ -7,6 +7,7 @@ from backend.agents.graph import consensus_pipeline
 from backend.models.schemas import PlacePaperOrderRequest, PositionSide
 from backend.services.analysis_cache import analysis_cache
 from backend.services.macro_calendar_service import macro_calendar_service
+from backend.config import settings
 
 class AutoTradingScheduler:
     """

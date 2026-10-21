@@ -535,26 +535,27 @@ class LearningMemoryService:
         lower_wick = float(ind.get("lower_wick_ratio", 0.0))
 
         # Check 4: Rejection Wick / Turtle Soup Trap (Phase 2 & 3)
-        if upper_wick >= 0.45 and side_upper in ["BUY", "LONG"]:
+        # A true bearish pinbar (shooting star) requires dominant upper rejection (>=58%) and low lower wick (<=22%)
+        if upper_wick >= 0.58 and lower_wick <= 0.22 and side_upper in ["BUY", "LONG"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_upper_wick_45",
+                rule_id="trap_upper_wick_58",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not buy when candle upper rejection wick exceeds 45% of range (bearish pinbar / supply wall).",
+                rule_text="Do not buy when closed candle forms a dominant upper rejection pinbar (>= 58% range) with close near lows.",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_upper_wick_45]: {clean_sym} formed massive upper rejection wick ({upper_wick*100:.1f}%). Bull trap / supply dump detected.",
-                confidence_penalty=45.0,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_upper_wick_58]: {clean_sym} closed a dominant upper rejection pinbar ({upper_wick*100:.1f}%). Bull trap / supply dump detected.",
+                confidence_penalty=35.0,
                 actionable_directive="Wait for clean price absorption of overhead supply before going long.",
             )
-        if lower_wick >= 0.45 and side_upper in ["SELL", "SHORT"]:
+        if lower_wick >= 0.58 and upper_wick <= 0.22 and side_upper in ["SELL", "SHORT"]:
             return PlaybookVetoSchema(
                 is_vetoed=True,
-                rule_id="trap_lower_wick_45",
+                rule_id="trap_lower_wick_58",
                 rule_type="AVOID_TRAP",
-                rule_text="Do not short when candle lower rejection wick exceeds 45% of range (bullish pinbar / demand wall).",
+                rule_text="Do not short when closed candle forms a dominant lower rejection hammer (>= 58% range) with close near highs.",
                 target_asset=clean_sym,
-                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_lower_wick_45]: {clean_sym} formed massive lower rejection wick ({lower_wick*100:.1f}%). Bear trap / demand wall detected.",
-                confidence_penalty=45.0,
+                veto_reason=f"⛔ AI PLAYBOOK VETO [trap_lower_wick_58]: {clean_sym} closed a dominant lower rejection hammer ({lower_wick*100:.1f}%). Bear trap / demand wall detected.",
+                confidence_penalty=35.0,
                 actionable_directive="Wait for clean breakdown below demand floor before shorting.",
             )
 

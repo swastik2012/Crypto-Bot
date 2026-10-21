@@ -158,7 +158,7 @@ async def run_stage4_openai_risk(
             f"Stage 3 Quant assumptions fail to account for adverse selection: funding={funding_rate:+.4f}%. "
             f"Chief Risk Officer mandate: Stand aside in cash."
         )
-    elif has_mtf_warning or (mtf and "1/3 DIVERGENCE" in mtf_align and direction != "NEUTRAL"):
+    elif has_mtf_warning or (mtf and "COUNTER-TREND" in mtf_align and direction != "NEUTRAL"):
         safety_score = 42.0
         false_breakout_prob = 74.5
         ob_floor = round(current_price * 0.980, 2)
@@ -234,7 +234,8 @@ async def run_stage4_openai_risk(
         "3. NEWS & MOMENTUM EXHAUSTION: Check if Stage 2's macro news catalyst is already priced in ('buy the rumor, sell the news').\n"
         "4. CHOP & COUNTER-TREND VETO: If multi-timeframe alignment opposes the 1D Macro Tide or price is trapped in consolidation, enforce an immediate VETO (safety_score < 50, issue macro_trap_alert).\n"
         "5. DERIVATIVES ORDER FLOW & CVD: Verify that funding rates are not crowded (> +0.03% or < -0.03%) and Cumulative Volume Delta does not show buyer/seller exhaustion.\n\n"
-        "Return ONLY a valid JSON object matching this schema:\n"
+        "In your very first thought, formulate and return the JSON object in a ```json code block matching this schema:\n"
+        "```json\n"
         "{\n"
         '  "liquidity_sweep_risk": "Low" | "Moderate" | "High",\n'
         '  "false_breakout_probability": float (0.0 to 100.0),\n'
@@ -243,7 +244,8 @@ async def run_stage4_openai_risk(
         '  "critique_of_gemini": "Critical peer-review of Stage 1 Gemini Vision technical setup",\n'
         '  "critique_of_nvidia": "Critical peer-review of Stage 3 NVIDIA Quant Monte Carlo assumptions",\n'
         '  "safety_score": float (0.0 to 100.0)\n'
-        "}"
+        "}\n"
+        "```"
     )
     user_prompt = (
         f"AUDIT TARGET: {symbol} | Current Price: ${current_price:,.2f}\n\n"
@@ -258,59 +260,17 @@ async def run_stage4_openai_risk(
         f"- Funding Rate: {funding_rate:+.4f}% ({funding_reg})\n"
         f"- CVD Divergence: {cvd_div} | Predatory Risk: {pred_risk}\n"
         f"- Open Interest Delta: {deriv_dict.get('open_interest_change_1h_pct', 0.0):+.1f}% ({deriv_dict.get('oi_interpretation', 'NEUTRAL')})\n\n"
-        f"{learning_memory_service.format_learnings_for_prompt(symbol)}\n\n"
+        f"{learning_memory_service.format_learnings_for_prompt(symbol)[:500]}\n\n"
         f"Conduct a ruthless risk audit. Cross-reference past failure modes, compute false breakout probability, and evaluate safety score."
     )
 
     parsed_successfully = False
-    
-    # 1. Primary AI Risk Officer: NVIDIA NIM Advanced Reasoning Model
-    if settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
-        try:
-            headers = {
-                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning",
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 450,
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(3.0, connect=1.5)) as client:
-                resp = await client.post(
-                    "https://integrate.api.nvidia.com/v1/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    raw_content = data["choices"][0]["message"]["content"]
-                    if "```json" in raw_content:
-                        json_str = raw_content.split("```json")[1].split("```")[0].strip()
-                        parsed = json.loads(json_str)
-                    elif "{" in raw_content:
-                        json_str = raw_content[raw_content.find("{"):raw_content.rfind("}")+1]
-                        parsed = json.loads(json_str)
-                    else:
-                        parsed = {}
-                    if parsed and "safety_score" in parsed:
-                        safety_score = float(parsed.get("safety_score", safety_score))
-                        false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
-                        order_block_status = parsed.get("order_block_status", order_block_status)
-                        macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
-                        critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
-                        critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                        model_name = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning"
-                        parsed_successfully = True
-        except Exception as e:
-            print(f"[Stage 4 NVIDIA Risk Officer Notice]: {e}")
+    active_provider = "Deterministic Quant Fallback"
 
-    # 2. Secondary Failover: OpenAI Flagship Risk Guard (Fast failover on 429 quota exhaustion)
-    if not parsed_successfully and openai_key and not openai_key.startswith("your-"):
+    from backend.services.gemini_guard import GeminiQuotaGuard, OpenAIQuotaGuard, extract_llm_json
+
+    # 1. Primary Attempt: OpenAI Flagship Risk Guard (if key present and credits not exhausted)
+    if openai_key and not openai_key.startswith("your-") and OpenAIQuotaGuard.is_available():
         try:
             headers = {
                 "Authorization": f"Bearer {openai_key}",
@@ -325,7 +285,7 @@ async def run_stage4_openai_risk(
                 "temperature": 0.2,
                 "response_format": {"type": "json_object"},
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(6.0, connect=2.0)) as client:
                 resp = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers=headers,
@@ -333,64 +293,81 @@ async def run_stage4_openai_risk(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    parsed = json.loads(data["choices"][0]["message"]["content"])
-                    safety_score = float(parsed.get("safety_score", safety_score))
-                    false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
-                    order_block_status = parsed.get("order_block_status", order_block_status)
-                    macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
-                    critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
-                    critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                    model_name = "gpt-4o"
-                    parsed_successfully = True
-                elif resp.status_code == 429:
-                    print("[Stage 4 OpenAI Notice]: OpenAI credits exhausted (429), failing over to NVIDIA NIM Risk Officer...")
-        except Exception as e:
-            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-            print(f"[Stage 4 OpenAI Notice]: {err_msg}")
-
-    # 2. Secondary Failover: NVIDIA NIM Risk Analysis
-    if not parsed_successfully and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
-        try:
-            nv_headers = {
-                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-                "Content-Type": "application/json",
-            }
-            nv_fast_model = settings.DEFAULT_NVIDIA_MODEL or "meta/llama-3.2-11b-vision-instruct"
-            nv_payload = {
-                "model": nv_fast_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.2,
-                "max_tokens": 350,
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
-                resp = await client.post(
-                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                    headers=nv_headers,
-                    json=nv_payload,
-                )
-                if resp.status_code == 200:
-                    raw_content = resp.json()["choices"][0]["message"]["content"]
-                    clean_text = raw_content
-                    if "{" in clean_text and "}" in clean_text:
-                        first_b = clean_text.find("{")
-                        last_b = clean_text.rfind("}")
-                        parsed = json.loads(clean_text[first_b:last_b+1])
+                    parsed = extract_llm_json(data["choices"][0]["message"])
+                    if parsed and "safety_score" in parsed:
                         safety_score = float(parsed.get("safety_score", safety_score))
                         false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
                         order_block_status = parsed.get("order_block_status", order_block_status)
                         macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
                         critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                         critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                        model_name = nv_fast_model
+                        model_name = "gpt-4o"
+                        active_provider = "OpenAI"
                         parsed_successfully = True
+                elif resp.status_code == 429:
+                    OpenAIQuotaGuard.mark_exhausted("OpenAI credits exhausted (429)")
+                    print("[Stage 4 OpenAI Notice]: OpenAI credits exhausted (429). Seamlessly rerouting to NVIDIA NIM Flagship Risk Officer...")
         except Exception as e:
-            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-            print(f"[Stage 4 NVIDIA Risk Officer Notice]: {err_msg}")
+            err_msg = str(e) or f"{type(e).__name__}"
+            if "429" in err_msg or "quota" in err_msg.lower():
+                OpenAIQuotaGuard.mark_exhausted(err_msg)
+            print(f"[Stage 4 OpenAI Notice]: {err_msg} - falling over to NVIDIA NIM...")
+    elif not OpenAIQuotaGuard.is_available():
+        print("[Stage 4 OpenAI Notice]: OpenAI in quota exhaustion cooldown. Routing directly to NVIDIA NIM Flagship Risk Officer...")
 
-    from backend.services.gemini_guard import GeminiQuotaGuard
+    # 2. Reroute to NVIDIA NIM Models (NVIDIA Flagship 120B / Lightning 30B Reasoning Models)
+    if not parsed_successfully and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
+        nv_candidates = [
+            settings.NVIDIA_RISK_MODEL or "nvidia/nemotron-3.5-super-vl-120b-a12b",
+            settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
+        ]
+        # Remove duplicates while preserving order
+        seen = set()
+        nv_candidates = [c for c in nv_candidates if c and not (c in seen or seen.add(c))]
+
+        nv_headers = {
+            "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
+            "Content-Type": "application/json",
+        }
+
+        for candidate_model in nv_candidates:
+            try:
+                nv_payload = {
+                    "model": candidate_model,
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    "temperature": 0.1,
+                    "max_tokens": 700,
+                }
+                async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=2.5)) as client:
+                    resp = await client.post(
+                        f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+                        headers=nv_headers,
+                        json=nv_payload,
+                    )
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        choice = data.get("choices", [{}])[0].get("message", {})
+                        parsed = extract_llm_json(choice)
+                        if parsed and ("safety_score" in parsed or "false_breakout_probability" in parsed):
+                            safety_score = float(parsed.get("safety_score", safety_score))
+                            false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+                            order_block_status = parsed.get("order_block_status", order_block_status)
+                            macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+                            critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+                            critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+                            model_name = candidate_model
+                            active_provider = f"NVIDIA NIM ({candidate_model.split('/')[-1]})"
+                            parsed_successfully = True
+                            print(f"[Stage 4 NVIDIA Reroute Success]: Audited via {candidate_model} (Safety Score: {safety_score}, Fakeout Prob: {false_breakout_prob}%)")
+                            break
+                    else:
+                        print(f"[Stage 4 NVIDIA Risk Officer Notice]: {candidate_model} returned HTTP {resp.status_code}")
+            except Exception as e:
+                err_msg = str(e) or f"{type(e).__name__} (request timed out)"
+                print(f"[Stage 4 NVIDIA Risk Officer Notice]: {candidate_model} - {err_msg}")
 
     # 3. Tertiary Failover: Google Gemini (Cascading)
     target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
@@ -403,17 +380,9 @@ async def run_stage4_openai_risk(
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 from langchain_core.messages import HumanMessage
                 llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=12.0)
-                raw_text = resp.content
-                if "```json" in raw_text:
-                    json_str = raw_text.split("```json")[1].split("```")[0].strip()
-                    parsed = json.loads(json_str)
-                elif "{" in raw_text:
-                    json_str = raw_text[raw_text.find("{"):raw_text.rfind("}")+1]
-                    parsed = json.loads(json_str)
-                else:
-                    parsed = {}
-                if parsed and "safety_score" in parsed:
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=10.0)
+                parsed = extract_llm_json(resp.content)
+                if parsed and ("safety_score" in parsed or "false_breakout_probability" in parsed):
                     safety_score = float(parsed.get("safety_score", safety_score))
                     false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
                     order_block_status = parsed.get("order_block_status", order_block_status)
@@ -421,6 +390,7 @@ async def run_stage4_openai_risk(
                     critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
                     critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
                     model_name = candidate_model
+                    active_provider = f"Google Gemini ({candidate_model})"
                     parsed_successfully = True
                     break
             except Exception as e:
@@ -433,6 +403,7 @@ async def run_stage4_openai_risk(
                 else:
                     err_msg = str(e) or f"{type(e).__name__} (request timed out)"
                     print(f"[Stage 4 LLM Risk Notice]: {err_msg}")
+                    continue
                     continue
 
     # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime
@@ -514,14 +485,20 @@ async def run_stage4_openai_risk(
 
     # Record Telemetry Call with complete Prompt & Return payload
     from backend.services.telemetry import telemetry_service
+    endpoint_used = (
+        "https://api.openai.com/v1/chat/completions" if active_provider == "OpenAI"
+        else f"{settings.NVIDIA_ENDPOINT}/chat/completions" if "NVIDIA" in active_provider
+        else "https://generativelanguage.googleapis.com" if "Gemini" in active_provider
+        else "Local Institutional Deterministic Quant"
+    )
     telemetry_service.record_call(
-        provider="OpenAI",
+        provider=active_provider,
         model=model_name,
         stage="Stage 5: Risk & Trap Guard",
-        status="SUCCESS" if (openai_key and not openai_key.startswith("sk-proj-***")) else "FALLBACK",
+        status="SUCCESS" if parsed_successfully else "FALLBACK",
         status_code=200,
         latency_ms=latency_ms,
-        endpoint="https://api.openai.com/v1/chat/completions",
+        endpoint=endpoint_used,
         prompt_text=f"{system_prompt}\n\n=== USER AUDIT TARGET ===\n{user_prompt}",
         response_text=json.dumps(result.dict(), indent=2),
         request_summary={

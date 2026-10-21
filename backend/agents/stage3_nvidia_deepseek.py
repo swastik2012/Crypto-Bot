@@ -125,11 +125,11 @@ async def run_stage3_nvidia_deepseek(
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    "temperature": 0.2,
-                    "max_tokens": 500,
+                    "temperature": 0.1,
+                    "max_tokens": 1200,
                 }
                 req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=4.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
                     resp = await client.post(
                         api_endpoint,
                         headers=headers,
@@ -139,38 +139,28 @@ async def run_stage3_nvidia_deepseek(
                     if resp.status_code == 200:
                         data = resp.json()
                         choice = data["choices"][0]
-                        raw_content = choice["message"].get("content") or ""
+                        from backend.services.gemini_guard import extract_llm_json
+                        parsed_json = extract_llm_json(choice.get("message", {}))
                         reasoning_cot = choice["message"].get("reasoning_content") or ""
-                        raw_response_text = raw_content
+                        raw_response_text = choice["message"].get("content") or reasoning_cot
 
-                        # Strip markdown or CoT narrative if present
-                        clean_text = raw_content.strip()
-                        if "```json" in clean_text:
-                            clean_text = clean_text.split("```json")[1].split("```")[0].strip()
-                        elif "```" in clean_text:
-                            clean_text = clean_text.split("```")[1].split("```")[0].strip()
-                        elif "{" in clean_text and "}" in clean_text:
-                            last_b = clean_text.rfind("}")
-                            first_b = clean_text.find("{")
-                            clean_text = clean_text[first_b:last_b+1]
-
-                        parsed_json = json.loads(clean_text)
-                        if reasoning_cot and (not parsed_json.get("chain_of_thought") or len(parsed_json.get("chain_of_thought", "")) < 20):
+                        if parsed_json and reasoning_cot and (not parsed_json.get("chain_of_thought") or len(parsed_json.get("chain_of_thought", "")) < 20):
                             parsed_json["chain_of_thought"] = reasoning_cot[:400]
 
-                        model_used = cand
-                        telemetry_status = "SUCCESS"
-                        telemetry_service.log_call(
-                            provider=provider_name,
-                            model=model_used,
-                            endpoint=api_endpoint,
-                            request_payload={"model": cand, "symbol": symbol},
-                            response_payload=parsed_json,
-                            latency_ms=req_latency,
-                            status="SUCCESS",
-                            status_code=200,
-                        )
-                        break
+                        if parsed_json and ("execution_bias" in parsed_json or "confidence" in parsed_json):
+                            model_used = cand
+                            telemetry_status = "SUCCESS"
+                            telemetry_service.log_call(
+                                provider=provider_name,
+                                model=model_used,
+                                endpoint=api_endpoint,
+                                request_payload={"model": cand, "symbol": symbol},
+                                response_payload=parsed_json,
+                                latency_ms=req_latency,
+                                status="SUCCESS",
+                                status_code=200,
+                            )
+                            break
                     else:
                         print(f"[Stage 3 Reasoning Candidate {cand}] Status {resp.status_code}: {resp.text[:120]}")
                         break

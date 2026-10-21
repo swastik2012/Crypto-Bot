@@ -391,9 +391,9 @@ async def run_stage3_nvidia_nim(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 350,
+                "max_tokens": 1200,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(14.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -401,19 +401,17 @@ async def run_stage3_nvidia_nim(
                 )
                 if resp.status_code == 200:
                     data = resp.json()
-                    raw_content = data["choices"][0]["message"]["content"]
-                    clean_text = raw_content.strip()
-                    if "{" in clean_text and "}" in clean_text:
-                        parsed = json.loads(clean_text[clean_text.find("{"):clean_text.rfind("}")+1])
-                    else:
-                        parsed = json.loads(clean_text)
-                    stress_score = float(parsed.get("stress_test_score", stress_score))
-                    calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
-                    mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
-                    verdict = parsed.get("verdict", verdict)
-                    adjustments = parsed.get("adjustments_proposed", adjustments)
-                    math_proof = parsed.get("mathematical_proof", math_proof)
-                    parsed_successfully = True
+                    choice = data.get("choices", [{}])[0].get("message", {})
+                    from backend.services.gemini_guard import extract_llm_json
+                    parsed = extract_llm_json(choice)
+                    if parsed and "stress_test_score" in parsed:
+                        stress_score = float(parsed.get("stress_test_score", stress_score))
+                        calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
+                        mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
+                        verdict = parsed.get("verdict", verdict)
+                        adjustments = parsed.get("adjustments_proposed", adjustments)
+                        math_proof = parsed.get("mathematical_proof", math_proof)
+                        parsed_successfully = True
         except Exception as e:
             err_msg = str(e) or f"{type(e).__name__} (request timed out)"
             print(f"[Stage 3 NVIDIA Quant Notice]: {err_msg}")

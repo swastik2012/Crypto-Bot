@@ -158,3 +158,139 @@ class GeminiQuotaGuard:
             cls._model_last_errors.clear()
             cls._exhausted_until = 0.0
             cls._last_error_msg = ""
+
+
+class OpenAIQuotaGuard:
+    """
+    Intelligent Circuit Breaker & Failover Router for OpenAI API calls.
+    
+    When OpenAI returns 429 (quota exhaustion / insufficient balance / rate limit),
+    this guard caches the exhaustion state so subsequent requests instantly failover to
+    equivalent NVIDIA NIM models (e.g. nvidia/nemotron-3.5-super-vl-120b-a12b or
+    nvidia/nemotron-3.5-lightning-30b-a3b) without paying an 8-second network timeout penalty
+    on every scan cycle.
+    """
+    _exhausted_until: float = 0.0
+    _last_error_msg: str = ""
+    _failover_count: int = 0
+
+    @classmethod
+    def is_available(cls) -> bool:
+        """Check if OpenAI is ready for inference or in quota exhaustion cooldown."""
+        return time.time() >= cls._exhausted_until
+
+    @classmethod
+    def mark_exhausted(cls, error_msg: str, cooldown_seconds: float = 3600.0):
+        """
+        Record a 429 quota exhaustion or rate limit for OpenAI.
+        Bypasses subsequent OpenAI calls and routes instantly to NVIDIA NIM.
+        """
+        now = time.time()
+        cls._exhausted_until = now + cooldown_seconds
+        cls._last_error_msg = str(error_msg)[:300]
+        cls._failover_count += 1
+        mins = int(cooldown_seconds / 60)
+        print(f"[OpenAI Quota Guard] ⚠️ OpenAI credits exhausted or rate limited (429) - {mins}m cooldown active. Rerouting all OpenAI tasks to NVIDIA NIM flagship reasoning models.")
+
+    @classmethod
+    def get_status(cls) -> Dict[str, Any]:
+        now = time.time()
+        rem = max(0, int(cls._exhausted_until - now))
+        return {
+            "available": rem == 0,
+            "cooldown_remaining_seconds": rem,
+            "failover_count": cls._failover_count,
+            "last_error": cls._last_error_msg,
+        }
+
+    @classmethod
+    def reset(cls):
+        cls._exhausted_until = 0.0
+        cls._last_error_msg = ""
+
+
+def extract_llm_json(message: Any) -> Dict[str, Any]:
+    """
+    Robust JSON extraction helper that parses JSON from:
+    1. Direct dictionary / parsed object
+    2. message.content (standard text or ```json markdown blocks)
+    3. message.reasoning_content (thinking / reasoning tokens from Nemotron/DeepSeek models)
+    4. Outermost { ... } substring search
+    """
+    if isinstance(message, dict):
+        # Could be an LLM choice message dict with 'content' and 'reasoning_content'
+        if "content" in message or "reasoning_content" in message:
+            content = message.get("content") or ""
+            reasoning = message.get("reasoning_content") or ""
+        else:
+            return message
+    elif isinstance(message, str):
+        content = message
+        reasoning = ""
+    elif hasattr(message, "content"):
+        content = getattr(message, "content", "") or ""
+        reasoning = getattr(message, "reasoning_content", "") or ""
+    else:
+        content = str(message)
+        reasoning = ""
+
+    import json
+    for text in [content, reasoning]:
+        if not text or not isinstance(text, str):
+            continue
+        text_clean = text.strip()
+        # 1. Search for markdown ```json ... ``` blocks
+        if "```json" in text_clean:
+            try:
+                candidate = text_clean.split("```json")[1].split("```")[0].strip()
+                return json.loads(candidate)
+            except Exception:
+                pass
+        if "```" in text_clean:
+            try:
+                candidate = text_clean.split("```")[1].split("```")[0].strip()
+                return json.loads(candidate)
+            except Exception:
+                pass
+        # 2. Search for outermost { ... }
+        start = text_clean.find("{")
+        end = text_clean.rfind("}")
+        if start != -1 and end != -1 and end > start:
+            try:
+                candidate = text_clean[start:end+1]
+                return json.loads(candidate)
+            except Exception:
+                pass
+
+    # 3. Fallback: Regex key-value extraction across reasoning content
+    import re
+    parsed = {}
+    full_text = f"{content}\n{reasoning}".strip()
+    if full_text:
+        num_keys = [
+            "safety_score", "false_breakout_probability", "stress_test_score",
+            "monte_carlo_win_rate", "risk_reward_ratio", "sentiment_score", "confidence", "consensus_confidence"
+        ]
+        for key in num_keys:
+            m = re.search(rf'[\"\'\`]?{key}[\"\'\`]?\s*[:=]\s*([0-9]+(\.[0-9]+)?)', full_text, re.IGNORECASE)
+            if m:
+                try:
+                    parsed[key] = float(m.group(1))
+                except Exception:
+                    pass
+
+        str_keys = [
+            "verdict", "sentiment_label", "consensus_signal", "execution_bias",
+            "order_block_status", "macro_trap_alert", "macro_narrative", "critique_of_gemini", "critique_of_nvidia"
+        ]
+        for key in str_keys:
+            m = re.search(rf'[\"\'\`]?{key}[\"\'\`]?\s*[:=]\s*[\"\'\`]?([^\"\n\r,}}]+)[\"\'\`]?', full_text, re.IGNORECASE)
+            if m:
+                val = m.group(1).strip()
+                if val.lower() == "null" or val.lower() == "none":
+                    parsed[key] = None
+                else:
+                    parsed[key] = val
+
+    return parsed
+

@@ -263,30 +263,48 @@ class MarketDataService:
             confidence = 77.0
             warning = False
             rec = "1D Macro Trend Bearish with 4H/15M relief rally into supply. Scale into Short on 15M rejection."
-        elif screen_1d.trend == "NEUTRAL" and bear_count >= 2:
-            alignment = "2/3 PARTIAL CONFLUENCE"
-            direction = "SHORT"
-            confidence = 74.0
+        elif screen_4h.trend == "BULLISH" and screen_15m.trend == "BULLISH" and screen_1d.trend == "BEARISH":
+            alignment = "2/3 REVERSAL CONFLUENCE (4H STRUCTURAL SHIFT)"
+            direction = "LONG"
+            confidence = 78.0
             warning = False
-            rec = "1D Macro Neutral with 4H and 15M structural breakdown. High-probability SHORT setup."
-        elif screen_1d.trend == "NEUTRAL" and bull_count >= 2:
-            alignment = "2/3 PARTIAL CONFLUENCE"
+            rec = "4H Structural Shift & 15M Continuation confirmed above key demand. High-probability swing reversal setup while 1D lags."
+        elif screen_4h.trend == "BEARISH" and screen_15m.trend == "BEARISH" and screen_1d.trend == "BULLISH":
+            alignment = "2/3 REVERSAL CONFLUENCE (4H STRUCTURAL BREAKDOWN)"
+            direction = "SHORT"
+            confidence = 77.0
+            warning = False
+            rec = "4H Structural Breakdown & 15M Continuation confirmed below key supply. High-probability swing short breakdown while 1D lags."
+        elif screen_1d.trend == "NEUTRAL" and (screen_4h.trend == "BULLISH" or bull_count >= 1) and bear_count == 0:
+            alignment = "2/3 PARTIAL CONFLUENCE (4H EXPANSION)"
             direction = "LONG"
             confidence = 75.0
             warning = False
-            rec = "1D Macro Neutral with 4H and 15M structural breakout. High-probability LONG setup."
-        elif screen_1d.trend != "NEUTRAL" and ((bull_count == 2 and screen_1d.trend == "BEARISH") or (bear_count == 2 and screen_1d.trend == "BULLISH")):
+            rec = "1D Macro Neutral with 4H structural bullish expansion. High-probability LONG setup."
+        elif screen_1d.trend == "NEUTRAL" and (screen_4h.trend == "BEARISH" or bear_count >= 1) and bull_count == 0:
+            alignment = "2/3 PARTIAL CONFLUENCE (4H BREAKDOWN)"
+            direction = "SHORT"
+            confidence = 74.0
+            warning = False
+            rec = "1D Macro Neutral with 4H structural breakdown. High-probability SHORT setup."
+        elif screen_1d.trend == "BEARISH" and screen_4h.trend == "BEARISH" and screen_15m.trend == "BULLISH":
             alignment = "1/3 DIVERGENCE (COUNTER-TREND)"
             direction = "NEUTRAL"
             confidence = 45.0
             warning = True
-            rec = f"WARNING: Low-timeframe signal conflicts with 1D Macro {screen_1d.trend} trend. Counter-trend trap probability elevated. Strict HOLD / Stand Aside."
+            rec = "WARNING: Low-timeframe 15M bounce fighting dual-macro (1D + 4H) BEARISH downtrend. High bull-trap probability. Strict HOLD."
+        elif screen_1d.trend == "BULLISH" and screen_4h.trend == "BULLISH" and screen_15m.trend == "BEARISH":
+            alignment = "1/3 DIVERGENCE (COUNTER-TREND)"
+            direction = "NEUTRAL"
+            confidence = 45.0
+            warning = True
+            rec = "WARNING: Low-timeframe 15M dip fighting dual-macro (1D + 4H) BULLISH uptrend. High bear-trap probability. Strict HOLD."
         else:
             alignment = "1/3 DIVERGENCE"
             direction = "NEUTRAL"
-            confidence = 50.0
+            confidence = 52.0
             warning = False
-            rec = "Mixed multi-timeframe structure. Equilibrium chop zone detected. Stand aside until 1D and 4H align."
+            rec = "Mixed multi-timeframe structure. Equilibrium chop zone detected. Stand aside until directional structure forms."
 
         confluence_obj = MultiTimeframeConfluence(
             symbol=symbol,
@@ -706,14 +724,19 @@ class MarketDataService:
         vol_ratio = max(vol_closed_ratio, vol_curr_ratio)
         atr_pct = (atr / p) * 100.0 if p > 0 else 1.5
 
-        bar_range = highs[-1] - lows[-1]
+        # Candlestick anatomy (wicks/pinbars) MUST be evaluated on the last COMPLETED candle (klines[-2])
+        # Live in-progress candles (klines[-1]) fluctuate in real time and create false wick alarms before closing.
+        c_closed = klines[-2] if len(klines) >= 2 else klines[-1]
+        c_high = float(c_closed[2])
+        c_low = float(c_closed[3])
+        c_open = float(c_closed[1])
+        c_close = float(c_closed[4])
+        bar_range = c_high - c_low
         upper_wick_ratio = 0.0
         lower_wick_ratio = 0.0
-        # Meaningful rejection wick must occur on a candle with substantive range (>= 40% of ATR)
-        # Otherwise newly opened or narrow in-progress candles create false 60%+ wicks on tiny noise
-        if bar_range >= (atr * 0.40) and bar_range > 0:
-            upper_wick_ratio = (highs[-1] - max(closes[-1], float(klines[-1][1]))) / bar_range
-            lower_wick_ratio = (min(closes[-1], float(klines[-1][1])) - lows[-1]) / bar_range
+        if bar_range > 0:
+            upper_wick_ratio = (c_high - max(c_close, c_open)) / bar_range
+            lower_wick_ratio = (min(c_close, c_open) - c_low) / bar_range
 
         ema_gap_pct = abs(ema_20 - ema_50) / p * 100.0 if p > 0 else 0.0
 
@@ -750,11 +773,11 @@ class MarketDataService:
             }
 
         # 3. Check Potential Setup
-        # A. Bullish Trend Expansion (Holding above key EMAs with healthy or strong momentum)
+        # A. Bullish Trend Momentum (Holding above key EMAs with healthy or strong momentum)
         is_bullish_trend = (
             p >= ema_20 and ema_20 >= ema_50 and
             42.0 <= rsi <= 84.0 and
-            upper_wick_ratio <= 0.40
+            upper_wick_ratio <= 0.50
         )
 
         # B. Bullish Breakout or Reversal (Price above both EMAs, or breaking 10-period high)
@@ -762,43 +785,64 @@ class MarketDataService:
         recent_10_low = min(lows[-11:-1])
         is_bullish_breakout = (
             (p >= recent_10_high or (p >= ema_20 and p >= ema_50)) and
-            46.0 <= rsi <= 85.0 and
-            vol_ratio >= 0.65 and
-            upper_wick_ratio <= 0.45
+            44.0 <= rsi <= 85.0 and
+            vol_ratio >= 0.50 and
+            upper_wick_ratio <= 0.52
         )
 
-        # C. Mean-reversion pullback support / dip buy
+        # C. Bullish Pullback in Uptrend (EMA20 >= EMA50, price retesting EMA support with lower wick absorption)
         is_bullish_pullback = (
-            p >= min(ema_20, ema_50) * 0.998 and
-            40.0 <= rsi <= 72.0 and
+            ema_20 >= ema_50 and
+            p >= ema_50 * 0.990 and
+            35.0 <= rsi <= 70.0 and
             lower_wick_ratio >= 0.15
         )
 
-        is_bullish = is_bullish_trend or is_bullish_breakout or is_bullish_pullback
+        # D. Oversold Demand Zone Accumulation / V-Bottom Bounce (Buying at major support extremes)
+        is_bullish_oversold_demand = (
+            (rsi <= 32.0 or (p <= recent_10_low * 1.010 and lower_wick_ratio >= 0.35)) and
+            vol_ratio >= 0.50
+        )
+
+        is_bullish = is_bullish_trend or is_bullish_breakout or is_bullish_pullback or is_bullish_oversold_demand
 
         # A. Bearish Trend Distribution
         is_bearish_trend = (
             p <= ema_20 and ema_20 <= ema_50 and
             18.0 <= rsi <= 58.0 and
-            lower_wick_ratio <= 0.40
+            lower_wick_ratio <= 0.50
         )
 
         # B. Bearish Breakdown
         is_bearish_breakdown = (
             (p <= recent_10_low or (p <= ema_20 and p <= ema_50)) and
-            16.0 <= rsi <= 54.0 and
-            vol_ratio >= 0.65 and
-            lower_wick_ratio <= 0.45
+            16.0 <= rsi <= 56.0 and
+            vol_ratio >= 0.50 and
+            lower_wick_ratio <= 0.52
         )
 
-        # C. Bearish Relief Rally Rejection
+        # C. Bearish Relief Rally in Downtrend (EMA20 <= EMA50, price rejected at falling EMAs with upper wick)
         is_bearish_pullback = (
-            p <= max(ema_20, ema_50) * 1.002 and
-            30.0 <= rsi <= 60.0 and
+            ema_20 <= ema_50 and
+            p <= ema_50 * 1.010 and
+            30.0 <= rsi <= 65.0 and
             upper_wick_ratio >= 0.15
         )
 
-        is_bearish = is_bearish_trend or is_bearish_breakdown or is_bearish_pullback
+        # D. Overbought Supply Zone Distribution / Blow-Off Top Rejection (Shorting exhaustion peaks)
+        is_bearish_overbought_supply = (
+            (rsi >= 75.0 or (p >= recent_10_high * 0.990 and upper_wick_ratio >= 0.35)) and
+            vol_ratio >= 0.50
+        )
+
+        is_bearish = is_bearish_trend or is_bearish_breakdown or is_bearish_pullback or is_bearish_overbought_supply
+
+        # Resolve overlap using established EMA trend structure
+        if is_bullish and is_bearish:
+            if ema_20 >= ema_50 and p >= ema_20:
+                is_bearish = False
+            elif ema_20 <= ema_50 and p <= ema_20:
+                is_bullish = False
 
         if is_bullish and not is_bearish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p > ema_20 else 0.0)

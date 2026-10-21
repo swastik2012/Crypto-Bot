@@ -36,7 +36,11 @@ async def run_stage3_openai_risk(
     
     risk_portfolio_str = _format_risk_portfolio_context(account_state, symbol)
     
-    if effective_key:
+    from backend.services.gemini_guard import OpenAIQuotaGuard, extract_llm_json
+    import httpx
+
+    # 1. Primary Attempt: OpenAI (if key present and not in quota cooldown)
+    if effective_key and OpenAIQuotaGuard.is_available():
         try:
             from openai import AsyncOpenAI
             client = AsyncOpenAI(api_key=effective_key)
@@ -56,12 +60,50 @@ Analyze correlation risk with currently open positions, liquidity sweep traps, a
                 temperature=0.2,
                 max_tokens=350,
             )
-            raw_text = response.choices[0].message.content
+            raw_text = response.choices[0].message.content or ""
             latency = int((time.time() - start_time) * 1000)
             gemini_critique = f"OpenAI Critique: {raw_text[:220]}"
             nvidia_critique = f"OpenAI Critique: {raw_text[220:440]}"
         except Exception as e:
-            print(f"[Stage 3 OpenAI Notice] Note on endpoint: {e}")
+            err_msg = str(e) or f"{type(e).__name__}"
+            if "429" in err_msg or "quota" in err_msg.lower():
+                OpenAIQuotaGuard.mark_exhausted(err_msg)
+            print(f"[Stage 3 OpenAI Notice] Note on endpoint: {err_msg} - failing over to NVIDIA NIM...")
+
+    # 2. NVIDIA NIM Reroute: Nemotron Lightning / Super VL
+    if not gemini_critique and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
+        try:
+            nv_model = settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b"
+            nv_prompt = f"""You are the Chief Risk Officer for crypto trade auditing on {symbol}.
+Evaluate correlation and liquidity sweep traps for this setup:
+- Direction: {stage1.initial_thesis.get('direction', 'LONG')}
+- Monte Carlo Win Rate: {stage2.monte_carlo_win_rate}%
+Portfolio context:
+{risk_portfolio_str}
+
+Provide a concise 2-sentence institutional risk audit critique."""
+            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=2.5)) as http_client:
+                nv_resp = await http_client.post(
+                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+                    headers={"Authorization": f"Bearer {settings.NVIDIA_API_KEY}", "Content-Type": "application/json"},
+                    json={
+                        "model": nv_model,
+                        "messages": [{"role": "user", "content": nv_prompt}],
+                        "temperature": 0.2,
+                        "max_tokens": 500,
+                    },
+                )
+                if nv_resp.status_code == 200:
+                    choice = nv_resp.json().get("choices", [{}])[0].get("message", {})
+                    raw_text = choice.get("content") or choice.get("reasoning_content") or ""
+                    clean_text = raw_text.strip()
+                    gemini_critique = f"NVIDIA Risk Critique: {clean_text[:220]}"
+                    nvidia_critique = f"NVIDIA Risk Critique: {clean_text[220:440]}"
+                    model_name = nv_model
+                    latency = int((time.time() - start_time) * 1000)
+                    print(f"[Stage 3 NVIDIA Reroute Success]: Audited via {nv_model}")
+        except Exception as e:
+            print(f"[Stage 3 NVIDIA Notice]: {e}")
 
     if not gemini_critique:
         gemini_critique = (
