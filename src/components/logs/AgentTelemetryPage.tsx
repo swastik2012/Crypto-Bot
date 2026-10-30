@@ -184,7 +184,7 @@ EVALUATION SCHEMAS:
   {
     id: 'stage3',
     stageNumber: 4,
-    name: 'NVIDIA NIM DeepSeek V4 Pro',
+    name: 'NVIDIA NIM Quant Engine',
     role: 'Quantitative Reasoning & 10,000 Monte Carlo Simulations',
     provider: 'NVIDIA NIM (Quant)',
     color: 'from-[#76B900] to-emerald-500',
@@ -211,9 +211,9 @@ QUANTITATIVE MANDATES:
   },
   {
     id: 'stage4',
-    stageNumber: 4,
-    name: "OpenAI GPT-4o Devil's Advocate",
-    role: 'Liquidity Sweeps & False Breakout Auditor',
+    stageNumber: 5,
+    name: "OpenAI / NVIDIA Flagship Risk Guard",
+    role: 'Liquidity Sweeps & Devil\'s Advocate Auditor',
     provider: 'OpenAI (Risk Guard)',
     color: 'from-purple-500 to-indigo-600',
     icon: ShieldAlert,
@@ -237,7 +237,7 @@ MANDATORY RISK AUDIT CHECKLIST:
   },
   {
     id: 'stage5',
-    stageNumber: 5,
+    stageNumber: 6,
     name: 'Google Gemini 3.7 Flash Consensus Arbiter',
     role: 'Multi-Agent Consensus Synthesizer & Execution Planner',
     provider: 'Google Gemini (Arbiter)',
@@ -245,10 +245,10 @@ MANDATORY RISK AUDIT CHECKLIST:
     icon: Brain,
     systemPrompt: `You are Agent 5 (Chief Consensus Arbiter & Trade Synthesizer powered by Google Gemini).
 Your duty is to impartially reconcile the multi-agent debate across:
-Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (Quant Monte Carlo Proof), and Stage 4 (Devil's Advocate Risk Guard).
+Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (DeepSeek Order Flow), Stage 4 (Quant Monte Carlo Proof), and Stage 5 (Devil's Advocate Risk Guard).
 
 ARBITRATION MANDATES:
-1. VETO COMPLIANCE: If Stage 4 OpenAI flags false_breakout_probability >= 40.0% OR Stage 3 NVIDIA NIM flags R:R < 1.8, you MUST issue 'HOLD' to prevent capital destruction.
+1. VETO COMPLIANCE: If Stage 5 Risk Guard flags false_breakout_probability >= 40.0% OR Stage 4 Quant flags R:R < 1.8, you MUST issue 'HOLD' to prevent capital destruction.
 2. HIGH CONVICTION CRITERIA: Issue 'STRONG BUY' or 'STRONG SELL' only when consensus agreement >= 88.0% with zero critical trap alerts.
 3. EXECUTION DISCIPLINE: Provide concise institutional synthesis, exact TP1 (50% scale-out), TP2 (trailing runner), and precise price invalidation condition.`,
     sampleOutput: `{
@@ -263,7 +263,7 @@ ARBITRATION MANDATES:
     "suggested_leverage": "3x - 5x Cross",
     "recommended_position_usd": 5000.0
   },
-  "executive_summary": "Full 5-Stage Bearish Consensus Reconciled with 92.0% conviction for BTC/USDT. Confirmed Head & Shoulders breakdown reinforced by macro news selling pressure and quantitative Monte Carlo proof.",
+  "executive_summary": "Full 6-Stage Bearish Consensus Reconciled with 92.0% conviction for BTC/USDT. Confirmed Head & Shoulders breakdown reinforced by macro news selling pressure and quantitative Monte Carlo proof.",
   "key_invalidation_condition": "Hourly candle close above $79,791.15 structural swing high invalidates short thesis."
 }`,
   },
@@ -295,7 +295,8 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
 
   const fetchLogs = async () => {
     try {
-      const data = await api.getTelemetryLogs(150, selectedProvider);
+      // Fetch comprehensive ring buffer so client-side filter tabs switch instantly
+      const data = await api.getTelemetryLogs(200);
       if (data && data.logs) {
         setLogs(data.logs);
         if (data.summary) {
@@ -316,7 +317,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
     if (!autoRefresh) return;
     const timer = setInterval(fetchLogs, 2000);
     return () => clearInterval(timer);
-  }, [autoRefresh, selectedProvider]);
+  }, [autoRefresh]);
 
   const handleClearLogs = async () => {
     await api.clearTelemetryLogs();
@@ -342,30 +343,78 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
   }, [selectedStageTab]);
 
   const latestLogForActiveStage = useMemo(() => {
-    return logs.find((l) =>
-      l.stage.toLowerCase().includes(activeStageData.id) ||
-      l.stage.toLowerCase().includes(activeStageData.name.toLowerCase().split(' ')[0]) ||
-      l.provider.toLowerCase().includes(activeStageData.provider.toLowerCase().split(' ')[0])
-    );
+    return logs.find((l) => {
+      const stageStr = (l.stage || '').toLowerCase();
+      const numMatch = stageStr.includes(`stage ${activeStageData.stageNumber}`) || stageStr.includes(`stage${activeStageData.stageNumber}`);
+      if (activeStageData.stageNumber === 1) {
+        return numMatch || stageStr.includes('vision');
+      }
+      if (activeStageData.stageNumber === 2) {
+        return numMatch || stageStr.includes('news');
+      }
+      if (activeStageData.stageNumber === 3) {
+        return numMatch || stageStr.includes('deepseek') || stageStr.includes('reasoning');
+      }
+      if (activeStageData.stageNumber === 4) {
+        return numMatch || stageStr.includes('quant') || stageStr.includes('monte carlo');
+      }
+      if (activeStageData.stageNumber === 5) {
+        return numMatch || stageStr.includes('risk') || stageStr.includes('trap');
+      }
+      if (activeStageData.stageNumber === 6) {
+        return numMatch || stageStr.includes('arbiter') || stageStr.includes('consensus arbiter');
+      }
+      return false;
+    });
   }, [logs, activeStageData]);
+
+  const activePromptText = useMemo(() => {
+    if (latestLogForActiveStage?.prompt_text && latestLogForActiveStage.prompt_text.trim().length > 0) {
+      return latestLogForActiveStage.prompt_text;
+    }
+    return activeStageData.systemPrompt;
+  }, [latestLogForActiveStage, activeStageData]);
+
+  const activeResponseText = useMemo(() => {
+    if (latestLogForActiveStage?.response_text && latestLogForActiveStage.response_text.trim().length > 0) {
+      return latestLogForActiveStage.response_text;
+    }
+    return activeStageData.sampleOutput;
+  }, [latestLogForActiveStage, activeStageData]);
 
   const filteredLogs = useMemo(() => {
     return logs.filter((log) => {
-      const matchesProvider =
-        selectedProvider === 'All' ||
-        (selectedProvider === 'Errors' && (log.status === 'ERROR' || log.status === 'FALLBACK')) ||
-        log.provider.toLowerCase().includes(selectedProvider.toLowerCase());
+      const prov = (log.provider || '').toLowerCase();
+      const stage = (log.stage || '').toLowerCase();
+      const status = log.status || '';
+
+      let matchesProvider = true;
+      if (selectedProvider === 'Errors') {
+        matchesProvider = status === 'ERROR' || status === 'FALLBACK';
+      } else if (selectedProvider === 'Gemini') {
+        matchesProvider = prov.includes('gemini');
+      } else if (selectedProvider === 'NVIDIA (DeepSeek)') {
+        matchesProvider = prov.includes('deepseek') || stage.includes('deepseek') || stage.includes('reasoning');
+      } else if (selectedProvider === 'NVIDIA') {
+        matchesProvider = prov.includes('nvidia');
+      } else if (selectedProvider === 'OpenAI') {
+        matchesProvider = prov.includes('openai') || stage.includes('stage 5') || stage.includes('risk');
+      } else if (selectedProvider === 'News') {
+        matchesProvider = prov.includes('news') || stage.includes('news');
+      } else if (selectedProvider !== 'All') {
+        matchesProvider = prov.includes(selectedProvider.toLowerCase()) || stage.includes(selectedProvider.toLowerCase());
+      }
 
       const q = searchQuery.toLowerCase().trim();
       const matchesSearch =
         !q ||
-        log.stage.toLowerCase().includes(q) ||
-        log.provider.toLowerCase().includes(q) ||
-        log.model.toLowerCase().includes(q) ||
+        stage.includes(q) ||
+        prov.includes(q) ||
+        (log.model || '').toLowerCase().includes(q) ||
         (log.prompt_text && log.prompt_text.toLowerCase().includes(q)) ||
         (log.response_text && log.response_text.toLowerCase().includes(q)) ||
-        JSON.stringify(log.request_summary).toLowerCase().includes(q) ||
-        JSON.stringify(log.response_summary).toLowerCase().includes(q);
+        JSON.stringify(log.request_summary || {}).toLowerCase().includes(q) ||
+        JSON.stringify(log.response_summary || {}).toLowerCase().includes(q);
 
       return matchesProvider && matchesSearch;
     });
@@ -506,7 +555,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
         </div>
 
         {/* Stage Selector Tabs (Horizontal Snap on Mobile, Grid on Desktop) */}
-        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-5 snap-x snap-mandatory my-3 sm:my-4">
+        <div className="flex overflow-x-auto pb-2 sm:pb-0 gap-2 no-scrollbar sm:grid sm:grid-cols-3 lg:grid-cols-6 snap-x snap-mandatory my-3 sm:my-4">
           {STAGE_TEMPLATES.map((stage) => {
             const isSelected = selectedStageTab === stage.id;
             const Icon = stage.icon;
@@ -548,14 +597,18 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
                 <span className="text-xs font-bold text-slate-200">
                   📥 Prompt & Directives Sent to {activeStageData.name}
                 </span>
+                {latestLogForActiveStage?.prompt_text ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Live Call Ingested
+                  </span>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                    Institutional Benchmark
+                  </span>
+                )}
               </div>
               <button
-                onClick={() =>
-                  handleCopy(
-                    latestLogForActiveStage?.prompt_text || activeStageData.systemPrompt,
-                    'prompt'
-                  )
-                }
+                onClick={() => handleCopy(activePromptText, 'prompt')}
                 className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
               >
                 {copiedSection === 'prompt' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -564,7 +617,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
             </div>
 
             <div className="p-3.5 overflow-y-auto max-h-[420px] font-mono text-[11px] leading-relaxed text-cyan-300 whitespace-pre-wrap bg-slate-900/90">
-              {latestLogForActiveStage?.prompt_text || activeStageData.systemPrompt}
+              {activePromptText}
             </div>
           </div>
 
@@ -576,14 +629,18 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
                 <span className="text-xs font-bold text-slate-200">
                   📤 Returned JSON Decision Payload & Analysis
                 </span>
+                {latestLogForActiveStage?.response_text ? (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                    Live Response
+                  </span>
+                ) : (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-400 border border-cyan-500/30">
+                    Institutional Benchmark
+                  </span>
+                )}
               </div>
               <button
-                onClick={() =>
-                  handleCopy(
-                    latestLogForActiveStage?.response_text || activeStageData.sampleOutput,
-                    'response'
-                  )
-                }
+                onClick={() => handleCopy(activeResponseText, 'response')}
                 className="px-2 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-bold transition-all flex items-center gap-1 cursor-pointer"
               >
                 {copiedSection === 'response' ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
@@ -592,7 +649,7 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
             </div>
 
             <div className="p-3.5 overflow-y-auto max-h-[420px] font-mono text-[11px] leading-relaxed text-emerald-400 whitespace-pre-wrap bg-slate-900/90">
-              {latestLogForActiveStage?.response_text || activeStageData.sampleOutput}
+              {activeResponseText}
             </div>
           </div>
 

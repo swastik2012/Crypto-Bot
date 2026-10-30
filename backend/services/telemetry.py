@@ -114,7 +114,46 @@ class AgentTelemetryService:
     def get_logs(self, limit: int = 100, provider: Optional[str] = None) -> List[Dict[str, Any]]:
         logs_list = list(self._logs)
         if provider and provider.lower() != "all":
-            logs_list = [l for l in logs_list if provider.lower() in l["provider"].lower()]
+            p = provider.lower().strip()
+            if p == "errors":
+                logs_list = [l for l in logs_list if l.get("status") in ("ERROR", "FALLBACK")]
+            elif "deepseek" in p:
+                logs_list = [
+                    l for l in logs_list
+                    if "deepseek" in l.get("provider", "").lower()
+                    or "deepseek" in l.get("stage", "").lower()
+                    or "reasoning" in l.get("stage", "").lower()
+                ]
+            elif "news" in p:
+                logs_list = [
+                    l for l in logs_list
+                    if "news" in l.get("provider", "").lower()
+                    or "news" in l.get("stage", "").lower()
+                ]
+            elif "openai" in p:
+                logs_list = [
+                    l for l in logs_list
+                    if "openai" in l.get("provider", "").lower()
+                    or "stage 5" in l.get("stage", "").lower()
+                    or "risk" in l.get("stage", "").lower()
+                ]
+            elif "gemini" in p:
+                logs_list = [
+                    l for l in logs_list
+                    if "gemini" in l.get("provider", "").lower()
+                ]
+            elif "nvidia" in p:
+                logs_list = [
+                    l for l in logs_list
+                    if "nvidia" in l.get("provider", "").lower()
+                ]
+            else:
+                logs_list = [
+                    l for l in logs_list
+                    if p in l.get("provider", "").lower()
+                    or p in l.get("stage", "").lower()
+                    or p in l.get("model", "").lower()
+                ]
         return logs_list[:limit]
 
     def get_summary(self) -> Dict[str, Any]:

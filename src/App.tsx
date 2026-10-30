@@ -60,7 +60,44 @@ export const App: React.FC = () => {
   }, []);
 
   // View State: 'terminal' (Charts & Debate) vs 'telemetry' (Live Agent API Logs)
-  const [activeView, setActiveView] = useState<'terminal' | 'telemetry'>('terminal');
+  const [activeView, setActiveView] = useState<'terminal' | 'telemetry'>(() => {
+    if (typeof window !== 'undefined') {
+      const path = window.location.pathname.toLowerCase();
+      const hash = window.location.hash.toLowerCase();
+      if (path.includes('telemetry') || hash.includes('telemetry')) {
+        return 'telemetry';
+      }
+    }
+    return 'terminal';
+  });
+
+  const handleViewChange = useCallback((view: 'terminal' | 'telemetry') => {
+    setActiveView(view);
+    if (typeof window !== 'undefined' && window.history) {
+      const newHash = view === 'telemetry' ? '#telemetry' : '';
+      if (window.location.hash !== newHash) {
+        window.history.replaceState(null, '', newHash || window.location.pathname);
+      }
+    }
+  }, []);
+
+  useEffect(() => {
+    const handleHashSync = () => {
+      const hash = window.location.hash.toLowerCase();
+      const path = window.location.pathname.toLowerCase();
+      if (hash.includes('telemetry') || path.includes('telemetry')) {
+        setActiveView('telemetry');
+      } else {
+        setActiveView('terminal');
+      }
+    };
+    window.addEventListener('hashchange', handleHashSync);
+    window.addEventListener('popstate', handleHashSync);
+    return () => {
+      window.removeEventListener('hashchange', handleHashSync);
+      window.removeEventListener('popstate', handleHashSync);
+    };
+  }, []);
 
   // Asset & Chart Interval State (Default: 1H, with localStorage persistence)
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>(SUPPORTED_ASSETS[0]);
@@ -1097,7 +1134,7 @@ export const App: React.FC = () => {
         onResetPaperAccount={handleResetAccount}
         onResetAutoTraderTimer={handleResetAutoTraderTimer}
         activeView={activeView}
-        onViewChange={setActiveView}
+        onViewChange={handleViewChange}
       />
 
       {/* Main Content Area */}

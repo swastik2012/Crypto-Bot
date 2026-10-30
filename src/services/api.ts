@@ -291,7 +291,8 @@ export const api = {
   // 6. Agent Telemetry & Diagnostics
   async getTelemetryLogs(limit: number = 100, provider?: string) {
     try {
-      const url = new URL(`${API_BASE_URL}/api/telemetry/logs`);
+      const base = API_BASE_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://127.0.0.1:8000');
+      const url = new URL('/api/telemetry/logs', base);
       url.searchParams.append('limit', limit.toString());
       if (provider && provider !== 'All') {
         url.searchParams.append('provider', provider);

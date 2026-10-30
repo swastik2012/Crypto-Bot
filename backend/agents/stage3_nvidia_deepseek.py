@@ -150,12 +150,20 @@ async def run_stage3_nvidia_deepseek(
                         if parsed_json and ("execution_bias" in parsed_json or "confidence" in parsed_json):
                             model_used = cand
                             telemetry_status = "SUCCESS"
-                            telemetry_service.log_call(
+                            telemetry_service.record_call(
                                 provider=provider_name,
                                 model=model_used,
+                                stage="Stage 3: DeepSeek Reasoning & Order Flow",
                                 endpoint=api_endpoint,
-                                request_payload={"model": cand, "symbol": symbol},
-                                response_payload=parsed_json,
+                                prompt_text=f"{system_prompt}\n\n=== USER INPUT & ORDER FLOW ===\n{user_prompt}",
+                                response_text=raw_response_text or json.dumps(parsed_json, indent=2),
+                                request_summary={"model": cand, "symbol": symbol, "funding_rate": funding_rate, "cvd": cvd_div},
+                                response_summary={
+                                    "execution_bias": parsed_json.get("execution_bias"),
+                                    "market_regime": parsed_json.get("market_regime"),
+                                    "confidence": parsed_json.get("confidence"),
+                                    "toxic_flow_detected": parsed_json.get("toxic_flow_detected"),
+                                },
                                 latency_ms=req_latency,
                                 status="SUCCESS",
                                 status_code=200,
@@ -195,12 +203,20 @@ async def run_stage3_nvidia_deepseek(
             "chain_of_thought": f"Order flow delta conditioned on {funding_reg} funding rate ({funding_rate:+.4f}%) and {cvd_div}. MTF confluence: {mtf_align}.",
             "summary": f"NVIDIA DeepSeek Reasoning ({model_used}): {bias} conviction ({confidence*100:.1f}%) in {regime} regime with toxic flow={toxic_flag}."
         }
-        telemetry_service.log_call(
+        telemetry_service.record_call(
             provider=provider_name,
             model=model_used,
+            stage="Stage 3: DeepSeek Reasoning & Order Flow",
             endpoint=f"{endpoint}/chat/completions",
-            request_payload={"symbol": symbol, "fallback": True},
-            response_payload=parsed_json,
+            prompt_text=f"{system_prompt}\n\n=== USER INPUT & ORDER FLOW (ALGORITHMIC QUANT) ===\n{user_prompt}",
+            response_text=json.dumps(parsed_json, indent=2),
+            request_summary={"symbol": symbol, "funding_rate": funding_rate, "cvd": cvd_div, "fallback": True},
+            response_summary={
+                "execution_bias": bias,
+                "market_regime": regime,
+                "confidence": confidence,
+                "toxic_flow_detected": toxic_flag,
+            },
             latency_ms=round((time.time() - start_time) * 1000),
             status=telemetry_status,
             status_code=200 if telemetry_status == "SUCCESS" else 429,
