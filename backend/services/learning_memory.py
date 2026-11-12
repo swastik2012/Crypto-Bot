@@ -617,7 +617,7 @@ class LearningMemoryService:
                 # B. Volume Starvation on Breakouts
                 if ("volume increase" in rule_lower or "volume below" in rule_lower or "average volume" in rule_lower) and side_upper in ["BUY", "LONG"]:
                     req_vol = 1.20 if "20%" in rule.rule_text else 1.05
-                    if vol_ratio < req_vol:
+                    if "volume_ratio" in ind and vol_ratio < req_vol:
                         return PlaybookVetoSchema(
                             is_vetoed=True,
                             rule_id=rule.rule_id,
@@ -631,7 +631,7 @@ class LearningMemoryService:
 
                 # C. Aggressive breakout without confirmation (e.g. DOGE rule_1791143808_doge)
                 if ("avoid aggressive" in rule_lower or "breakout entries" in rule_lower) and side_upper in ["BUY", "LONG"]:
-                    if upper_wick > 0.28 or vol_ratio < 1.15:
+                    if upper_wick > 0.28 or ("volume_ratio" in ind and vol_ratio < 1.15):
                         return PlaybookVetoSchema(
                             is_vetoed=True,
                             rule_id=rule.rule_id,

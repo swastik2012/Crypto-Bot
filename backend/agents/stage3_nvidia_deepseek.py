@@ -225,7 +225,17 @@ async def run_stage3_nvidia_deepseek(
     latency_total = round((time.time() - start_time) * 1000)
 
     # Compile Typed Question Results
-    bias_val = parsed_json.get("execution_bias", "BUY").upper()
+    raw_bias = str(parsed_json.get("execution_bias", "NEUTRAL")).upper().strip()
+    if "SELL" in raw_bias and "BUY" not in raw_bias:
+        bias_val = "SELL"
+    elif "BUY" in raw_bias and "SELL" not in raw_bias:
+        bias_val = "BUY"
+    elif "SELL" in raw_bias and "BUY" in raw_bias:
+        # LLM echoed schema placeholder ("BUY | SELL | NEUTRAL") - infer from setup direction
+        bias_val = "SELL" if direction in ["SHORT", "SELL", "BEARISH"] else ("BUY" if direction in ["LONG", "BUY", "BULLISH"] else "NEUTRAL")
+    else:
+        bias_val = "NEUTRAL"
+
     conf_val = float(parsed_json.get("confidence", 0.84))
     probs_val = parsed_json.get("bias_probabilities", {"BUY": 0.80, "HOLD": 0.15, "SELL": 0.05})
 

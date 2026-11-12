@@ -439,6 +439,18 @@ export const api = {
     return [];
   },
 
+  async fetchPlaybookRules(): Promise<{ status: string; count: number; rules: any[] }> {
+    try {
+      const res = await fetch(`${API_BASE_URL}/api/learning/rules`);
+      if (res.ok) {
+        return await res.json();
+      }
+    } catch (e) {
+      console.warn('[API] fetchPlaybookRules error:', e);
+    }
+    return { status: 'fallback', count: 0, rules: [] };
+  },
+
   async triggerAuditAll(limit: number = 15): Promise<any> {
     try {
       const res = await fetch(`${API_BASE_URL}/api/learning/audit-all?limit=${limit}`, {

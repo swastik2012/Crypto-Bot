@@ -71,7 +71,7 @@ async def test_phase2_relative_strength():
         patterns=[],
         key_levels=[],
         rsi_status={"rsi_14": 52.0},
-        volume_analysis="Average",
+        volume_analysis="Expanding institutional buyer volume (1.45x volume ratio)",
         initial_thesis={"direction": "LONG", "suggested_entry": 0.45, "take_profit_1": 0.48, "stop_loss": 0.44},
         multi_timeframe_confluence=None,
     )
@@ -137,7 +137,7 @@ async def test_phase2_relative_strength():
         patterns=[],
         key_levels=[],
         rsi_status={"rsi_14": 52.0},
-        volume_analysis="Average",
+        volume_analysis="Expanding institutional buyer volume (1.45x volume ratio)",
         initial_thesis={"direction": "LONG", "suggested_entry": 150.0, "take_profit_1": 160.0, "stop_loss": 147.0},
         multi_timeframe_confluence=None,
     )

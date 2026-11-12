@@ -291,21 +291,31 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
   const [selectedStageTab, setSelectedStageTab] = useState<string>('stage1');
   const [copiedSection, setCopiedSection] = useState<string | null>(null);
   const [tradeLearnings, setTradeLearnings] = useState<any[]>([]);
+  const [playbookRules, setPlaybookRules] = useState<any[]>([]);
   const [isLearningsExpanded, setIsLearningsExpanded] = useState<boolean>(false);
 
   const fetchLogs = async () => {
     try {
-      // Fetch comprehensive ring buffer so client-side filter tabs switch instantly
-      const data = await api.getTelemetryLogs(200);
-      if (data && data.logs) {
-        setLogs(data.logs);
-        if (data.summary) {
-          setSummary(data.summary);
+      // Fetch telemetry logs, learnings, and playbook rules in parallel
+      const [logsRes, learnRes, rulesRes] = await Promise.allSettled([
+        api.getTelemetryLogs(200),
+        api.getTradeLearnings(),
+        api.fetchPlaybookRules(),
+      ]);
+
+      if (logsRes.status === 'fulfilled' && logsRes.value?.logs) {
+        setLogs(logsRes.value.logs);
+        if (logsRes.value.summary) {
+          setSummary(logsRes.value.summary);
         }
       }
-      const learnData = await api.getTradeLearnings();
-      if (learnData && learnData.learnings) {
-        setTradeLearnings(learnData.learnings);
+
+      if (learnRes.status === 'fulfilled' && learnRes.value?.learnings) {
+        setTradeLearnings(learnRes.value.learnings);
+      }
+
+      if (rulesRes.status === 'fulfilled' && rulesRes.value?.rules) {
+        setPlaybookRules(rulesRes.value.rules);
       }
     } catch (e) {
       console.warn('[Telemetry] Error loading logs/learnings:', e);
@@ -676,13 +686,13 @@ export const AgentTelemetryPage: React.FC<AgentTelemetryPageProps> = ({
                 </Badge>
               </h2>
               <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                Closed trades undergo automated post-mortems. Click to {isLearningsExpanded ? 'collapse' : 'expand and review'} {tradeLearnings.length} active historical lessons & failure dissections.
+                Closed trades undergo automated post-mortems. Click to {isLearningsExpanded ? 'collapse' : 'expand and review'} {playbookRules.length || tradeLearnings.length} active historical lessons & failure dissections.
               </p>
             </div>
           </div>
           <div className="flex items-center gap-2.5 shrink-0 self-end md:self-auto">
             <Badge variant="purple" size="sm" className="font-mono">
-              {isLearningsExpanded ? 'Click to Hide' : `${tradeLearnings.length} Rules • Click to View`}
+              {isLearningsExpanded ? 'Click to Hide' : `${playbookRules.length || tradeLearnings.length} Rules • Click to View`}
             </Badge>
             <div className="p-1.5 rounded-lg bg-slate-200/80 dark:bg-white/10 text-slate-600 dark:text-slate-300 group-hover:text-purple-600 dark:group-hover:text-purple-300 transition-colors">
               <motion.div animate={{ rotate: isLearningsExpanded ? 180 : 0 }} transition={{ duration: 0.2 }}>

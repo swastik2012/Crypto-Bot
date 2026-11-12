@@ -378,17 +378,17 @@ class MarketDataService:
         else:
             vol_regime = "Normal Volatility"
 
-        # 3. Calculate distance with safety clamping (1.0% min SL distance, strict 2.2% max SL distance)
+        # 3. Calculate distance with safety clamping (0.9% min SL distance, strict 1.8% max SL distance)
         # Prevents high-leverage outliers while maintaining volatility adaptation
-        sl_distance = max(p * 0.010, min(p * 0.022, atr * sl_multiplier))
-        tp1_distance = max(p * 0.018, atr * tp1_multiplier)
-        tp2_distance = max(p * 0.038, atr * tp2_multiplier)
+        sl_distance = max(p * 0.009, min(p * 0.018, atr * sl_multiplier))
+        tp1_distance = max(p * 0.015, max(sl_distance * 1.50, atr * tp1_multiplier))
+        tp2_distance = max(p * 0.030, max(sl_distance * 3.00, atr * tp2_multiplier))
 
-        # Guarantee strong asymmetric R:R (TP1 >= 1.33x SL, TP2 >= 2.67x SL)
-        if tp1_distance < (sl_distance * 1.33):
-            tp1_distance = round(sl_distance * 1.5, prec)
-        if tp2_distance < (sl_distance * 2.5):
-            tp2_distance = round(sl_distance * 3.0, prec)
+        # Guarantee strong asymmetric R:R (TP1 >= 1.50x SL, TP2 >= 3.00x SL)
+        if tp1_distance < (sl_distance * 1.50):
+            tp1_distance = round(sl_distance * 1.50, prec)
+        if tp2_distance < (sl_distance * 3.00):
+            tp2_distance = round(sl_distance * 3.00, prec)
 
         # 4. Synthesize Geometry based on direction
         dir_upper = direction.upper()
@@ -793,11 +793,12 @@ class MarketDataService:
             }
 
         # 3. Check Potential Setup
-        # A. Bullish Trend Momentum (Holding above key EMAs with healthy or strong momentum)
+        # A. Bullish Trend Momentum (Holding above key EMAs with healthy momentum)
         is_bullish_trend = (
             p >= ema_20 and ema_20 >= ema_50 and
-            42.0 <= rsi <= 84.0 and
-            upper_wick_ratio <= 0.50
+            42.0 <= rsi <= 68.0 and
+            upper_wick_ratio <= 0.50 and
+            p <= ema_20 * 1.035
         )
 
         # B. Bullish Breakout or Reversal (Price above both EMAs, or breaking 10-period high)
@@ -805,53 +806,58 @@ class MarketDataService:
         recent_10_low = min(lows[-11:-1])
         is_bullish_breakout = (
             (p >= recent_10_high or (p >= ema_20 and p >= ema_50)) and
-            44.0 <= rsi <= 85.0 and
+            44.0 <= rsi <= 68.0 and
             vol_ratio >= 0.50 and
-            upper_wick_ratio <= 0.52
+            upper_wick_ratio <= 0.52 and
+            p <= ema_20 * 1.035
         )
 
         # C. Bullish Pullback in Uptrend (EMA20 >= EMA50, price retesting EMA support with lower wick absorption)
         is_bullish_pullback = (
             ema_20 >= ema_50 and
             p >= ema_50 * 0.990 and
-            35.0 <= rsi <= 70.0 and
+            38.0 <= rsi <= 65.0 and
             lower_wick_ratio >= 0.15
         )
 
-        # D. Oversold Demand Zone Accumulation / V-Bottom Bounce (Buying at major support extremes)
+        # D. Oversold Demand Zone Accumulation (Buying support with confirmed absorption lower wick)
         is_bullish_oversold_demand = (
-            (rsi <= 32.0 or (p <= recent_10_low * 1.010 and lower_wick_ratio >= 0.35)) and
-            vol_ratio >= 0.50
+            p <= recent_10_low * 1.015 and
+            lower_wick_ratio >= 0.35 and
+            25.0 <= rsi <= 45.0 and
+            vol_ratio >= 0.55
         )
 
         is_bullish = is_bullish_trend or is_bullish_breakout or is_bullish_pullback or is_bullish_oversold_demand
 
-        # A. Bearish Trend Distribution
+        # A. Bearish Trend Distribution (Controlled downtrend, never shorting into oversold exhaustion)
         is_bearish_trend = (
             p <= ema_20 and ema_20 <= ema_50 and
-            18.0 <= rsi <= 58.0 and
-            lower_wick_ratio <= 0.50
+            36.0 <= rsi <= 58.0 and
+            lower_wick_ratio <= 0.45 and
+            p >= ema_20 * 0.965
         )
 
-        # B. Bearish Breakdown
+        # B. Bearish Breakdown (Fresh support break, not late chase)
         is_bearish_breakdown = (
             (p <= recent_10_low or (p <= ema_20 and p <= ema_50)) and
-            16.0 <= rsi <= 56.0 and
+            36.0 <= rsi <= 56.0 and
             vol_ratio >= 0.50 and
-            lower_wick_ratio <= 0.52
+            lower_wick_ratio <= 0.48 and
+            p >= ema_20 * 0.965
         )
 
         # C. Bearish Relief Rally in Downtrend (EMA20 <= EMA50, price rejected at falling EMAs with upper wick)
         is_bearish_pullback = (
             ema_20 <= ema_50 and
             p <= ema_50 * 1.010 and
-            30.0 <= rsi <= 65.0 and
+            38.0 <= rsi <= 62.0 and
             upper_wick_ratio >= 0.15
         )
 
         # D. Overbought Supply Zone Distribution / Blow-Off Top Rejection (Shorting exhaustion peaks)
         is_bearish_overbought_supply = (
-            (rsi >= 75.0 or (p >= recent_10_high * 0.990 and upper_wick_ratio >= 0.35)) and
+            (rsi >= 68.0 or (p >= recent_10_high * 0.990 and upper_wick_ratio >= 0.35)) and
             vol_ratio >= 0.50
         )
 
@@ -866,18 +872,28 @@ class MarketDataService:
 
         if is_bullish and not is_bearish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p > ema_20 else 0.0)
+            reason_txt = (
+                f"BULLISH_CANDIDATE: Price (${p:,.2f}) holding above EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x."
+                if p >= ema_20 else
+                f"BULLISH_RECOVERY: Price (${p:,.2f}) rebounding toward EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x."
+            )
             return {
                 "passed": True,
-                "reason": f"BULLISH_CANDIDATE: Price (${p:,.2f}) holding above EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x.",
+                "reason": reason_txt,
                 "setup_direction": "LONG",
                 "score": round(min(98.0, score), 1),
                 "indicators": indicators,
             }
         elif is_bearish and not is_bullish:
             score = 65.0 + min(20.0, (vol_ratio - 1.0) * 15.0) + (10.0 if p < ema_20 else 0.0)
+            reason_txt = (
+                f"BEARISH_CANDIDATE: Price (${p:,.2f}) holding below EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x."
+                if p <= ema_20 else
+                f"BEARISH_REJECTION: Price (${p:,.2f}) rejected near EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x."
+            )
             return {
                 "passed": True,
-                "reason": f"BEARISH_CANDIDATE: Price (${p:,.2f}) holding below EMA20 (${ema_20:,.2f}), RSI={rsi:.1f}, Vol={vol_ratio:.2f}x.",
+                "reason": reason_txt,
                 "setup_direction": "SHORT",
                 "score": round(min(98.0, score), 1),
                 "indicators": indicators,

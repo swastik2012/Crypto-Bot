@@ -442,12 +442,24 @@ class VirtualPaperEngine:
             multiplier = pos.chandelier_multiplier or 2.5
             is_runner = (pos.take_profit_1 is None) or pos.trailing_stop_active
 
-            # Pre-TP1 Breakeven Lock: if price surges >= +3.0% even before TP1, protect capital at BE
-            if price_delta_pct >= 0.030 and pos.stop_loss:
+            # Pre-TP1 Dynamic Breakeven & Profit Lock Engine:
+            # 1. Early Breakeven Lock: If price advances >= +0.80% or >= 40% toward TP1, secure entry at BE + fee buffer.
+            # 2. Profit Lock: If price advances >= 70% toward TP1, lock +0.25% net profit.
+            prec = 4 if current_price < 1 else 2
+            tp1_dist_pct = (abs(pos.take_profit_1 - pos.entry_price) / pos.entry_price) if (pos.take_profit_1 and pos.entry_price > 0) else 0.015
+            be_trigger_pct = min(0.008, tp1_dist_pct * 0.40)
+            profit_lock_trigger_pct = tp1_dist_pct * 0.70
+
+            if pos.stop_loss and price_delta_pct >= profit_lock_trigger_pct:
+                if pos.side == PositionSide.LONG:
+                    pos.stop_loss = max(pos.stop_loss, round(pos.entry_price * 1.0025, prec))
+                elif pos.side == PositionSide.SHORT:
+                    pos.stop_loss = min(pos.stop_loss, round(pos.entry_price * 0.9975, prec))
+            elif pos.stop_loss and price_delta_pct >= be_trigger_pct:
                 if pos.side == PositionSide.LONG and pos.stop_loss < pos.entry_price:
-                    pos.stop_loss = round(pos.entry_price * 1.001, 4 if current_price < 1 else 2)
+                    pos.stop_loss = round(pos.entry_price * 1.001, prec)
                 elif pos.side == PositionSide.SHORT and pos.stop_loss > pos.entry_price:
-                    pos.stop_loss = round(pos.entry_price * 0.999, 4 if current_price < 1 else 2)
+                    pos.stop_loss = round(pos.entry_price * 0.999, prec)
 
             # Adaptive Chandelier Exit logic for active runners
             if is_runner:

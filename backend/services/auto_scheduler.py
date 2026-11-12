@@ -391,12 +391,13 @@ class AutoTradingScheduler:
                     eq = float(paper_engine.total_equity or paper_engine.cash_balance or 10000.0)
                     avail_cash = float(paper_engine.cash_balance or 0.0)
                     target_pct = (
-                        0.15 if confidence >= 85.0
-                        else (0.11 if confidence >= 78.0 else (0.08 if confidence >= 70.0 else 0.06))
+                        0.12 if confidence >= 85.0
+                        else (0.09 if confidence >= 78.0 else (0.06 if confidence >= 70.0 else 0.045))
                     )
-                    default_auto_size = max(400.0, round(eq * target_pct, 2))
+                    default_auto_size = max(350.0, round(eq * target_pct, 2))
                     raw_pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
-                    pos_size = max(default_auto_size, raw_pos_size) if raw_pos_size > 0 else default_auto_size
+                    # For lower conviction (<75%), use conservative sizing to guard drawdown
+                    pos_size = raw_pos_size if (raw_pos_size > 0 and confidence >= 75.0) else default_auto_size
 
                     # Maintain 15% cash reserve buffer for margin stability
                     safe_cash_buffer = eq * 0.15
@@ -404,8 +405,8 @@ class AutoTradingScheduler:
                     plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
                     if not plan_lev or int(plan_lev) < 1:
                         plan_lev = (
-                            10 if confidence >= 85.0
-                            else (7 if confidence >= 78.0 else (5 if confidence >= 70.0 else 4))
+                            8 if confidence >= 85.0
+                            else (5 if confidence >= 78.0 else (4 if confidence >= 70.0 else 3))
                         )
                     max_sys_lev = getattr(paper_engine, "max_leverage", 20)
                     chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
@@ -415,7 +416,7 @@ class AutoTradingScheduler:
                     entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
                     kelly_pct = round((pos_size / eq) * 100, 1) if eq > 0 else 8.0
                     sizing_regime = plan.get("sizing_regime", "BALANCED_HALF_KELLY") if isinstance(plan, dict) else getattr(plan, "sizing_regime", "BALANCED_HALF_KELLY")
-                    print(f"[AutoTrader Dynamic Sizing] {pair} allocated ${pos_size:,.2f} ({kelly_pct}% equity) via {sizing_regime}.")
+                    print(f"[AutoTrader Dynamic Sizing] {pair} allocated ${pos_size:,.2f} ({kelly_pct}% equity) with {chosen_leverage}x leverage via {sizing_regime}.")
                     
                     is_short = signal.value in ["STRONG SELL", "SELL"]
                     order_side = PositionSide.SHORT if is_short else PositionSide.LONG
@@ -439,6 +440,13 @@ class AutoTradingScheduler:
                     if is_short and sl <= entry_p:
                         sl = default_sl
                     elif not is_short and sl >= entry_p:
+                        sl = default_sl
+
+                    # Guarantee asymmetric payoff: if plan targets have R:R < 1.45, enforce mathematical ATR geometry
+                    measured_rr = (abs(tp1 - entry_p) / abs(entry_p - sl)) if (sl and entry_p and abs(entry_p - sl) > 0) else 0.0
+                    if measured_rr < 1.45:
+                        tp1 = default_tp1
+                        tp2 = default_tp2
                         sl = default_sl
 
                     plan_tp1, plan_tp2, plan_sl = tp1, tp2, sl

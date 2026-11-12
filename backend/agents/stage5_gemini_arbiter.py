@@ -509,18 +509,23 @@ async def run_stage5_gemini_arbiter(
     
     # Conviction-driven capital scaling (Phase 3)
     if consensus_confidence >= 85.0:
-        target_pct = 0.15
+        target_pct = 0.12
     elif consensus_confidence >= 78.0:
-        target_pct = 0.11
+        target_pct = 0.09
     elif consensus_confidence >= 70.0:
-        target_pct = 0.08
-    else:
         target_pct = 0.06
-    default_pos_size = max(400.0, round(equity * target_pct, 2))
+    else:
+        target_pct = 0.045
+    default_pos_size = max(350.0, round(equity * target_pct, 2))
 
     adj = stage3.adjustments_proposed if isinstance(stage3.adjustments_proposed, dict) else {}
     raw_suggested = adj.get("suggested_position_usd", default_pos_size) if signal != SignalAction.HOLD else 0.0
-    suggested_pos = max(default_pos_size, raw_suggested) if (signal != SignalAction.HOLD and raw_suggested > 0) else raw_suggested
+    # For mid-conviction (<75%), cap suggested position to avoid Kelly over-allocation
+    if consensus_confidence < 75.0 and raw_suggested > 0:
+        suggested_pos = min(round(equity * 0.06, 2), max(350.0, raw_suggested * 0.5))
+    else:
+        suggested_pos = max(default_pos_size, raw_suggested) if (signal != SignalAction.HOLD and raw_suggested > 0) else raw_suggested
+
     kelly_pct = adj.get("kelly_fraction_pct", round((suggested_pos / equity) * 100, 1)) if signal != SignalAction.HOLD else 0.0
     portfolio_heat = adj.get("portfolio_heat_pct", 0.0)
     expected_val = adj.get("expected_value", 0.0)
@@ -535,25 +540,38 @@ async def run_stage5_gemini_arbiter(
     discount_pct_val = deriv_dict.get("sweep_discount_pct", 0.0)
 
     # Dynamic Leverage Recommendation Engine:
-    # Scale between 3x and 10x based on Trade Grade, Consensus Conviction & Volatility:
+    # Strictly align leverage with Conviction & Setup Quality to prevent outsized losses:
     rec_leverage = 3
     if signal != SignalAction.HOLD:
-        if trade_grade == "A+" or consensus_confidence >= 85.0:
-            rec_leverage = 10
-        elif trade_grade == "A" or consensus_confidence >= 78.0:
-            rec_leverage = 7
-        elif consensus_confidence >= 70.0:
+        if consensus_confidence >= 85.0 and trade_grade == "A+":
+            rec_leverage = 8
+        elif consensus_confidence >= 78.0:
             rec_leverage = 5
-        elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
+        elif consensus_confidence >= 70.0:
             rec_leverage = 4
         else:
+            # 65.0 - 69.9% lower conviction trades taken at low 3x leverage
             rec_leverage = 3
 
         atr_pct_val = float(atr_plan.get("atr_pct", 2.0)) if isinstance(atr_plan, dict) else 2.0
-        if atr_pct_val >= 3.5:
+        if atr_pct_val >= 2.8:
+            rec_leverage = min(rec_leverage, 3)
+        elif atr_pct_val >= 2.0:
             rec_leverage = min(rec_leverage, 5)
     else:
         rec_leverage = 1
+
+    # Mathematical Risk:Reward & Directional Target Geometry Guard:
+    # Ensure TP1 distance is AT LEAST 1.45x SL distance and matches signal direction
+    risk_dist = abs(entry - sl) if (sl and entry) else 0.0
+    reward_dist = abs(tp1 - entry) if (tp1 and entry) else 0.0
+    measured_rr = (reward_dist / risk_dist) if risk_dist > 0 else 0.0
+
+    # If LLM thesis gave inverted or weak R:R (< 1.45), enforce institutional ATR target geometry
+    if measured_rr < 1.45 or not tp1 or not sl:
+        tp1 = atr_plan["take_profit_1"]
+        tp2 = atr_plan["take_profit_2"]
+        sl = atr_plan["stop_loss"]
 
     exec_plan = {
         "recommended_entry": entry,
