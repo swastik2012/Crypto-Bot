@@ -272,9 +272,9 @@ async def run_stage5_gemini_arbiter(
                 (openai_score * 0.25),
                 1
             )
-            if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+            if consensus_confidence >= 80.0 and fakeout_risk < 35.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_SELL
-            elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+            elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and fakeout_risk < 50.0:
                 signal = SignalAction.SELL
             else:
                 signal = SignalAction.HOLD
@@ -362,9 +362,9 @@ async def run_stage5_gemini_arbiter(
                 else:
                     rs_mod = getattr(relative_strength, "long_conviction_modifier", 0.0)
                 consensus_confidence = max(20.0, min(98.0, round(consensus_confidence + rs_mod, 1)))
-            if consensus_confidence >= 85.0 and fakeout_risk < 30.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
+            if consensus_confidence >= 80.0 and fakeout_risk < 35.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_BUY
-            elif consensus_confidence >= 70.0 and fakeout_risk < 45.0:
+            elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and fakeout_risk < 50.0:
                 signal = SignalAction.BUY
             else:
                 signal = SignalAction.HOLD
@@ -383,10 +383,10 @@ async def run_stage5_gemini_arbiter(
         "You are Agent 5 (Chief Consensus Arbiter & Trade Synthesizer powered by Google Gemini). "
         "Your duty is to impartially reconcile the multi-agent debate across: "
         "Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (Quant Monte Carlo Proof), and Stage 4 (Devil's Advocate Risk Guard).\n\n"
-        "ARBITRATION MANDATES FOR MAXIMUM PROFITABILITY:\n"
-        "1. STRICT VETO COMPLIANCE: If Stage 4 flags false_breakout_probability >= 35.0%, safety_score < 65, OR Stage 3 flags R:R < 2.0 or negative EV, you MUST issue 'HOLD' (Neutral Stand Aside) to prevent capital destruction.\n"
-        "2. HIGH CONVICTION CRITERIA: Issue 'STRONG BUY' or 'STRONG SELL' only when consensus agreement >= 85.0%, multi-timeframe concordance is at least 2/3, and zero critical macro trap alerts.\n"
-        "3. PROFIT HARVESTING DISCIPLINE: Provide concise institutional synthesis, exact TP1 (+7.8% - +8.5%, 50% scale-out with stop locked to break-even), TP2 (+15.0% - +18.0% runner), and precise structural invalidation.\n\n"
+        "ARBITRATION MANDATES FOR BALANCED PROFITABILITY:\n"
+        f"1. RISK VETO COMPLIANCE: If Stage 4 flags false_breakout_probability >= 50.0%, safety_score < 55, OR Stage 3 flags R:R < 1.3 or severe negative EV, issue 'HOLD' (Neutral Stand Aside).\n"
+        f"2. CONVICTION CRITERIA: Issue 'BUY' or 'SELL' on constructive directional setups when consensus agreement >= {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}% and R:R >= 1.3. Issue 'STRONG BUY' or 'STRONG SELL' when consensus agreement >= 80.0%, multi-timeframe concordance is at least 2/3, and zero critical macro trap alerts.\n"
+        "3. PROFIT HARVESTING DISCIPLINE: Provide concise institutional synthesis, exact TP1 (2.0x ATR, 50% scale-out with trailing stop locked), TP2 (4.0x ATR runner), and precise structural invalidation.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "consensus_signal": "STRONG BUY" | "BUY" | "HOLD" | "SELL" | "STRONG SELL",\n'
@@ -508,12 +508,14 @@ async def run_stage5_gemini_arbiter(
     equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
     
     # Conviction-driven capital scaling (Phase 3)
-    if consensus_confidence >= 88.0:
+    if consensus_confidence >= 85.0:
         target_pct = 0.15
-    elif consensus_confidence >= 82.0:
+    elif consensus_confidence >= 78.0:
         target_pct = 0.11
-    else:
+    elif consensus_confidence >= 70.0:
         target_pct = 0.08
+    else:
+        target_pct = 0.06
     default_pos_size = max(400.0, round(equity * target_pct, 2))
 
     adj = stage3.adjustments_proposed if isinstance(stage3.adjustments_proposed, dict) else {}
@@ -536,12 +538,14 @@ async def run_stage5_gemini_arbiter(
     # Scale between 3x and 10x based on Trade Grade, Consensus Conviction & Volatility:
     rec_leverage = 3
     if signal != SignalAction.HOLD:
-        if trade_grade == "A+" or consensus_confidence >= 88.0:
+        if trade_grade == "A+" or consensus_confidence >= 85.0:
             rec_leverage = 10
-        elif trade_grade == "A" or consensus_confidence >= 82.0:
+        elif trade_grade == "A" or consensus_confidence >= 78.0:
             rec_leverage = 7
-        elif consensus_confidence >= 75.0:
+        elif consensus_confidence >= 70.0:
             rec_leverage = 5
+        elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
+            rec_leverage = 4
         else:
             rec_leverage = 3
 
@@ -705,6 +709,7 @@ async def run_stage5_gemini_arbiter(
             "effective_rr": stage3.risk_reward_ratio,
             "entry": entry,
             "take_profit_1": tp1,
+            "take_profit_2": tp2,
             "stop_loss": sl,
         },
     )

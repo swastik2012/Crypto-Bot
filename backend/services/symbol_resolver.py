@@ -116,16 +116,29 @@ CURRENCY_RATES = {
     "AED": 3.67,
 }
 
+COINGECKO_ID_MAP: Dict[str, str] = {
+    "bitcoin": "BTC",
+    "ethereum": "ETH",
+    "solana": "SOL",
+    "avalanche-2": "AVAX",
+    "ripple": "XRP",
+    "binancecoin": "BNB",
+    "cardano": "ADA",
+    "dogecoin": "DOGE",
+}
+
 class CryptoSymbolResolver:
     def __init__(self):
         self.pairs_db = DEFAULT_CRYPTO_PAIRS
         self.alias_to_entry: Dict[str, Dict] = {}
         self.currency_rates: Dict[str, float] = dict(CURRENCY_RATES)
         self.last_forex_sync: float = 0.0
+        self.last_price_sync: float = 0.0
+        self._price_sync_ttl: float = 5.0
         self._build_indexes()
         # Fetch live Binance ticker prices & Forex rates
         try:
-            self.refresh_live_binance_prices()
+            self.refresh_live_binance_prices(force=True)
             self.refresh_live_forex_rates()
         except Exception:
             pass
@@ -174,32 +187,109 @@ class CryptoSymbolResolver:
 
         return self.currency_rates
 
-    def refresh_live_binance_prices(self):
-        try:
-            symbols_query = '["BTCUSDT","ETHUSDT","SOLUSDT","AVAXUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT"]'
-            url = f"https://api.binance.com/api/v3/ticker/24hr?symbols={symbols_query}"
-            with httpx.Client(timeout=3.0) as client:
-                resp = client.get(url)
+    @staticmethod
+    def _format_volume_usd(vol: float) -> str:
+        if vol >= 1e9:
+            return f"${vol / 1e9:.1f}B"
+        return f"${vol / 1e6:.1f}M"
+
+    def _apply_binance_tickers(self, data: List[Dict]) -> bool:
+        updated = False
+        by_sym = {entry["symbol"]: entry for entry in self.pairs_db}
+        for item in data:
+            raw_sym = str(item.get("symbol", ""))
+            sym = raw_sym[:-4] if raw_sym.endswith("USDT") else raw_sym
+            entry = by_sym.get(sym)
+            if not entry:
+                continue
+            last_price = float(item.get("lastPrice", 0) or 0)
+            if last_price <= 0:
+                continue
+            entry["base_price"] = last_price
+            entry["change_24h"] = round(float(item.get("priceChangePercent", entry["change_24h"]) or 0), 2)
+            high_p = float(item.get("highPrice", 0) or 0)
+            low_p = float(item.get("lowPrice", 0) or 0)
+            if high_p > 0:
+                entry["high24h"] = high_p
+            if low_p > 0:
+                entry["low24h"] = low_p
+            vol = float(item.get("quoteVolume", 0) or 0)
+            if vol > 0:
+                entry["volume_24h"] = self._format_volume_usd(vol)
+            updated = True
+        return updated
+
+    def _apply_coingecko_prices(self, data: Dict) -> bool:
+        updated = False
+        by_sym = {entry["symbol"]: entry for entry in self.pairs_db}
+        for cg_id, sym in COINGECKO_ID_MAP.items():
+            info = data.get(cg_id)
+            entry = by_sym.get(sym)
+            if not info or not entry:
+                continue
+            price = float(info.get("usd", 0) or 0)
+            if price <= 0:
+                continue
+            entry["base_price"] = price
+            if "usd_24h_change" in info and info["usd_24h_change"] is not None:
+                entry["change_24h"] = round(float(info["usd_24h_change"]), 2)
+            if "usd_24h_vol" in info and info["usd_24h_vol"]:
+                entry["volume_24h"] = self._format_volume_usd(float(info["usd_24h_vol"]))
+            entry["high24h"] = round(price * 1.02, 4 if price < 1 else 2)
+            entry["low24h"] = round(price * 0.98, 4 if price < 1 else 2)
+            updated = True
+        return updated
+
+    def refresh_live_binance_prices(self, force: bool = False):
+        now = time.time()
+        if not force and (now - self.last_price_sync) < self._price_sync_ttl:
+            return
+
+        symbols_query = '["BTCUSDT","ETHUSDT","SOLUSDT","AVAXUSDT","XRPUSDT","BNBUSDT","ADAUSDT","DOGEUSDT"]'
+        binance_urls = [
+            f"https://data-api.binance.vision/api/v3/ticker/24hr?symbols={symbols_query}",
+            f"https://api.binance.com/api/v3/ticker/24hr?symbols={symbols_query}",
+        ]
+        timeout_cfg = httpx.Timeout(2.5, connect=1.2)
+
+        with httpx.Client(timeout=timeout_cfg) as client:
+            for url in binance_urls:
+                try:
+                    resp = client.get(url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, list) and self._apply_binance_tickers(data):
+                            self._build_indexes()
+                            self.last_price_sync = now
+                            return
+                except Exception as e:
+                    print(f"[SymbolResolver] Live price sync notice ({url.split('/')[2]}): {e}")
+
+            # Fallback to CoinGecko batch price endpoint if Binance mirrors are unreachable
+            try:
+                cg_ids = ",".join(COINGECKO_ID_MAP.keys())
+                cg_url = (
+                    f"https://api.coingecko.com/api/v3/simple/price"
+                    f"?ids={cg_ids}&vs_currencies=usd&include_24hr_change=true&include_24hr_vol=true"
+                )
+                resp = client.get(cg_url)
                 if resp.status_code == 200:
                     data = resp.json()
-                    for item in data:
-                        sym = item["symbol"].replace("USDT", "")
-                        for entry in self.pairs_db:
-                            if entry["symbol"] == sym:
-                                entry["base_price"] = float(item["lastPrice"])
-                                entry["change_24h"] = round(float(item["priceChangePercent"]), 2)
-                                entry["high24h"] = float(item["highPrice"])
-                                entry["low24h"] = float(item["lowPrice"])
-                                vol = float(item["quoteVolume"])
-                                if vol >= 1e9:
-                                    entry["volume_24h"] = f"${vol/1e9:.1f}B"
-                                else:
-                                    entry["volume_24h"] = f"${vol/1e6:.1f}M"
-                    self._build_indexes()
-        except Exception as e:
-            print(f"[SymbolResolver] Live price sync notice: {e}")
+                    if isinstance(data, dict) and self._apply_coingecko_prices(data):
+                        self._build_indexes()
+                        self.last_price_sync = now
+                        return
+            except Exception as e:
+                print(f"[SymbolResolver] CoinGecko fallback sync notice: {e}")
+
+        # Brief backoff on total offline failure so repeated calls don't hang
+        self.last_price_sync = now
 
     def resolve(self, query: str, preferred_quote: str = "USDT", limit: int = 6) -> SymbolSearchResponse:
+        try:
+            self.refresh_live_binance_prices()
+        except Exception:
+            pass
         cleaned_query = query.strip().lower()
         if not cleaned_query:
             results = [
@@ -246,7 +336,10 @@ class CryptoSymbolResolver:
         quote = preferred_quote.upper()
         rate = CURRENCY_RATES.get(quote, 1.0)
         converted_price = entry["base_price"] * rate
-        
+        prec = 4 if converted_price < 1 else 2
+        high_p = entry.get("high24h", entry["base_price"] * 1.02) * rate
+        low_p = entry.get("low24h", entry["base_price"] * 0.98) * rate
+
         pair_str = f"{entry['symbol']}/{quote}"
         return MatchedSymbol(
             symbol=entry["symbol"],
@@ -255,8 +348,10 @@ class CryptoSymbolResolver:
             quote_asset=quote,
             exchange=entry["exchange"],
             match_score=score,
-            current_price=round(converted_price, 4 if converted_price < 1 else 2),
+            current_price=round(converted_price, prec),
             change_24h=entry["change_24h"],
+            high_24h=round(high_p, prec),
+            low_24h=round(low_p, prec),
             volume_24h=entry["volume_24h"],
         )
 

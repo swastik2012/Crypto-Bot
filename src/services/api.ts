@@ -43,6 +43,8 @@ export interface SymbolSearchResult {
     match_score: number;
     current_price: number;
     change_24h: number;
+    high_24h?: number;
+    low_24h?: number;
     volume_24h: string;
   } | null;
   results: Array<{
@@ -54,6 +56,8 @@ export interface SymbolSearchResult {
     match_score: number;
     current_price: number;
     change_24h: number;
+    high_24h?: number;
+    low_24h?: number;
     volume_24h: string;
   }>;
 }
@@ -86,7 +90,7 @@ export interface AutoTraderStatus {
 }
 
 export const api = {
-  // 1. Fetch Real-time Live Ticker Prices (from Backend / Binance)
+  // 1. Fetch Real-time Live Ticker Prices (from Backend / Binance Vision)
   async fetchLiveTicker(symbol: string): Promise<LiveTicker | null> {
     try {
       const response = await fetch(`${API_BASE_URL}/api/search-symbol`, {
@@ -96,34 +100,42 @@ export const api = {
       });
       if (response.ok) {
         const data = await response.json();
-        if (data.best_match) {
+        const m = data?.best_match;
+        if (m && typeof m.current_price === 'number') {
+          const factor = m.current_price < 1 ? 10000 : 100;
           return {
-            symbol: data.best_match.symbol,
-            price: data.best_match.current_price,
-            change24h: data.best_match.change_24h,
-            high24h: Math.round(data.best_match.current_price * 1.02 * 100) / 100,
-            low24h: Math.round(data.best_match.current_price * 0.98 * 100) / 100,
-            volume24h: data.best_match.volume_24h,
+            symbol: m.symbol,
+            price: m.current_price,
+            change24h: m.change_24h,
+            high24h: m.high_24h ?? Math.round(m.current_price * 1.02 * factor) / factor,
+            low24h: m.low_24h ?? Math.round(m.current_price * 0.98 * factor) / factor,
+            volume24h: m.volume_24h,
           };
         }
       }
     } catch {
+      // Backend unreachable; fall through to direct market feed
+    }
+
+    const bSym = symbol.replace('/', '').toUpperCase();
+    const pairSym = bSym.includes('USDT') ? bSym : `${bSym}USDT`;
+    for (const host of ['https://data-api.binance.vision', 'https://api.binance.com']) {
       try {
-        const bSym = symbol.replace('/', '').toUpperCase();
-        const bResp = await fetch(`https://api.binance.com/api/v3/ticker/24hr?symbol=${bSym.includes('USDT') ? bSym : bSym + 'USDT'}`);
+        const bResp = await fetch(`${host}/api/v3/ticker/24hr?symbol=${pairSym}`);
         if (bResp.ok) {
           const bData = await bResp.json();
+          const quoteVol = parseFloat(bData.quoteVolume);
           return {
             symbol,
             price: parseFloat(bData.lastPrice),
             change24h: parseFloat(bData.priceChangePercent),
             high24h: parseFloat(bData.highPrice),
             low24h: parseFloat(bData.lowPrice),
-            volume24h: `$${(parseFloat(bData.quoteVolume) / 1e9).toFixed(1)}B`,
+            volume24h: quoteVol >= 1e9 ? `$${(quoteVol / 1e9).toFixed(1)}B` : `$${(quoteVol / 1e6).toFixed(1)}M`,
           };
         }
       } catch (err) {
-        console.warn('[API] Ticker fetch error:', err);
+        console.warn(`[API] Ticker fetch error (${host}):`, err);
       }
     }
     return null;

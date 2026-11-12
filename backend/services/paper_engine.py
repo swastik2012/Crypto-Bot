@@ -393,6 +393,9 @@ class VirtualPaperEngine:
                         side=pos.side,
                         entry_price=pos.entry_price,
                         exit_price=pos.take_profit_1,
+                        take_profit_1=pos.take_profit_1,
+                        take_profit_2=pos.take_profit_2,
+                        stop_loss=pos.stop_loss,
                         size_usd=round(half_notional, 2),
                         leverage=pos.leverage,
                         realized_pnl=round(gross_pnl, 2),
@@ -533,7 +536,7 @@ class VirtualPaperEngine:
             if pid in self.open_positions:
                 del self.open_positions[pid]
 
-        if positions_to_remove:
+        if positions_to_remove or closed_trades:
             self._save_to_disk()
 
         return closed_trades
@@ -581,6 +584,9 @@ class VirtualPaperEngine:
             side=pos.side,
             entry_price=pos.entry_price,
             exit_price=round(exit_price, 4 if exit_price < 1 else 2),
+            take_profit_1=pos.take_profit_1 or pos.tp1_hit_price,
+            take_profit_2=pos.take_profit_2,
+            stop_loss=pos.stop_loss,
             size_usd=pos.size_usd,
             leverage=pos.leverage,
             realized_pnl=round(gross_realized_pnl, 2),

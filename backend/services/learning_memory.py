@@ -7,6 +7,7 @@ from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 from backend.models.schemas import AITradeAuditPostMortem, EvolvingTradingRule, AIPlaybookSummary, PlaybookVetoSchema
 from backend.agents.trade_learning_agent import trade_learning_agent
+from backend.config import settings
 
 is_serverless = os.environ.get("VERCEL") == "1" or os.environ.get("AWS_LAMBDA_FUNCTION_NAME") is not None
 if is_serverless:
@@ -681,7 +682,7 @@ class LearningMemoryService:
                 "is_quarantined": False,
                 "tier": 0,
                 "reason": "No recent loss history for asset.",
-                "min_confidence_required": 82.0,
+                "min_confidence_required": settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD,
                 "min_volume_required": 1.0,
                 "cooldown_remaining_secs": 0,
             }
@@ -701,7 +702,7 @@ class LearningMemoryService:
                 "is_quarantined": False,
                 "tier": 0,
                 "reason": "Last closed trade was a WIN or BREAKEVEN.",
-                "min_confidence_required": 82.0,
+                "min_confidence_required": settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD,
                 "min_volume_required": 1.0,
                 "cooldown_remaining_secs": 0,
             }
@@ -737,7 +738,7 @@ class LearningMemoryService:
             "is_quarantined": False,
             "tier": 0,
             "reason": "Quarantine cooldown period expired.",
-            "min_confidence_required": 82.0,
+            "min_confidence_required": settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD,
             "min_volume_required": 1.0,
             "cooldown_remaining_secs": 0,
         }

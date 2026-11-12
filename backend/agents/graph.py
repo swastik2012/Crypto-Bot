@@ -159,7 +159,7 @@ class MultiAgentConsensusPipeline:
         )
         debate_stream.append(msg5)
 
-        # Execution Hook: If auto_execute is requested, consensus score >= 82%, macro lockout is NOT active, BTC Gatekeeper permits, and System 1/System 2 directionally agree
+        # Execution Hook: If auto_execute is requested, directional signal & consensus score >= AUTO_EXECUTE_CONFIDENCE_THRESHOLD (65%), macro lockout is NOT active, BTC Gatekeeper permits, and System 1/System 2 directionally agree
         executed_position: Optional[PaperPosition] = None
         auto_executed = False
 
@@ -182,8 +182,9 @@ class MultiAgentConsensusPipeline:
 
         if (
             auto_execute and
+            (is_buy_sig or is_sell_sig) and
             stage5_res.consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and
-            plan_rr >= 1.50 and
+            plan_rr >= 1.30 and
             not directional_conflict and
             not macro_status.lockout_active and
             not btc_block and
@@ -192,7 +193,10 @@ class MultiAgentConsensusPipeline:
         ):
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
             conf = stage5_res.consensus_confidence
-            target_pct = 0.15 if conf >= 88.0 else (0.11 if conf >= 82.0 else 0.08)
+            target_pct = (
+                0.15 if conf >= 85.0
+                else (0.11 if conf >= 78.0 else (0.08 if conf >= 70.0 else 0.06))
+            )
             default_fallback_size = max(400.0, round(account_eq * target_pct, 2))
             raw_pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
             pos_size = max(default_fallback_size, raw_pos_size) if raw_pos_size > 0 else default_fallback_size
@@ -210,7 +214,10 @@ class MultiAgentConsensusPipeline:
             # Dynamic Leverage Scaling (>3x up to max_leverage):
             plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
             if not plan_lev or int(plan_lev) < 1:
-                plan_lev = 10 if stage5_res.consensus_confidence >= 88.0 else (7 if stage5_res.consensus_confidence >= 82.0 else 5)
+                plan_lev = (
+                    10 if conf >= 85.0
+                    else (7 if conf >= 78.0 else (5 if conf >= 70.0 else 4))
+                )
             max_sys_lev = getattr(paper_engine, "max_leverage", 20)
             chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
 

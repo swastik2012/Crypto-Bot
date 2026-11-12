@@ -33,6 +33,8 @@ class MatchedSymbol(BaseModel):
     match_score: float
     current_price: float
     change_24h: float
+    high_24h: Optional[float] = None
+    low_24h: Optional[float] = None
     volume_24h: str
 
 class SymbolSearchRequest(BaseModel):
@@ -105,6 +107,9 @@ class PaperTradeRecord(BaseModel):
     side: PositionSide
     entry_price: float
     exit_price: float
+    take_profit_1: Optional[float] = None
+    take_profit_2: Optional[float] = None
+    stop_loss: Optional[float] = None
     size_usd: float
     leverage: int
     realized_pnl: float

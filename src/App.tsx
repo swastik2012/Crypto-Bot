@@ -211,7 +211,11 @@ export const App: React.FC = () => {
                       p.position_id === n.position_id &&
                       p.current_price === n.current_price &&
                       p.unrealized_pnl === n.unrealized_pnl &&
-                      p.size_usd === n.size_usd
+                      p.size_usd === n.size_usd &&
+                      p.stop_loss === n.stop_loss &&
+                      p.take_profit_1 === n.take_profit_1 &&
+                      p.take_profit_2 === n.take_profit_2 &&
+                      p.tp1_hit_price === n.tp1_hit_price
                     );
                   });
                   if (unchanged) return prev;
@@ -230,6 +234,7 @@ export const App: React.FC = () => {
                   liquidation_price: p.liquidation_price,
                   take_profit_1: p.take_profit_1,
                   take_profit_2: p.take_profit_2,
+                  tp1_hit_price: p.tp1_hit_price,
                   stop_loss: p.stop_loss,
                   trailing_stop_active: p.trailing_stop_active,
                   highest_price_seen: p.highest_price_seen,
@@ -262,6 +267,9 @@ export const App: React.FC = () => {
                   side: t.side,
                   entry_price: t.entry_price,
                   exit_price: t.exit_price,
+                  take_profit_1: t.take_profit_1,
+                  take_profit_2: t.take_profit_2,
+                  stop_loss: t.stop_loss,
                   size_usd: t.size_usd,
                   leverage: t.leverage,
                   realized_pnl: t.realized_pnl,
@@ -378,6 +386,8 @@ export const App: React.FC = () => {
           if (
             prev.price === ticker.price &&
             prev.change24h === ticker.change24h &&
+            prev.high24h === ticker.high24h &&
+            prev.low24h === ticker.low24h &&
             prev.volume24h === ticker.volume24h
           ) {
             return prev;
@@ -671,6 +681,9 @@ export const App: React.FC = () => {
         side: pos.side,
         entry_price: pos.entry_price,
         exit_price: pos.current_price,
+        take_profit_1: pos.take_profit_1 ?? pos.tp1_hit_price,
+        take_profit_2: pos.take_profit_2,
+        stop_loss: pos.stop_loss,
         size_usd: pos.size_usd,
         leverage: pos.leverage,
         realized_pnl: pos.unrealized_pnl,

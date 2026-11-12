@@ -53,14 +53,20 @@ class MarketDataService:
         if not clean_sym.endswith("USDT") and not clean_sym.endswith("BUSD"):
             clean_sym += "USDT"
 
-        url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval={interval}&limit={limit}"
-        try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    return resp.json()
-        except Exception as e:
-            print(f"[MarketDataService] Binance klines notice ({symbol} {interval}): {e}")
+        urls = [
+            f"https://data-api.binance.vision/api/v3/klines?symbol={clean_sym}&interval={interval}&limit={limit}",
+            f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval={interval}&limit={limit}",
+        ]
+        async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.2)) as client:
+            for url in urls:
+                try:
+                    resp = await client.get(url)
+                    if resp.status_code == 200:
+                        data = resp.json()
+                        if isinstance(data, list) and data:
+                            return data
+                except Exception as e:
+                    print(f"[MarketDataService] Binance klines notice ({symbol} {interval} via {url.split('/')[2]}): {e}")
 
         return []
 
@@ -614,22 +620,36 @@ class MarketDataService:
         bench_change = override_benchmark_change
 
         if asset_change is None or bench_change is None:
-            try:
-                sym_to_fetch = clean_sym if clean_sym.endswith("USDT") else clean_sym + "USDT"
-                bench_to_fetch = clean_bench if clean_bench.endswith("USDT") else "BTCUSDT"
-                async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.5)) as client:
-                    if asset_change is None:
-                        url_asset = f"https://api.binance.com/api/v3/ticker/24hr?symbol={sym_to_fetch}"
-                        resp = await client.get(url_asset)
-                        if resp.status_code == 200:
-                            asset_change = float(resp.json().get("priceChangePercent", 0.0))
-                    if bench_change is None:
-                        url_bench = f"https://api.binance.com/api/v3/ticker/24hr?symbol={bench_to_fetch}"
-                        resp_b = await client.get(url_bench)
-                        if resp_b.status_code == 200:
-                            bench_change = float(resp_b.json().get("priceChangePercent", 0.0))
-            except Exception as e:
-                print(f"[MarketDataService] RS ticker fetch notice ({symbol}): {e}")
+            sym_to_fetch = clean_sym if clean_sym.endswith("USDT") else clean_sym + "USDT"
+            bench_to_fetch = clean_bench if clean_bench.endswith("USDT") else "BTCUSDT"
+            bases = ["https://data-api.binance.vision", "https://api.binance.com"]
+            async with httpx.AsyncClient(timeout=httpx.Timeout(2.5, connect=1.2)) as client:
+                for base_url in bases:
+                    if asset_change is not None and bench_change is not None:
+                        break
+                    try:
+                        if asset_change is None:
+                            resp = await client.get(f"{base_url}/api/v3/ticker/24hr?symbol={sym_to_fetch}")
+                            if resp.status_code == 200:
+                                asset_change = float(resp.json().get("priceChangePercent", 0.0))
+                        if bench_change is None:
+                            resp_b = await client.get(f"{base_url}/api/v3/ticker/24hr?symbol={bench_to_fetch}")
+                            if resp_b.status_code == 200:
+                                bench_change = float(resp_b.json().get("priceChangePercent", 0.0))
+                    except Exception as e:
+                        print(f"[MarketDataService] RS ticker fetch notice ({symbol} via {base_url.split('/')[2]}): {e}")
+
+            if asset_change is None or bench_change is None:
+                from backend.services.symbol_resolver import symbol_resolver
+                symbol_resolver.refresh_live_binance_prices()
+                if asset_change is None:
+                    r = symbol_resolver.resolve(symbol.split("/")[0], limit=1)
+                    if r.best_match:
+                        asset_change = r.best_match.change_24h
+                if bench_change is None:
+                    rb = symbol_resolver.resolve("BTC", limit=1)
+                    if rb.best_match:
+                        bench_change = rb.best_match.change_24h
 
         if asset_change is None:
             asset_change = 0.0

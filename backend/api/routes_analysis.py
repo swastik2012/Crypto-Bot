@@ -12,7 +12,7 @@ async def analyze_and_trade(req: AnalyzeAndTradeRequest):
     """
     Ingests Base64 chart screenshot, timeframe, and crypto pair.
     Runs the 4-stage LangChain / LangGraph consensus debate (Gemini Vision, NVIDIA NIM, OpenAI, Gemini Arbiter).
-    If auto_execute=True and consensus confidence >= 80%, executes virtual paper trade.
+    If auto_execute=True and consensus confidence >= AUTO_EXECUTE_CONFIDENCE_THRESHOLD (65%), executes virtual paper trade.
     """
     # Clean Base64 image payload if provided
     clean_b64 = ""

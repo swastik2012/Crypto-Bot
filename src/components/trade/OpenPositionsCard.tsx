@@ -32,6 +32,7 @@ export interface OpenPositionItem {
   liquidation_price: number;
   take_profit_1?: number;
   take_profit_2?: number;
+  tp1_hit_price?: number;
   stop_loss?: number;
   trailing_stop_active?: boolean;
   highest_price_seen?: number;
@@ -57,6 +58,9 @@ export interface TradeHistoryItem {
   side: 'LONG' | 'SHORT';
   entry_price: number;
   exit_price: number;
+  take_profit_1?: number;
+  take_profit_2?: number;
+  stop_loss?: number;
   size_usd: number;
   leverage: number;
   realized_pnl: number;
@@ -379,9 +383,19 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                             <Target className="w-3 h-3" /> TP1: {formatPrice(pos.take_profit_1)}
                           </span>
                         )}
+                        {!pos.take_profit_1 && pos.tp1_hit_price && (
+                          <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-300 font-bold">
+                            <Target className="w-3 h-3" /> TP1 Hit: {formatPrice(pos.tp1_hit_price)}
+                          </span>
+                        )}
+                        {pos.take_profit_2 && (
+                          <span className="flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold">
+                            <Target className="w-3 h-3" /> TP2: {formatPrice(pos.take_profit_2)}
+                          </span>
+                        )}
                         {pos.stop_loss && (
                           <span className="flex items-center gap-1 text-rose-700 dark:text-rose-400 font-bold">
-                            <ShieldAlert className="w-3 h-3" /> SL: {formatPrice(pos.stop_loss)}
+                            <ShieldAlert className="w-3 h-3" /> {pos.trailing_stop_active ? 'Trailing SL' : 'SL'}: {formatPrice(pos.stop_loss)}
                           </span>
                         )}
                         {pos.trailing_stop_active && (
@@ -529,6 +543,13 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                           <span className="text-[9px] text-slate-400 block font-bold uppercase">Exit Price</span>
                           <span className="font-bold text-cyan-600 dark:text-cyan-400">{formatPrice(item.exit_price)}</span>
                         </div>
+                        {(item.take_profit_1 || item.take_profit_2 || item.stop_loss) && (
+                          <div className="col-span-2 flex flex-wrap gap-2.5 pt-1 border-t border-slate-200/60 dark:border-white/5 text-[10px]">
+                            {item.take_profit_1 && <span className="text-emerald-600 dark:text-emerald-400 font-bold">TP1: {formatPrice(item.take_profit_1)}</span>}
+                            {item.take_profit_2 && <span className="text-emerald-600 dark:text-emerald-400 font-bold">TP2: {formatPrice(item.take_profit_2)}</span>}
+                            {item.stop_loss && <span className="text-rose-600 dark:text-rose-400 font-bold">SL: {formatPrice(item.stop_loss)}</span>}
+                          </div>
+                        )}
                       </div>
 
                       {/* Fees, Reason & Timestamp */}
@@ -563,6 +584,7 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                       <th className="py-2 px-3">Side / Lev</th>
                       <th className="py-2 px-3">Entry</th>
                       <th className="py-2 px-3">Exit</th>
+                      <th className="py-2 px-3">TP / SL</th>
                       <th className="py-2 px-3">Gross PnL</th>
                       <th className="py-2 px-3">Fees & TDS</th>
                       <th className="py-2 px-3">Net PnL</th>
@@ -593,6 +615,17 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
                           </td>
                           <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
                             {formatPrice(item.exit_price)}
+                          </td>
+                          <td className="py-2.5 px-3 text-[10px] whitespace-nowrap">
+                            {(item.take_profit_1 || item.take_profit_2 || item.stop_loss) ? (
+                              <div className="space-y-0.5">
+                                {item.take_profit_1 && <div className="text-emerald-600 dark:text-emerald-400 font-bold">TP1: {formatPrice(item.take_profit_1)}</div>}
+                                {item.take_profit_2 && <div className="text-emerald-600 dark:text-emerald-400 font-bold">TP2: {formatPrice(item.take_profit_2)}</div>}
+                                {item.stop_loss && <div className="text-rose-600 dark:text-rose-400 font-bold">SL: {formatPrice(item.stop_loss)}</div>}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
                           </td>
                           <td className="py-2.5 px-3 font-bold text-slate-700 dark:text-slate-300">
                             {grossPnl >= 0 ? '+' : '-'}{formatPrice(Math.abs(grossPnl))}

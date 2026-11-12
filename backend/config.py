@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     DEFAULT_MAX_LEVERAGE: int = 20
     
     # Consensus Threshold for Auto-Execution
-    AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 75.0
+    AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 65.0
 
     class Config:
         env_file = str(backend_env) if backend_env.exists() else None

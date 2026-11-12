@@ -112,7 +112,7 @@ async def run_stage3_nvidia_nim(
             mc_win_rate = round(min(max((sim_wins / trials) * 100.0, 78.0), 94.5), 1)
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(78.0 + (calculated_rr * 7.5), 98.0), 1)
-            verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
+            verdict = "VERIFIED_PASS" if calculated_rr >= 1.50 else ("ADJUST_SIZE" if calculated_rr >= 1.30 else "REJECT")
             kelly_res = risk_engine.calculate_volatility_adjusted_size(
                 total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
                 win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
@@ -165,7 +165,7 @@ async def run_stage3_nvidia_nim(
             mc_win_rate = round(min(max((sim_wins / trials) * 100.0, 68.5), 84.0), 1)
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(72.0 + (calculated_rr * 7.5), 92.0), 1)
-            verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
+            verdict = "VERIFIED_PASS" if calculated_rr >= 1.50 else ("ADJUST_SIZE" if calculated_rr >= 1.30 else "REJECT")
             kelly_res = risk_engine.calculate_volatility_adjusted_size(
                 total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
                 win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
@@ -257,7 +257,7 @@ async def run_stage3_nvidia_nim(
             mc_win_rate = round(min(max((sim_wins / trials) * 100.0, 80.0), 96.0), 1)
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(78.0 + (calculated_rr * 7.8), 98.0), 1)
-            verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
+            verdict = "VERIFIED_PASS" if calculated_rr >= 1.50 else ("ADJUST_SIZE" if calculated_rr >= 1.30 else "REJECT")
             kelly_res = risk_engine.calculate_volatility_adjusted_size(
                 total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
                 win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
@@ -310,7 +310,7 @@ async def run_stage3_nvidia_nim(
             mc_win_rate = round(min(max((sim_wins / trials) * 100.0, 70.0), 85.0), 1)
             ev = round(((mc_win_rate / 100.0) * reward) - ((1.0 - (mc_win_rate / 100.0)) * risk), 2)
             stress_score = round(min(74.0 + (calculated_rr * 7.8), 94.0), 1)
-            verdict = "VERIFIED_PASS" if calculated_rr >= 2.0 else ("ADJUST_SIZE" if calculated_rr >= 1.8 else "REJECT")
+            verdict = "VERIFIED_PASS" if calculated_rr >= 1.50 else ("ADJUST_SIZE" if calculated_rr >= 1.30 else "REJECT")
             kelly_res = risk_engine.calculate_volatility_adjusted_size(
                 total_equity=equity, entry_price=current_price, stop_loss=stop_loss, take_profit_1=target1,
                 win_probability=mc_win_rate / 100.0, volatility_regime=vol_regime, atr_pct=atr_pct_val,
@@ -339,11 +339,11 @@ async def run_stage3_nvidia_nim(
         "You are the Principal Quantitative Risk & Mathematical Engine for an autonomous AI crypto hedge fund. "
         "Your task is to mathematically stress-test the proposed technical setup from Stage 1 and macro sentiment from Stage 2 "
         "using Monte Carlo path simulations (10,000 iterations), Expected Value calculations, and liquidity depth modeling.\n\n"
-        "QUANTITATIVE MANDATES FOR MAXIMUM PROFITABILITY:\n"
-        "1. ASYMMETRIC HURDLE RATE: Calculate exact Risk:Reward ratio. The setup MUST achieve at least 1:2.2 R:R to TP1. If R:R < 2.0, verdict MUST be 'REJECT' or 'ADJUST_SIZE'.\n"
-        "2. EXPECTED VALUE (EV) PROOF: Compute EV = (Win_Rate * Potential_Gain) - (Loss_Rate * Potential_Loss). EV must be strictly positive (> +5.5% expected value).\n"
-        "3. MONTE CARLO STRESS TEST: Simulate 10,000 price paths. Win rate must clear >= 65% with news weighting. Reject low-conviction chop.\n"
-        "4. CAPITAL ALLOCATION: Adjust position sizing according to account margin availability and market volatility (standard 8% margin budget, max 3x leverage).\n\n"
+        "QUANTITATIVE MANDATES FOR BALANCED PROFITABILITY:\n"
+        "1. ASYMMETRIC HURDLE RATE: Calculate exact Risk:Reward ratio. Target at least 1:1.5 R:R to TP1 (use 'ADJUST_SIZE' for 1.3-1.49x; 'REJECT' only if R:R < 1.3).\n"
+        "2. EXPECTED VALUE (EV) PROOF: Compute EV = (Win_Rate * Potential_Gain) - (Loss_Rate * Potential_Loss). EV must be positive (> 0.0).\n"
+        "3. MONTE CARLO STRESS TEST: Simulate 10,000 price paths. Win rate should clear >= 55% with news weighting. Reject only flat low-conviction chop.\n"
+        "4. CAPITAL ALLOCATION: Adjust position sizing according to account margin availability and market volatility (standard 6-12% margin budget).\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
         '  "stress_test_score": float (0.0 to 100.0),\n'

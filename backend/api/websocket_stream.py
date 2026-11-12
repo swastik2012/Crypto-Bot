@@ -1,11 +1,9 @@
 import asyncio
-import json
-import random
 import time
 from typing import Set
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from backend.services.paper_engine import paper_engine
-from backend.services.symbol_resolver import DEFAULT_CRYPTO_PAIRS
+from backend.services.symbol_resolver import symbol_resolver
 
 router = APIRouter(tags=["WebSocket Real-Time Stream"])
 
@@ -41,14 +39,10 @@ async def websocket_endpoint(websocket: WebSocket):
             "account_state": paper_engine.get_state().dict(),
         })
 
-        # Keep connection alive while broadcasting simulated ticks
+        # Keep connection alive while broadcasting live market ticks
         while True:
-            # Generate minor random price jitter for simulated real-time market movement
-            price_map = {}
-            for entry in DEFAULT_CRYPTO_PAIRS:
-                jitter = random.uniform(-0.0015, 0.0015)
-                entry["base_price"] = round(entry["base_price"] * (1.0 + jitter), 2 if entry["base_price"] > 1 else 4)
-                price_map[entry["symbol"]] = entry["base_price"]
+            symbol_resolver.refresh_live_binance_prices()
+            price_map = {entry["symbol"]: entry["base_price"] for entry in symbol_resolver.pairs_db}
 
             # Evaluate paper trading SL/TP triggers
             closed_trades = paper_engine.evaluate_price_ticks(price_map)
@@ -62,7 +56,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 "closed_trades_events": [t.dict() for t in closed_trades] if closed_trades else [],
             })
 
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(5.0)
 
     except WebSocketDisconnect:
         manager.disconnect(websocket)

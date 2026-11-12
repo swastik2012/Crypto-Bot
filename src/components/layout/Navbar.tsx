@@ -116,45 +116,47 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // Instant client filter + debounced backend fuzzy lookup
+  // Instant client filter + live backend price lookup
   useEffect(() => {
     const q = searchQuery.trim().toLowerCase();
     if (!q) {
       setSearchResults(assets);
-      return;
+    } else {
+      const localFiltered = assets.filter(
+        (a) => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.pair.toLowerCase().includes(q)
+      );
+      setSearchResults(localFiltered.length > 0 ? localFiltered : assets);
     }
 
-    // Instant local filter
-    const localFiltered = assets.filter(
-      (a) => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q) || a.pair.toLowerCase().includes(q)
-    );
-    setSearchResults(localFiltered.length > 0 ? localFiltered : assets);
+    if (!q && !assetDropdownOpen) return;
 
-    // Debounced backend fetch
     const timer = setTimeout(async () => {
       try {
         const res = await api.searchSymbol(searchQuery);
         if (res && res.results && res.results.length > 0) {
-          const mapped: CryptoAsset[] = res.results.map((r) => ({
-            symbol: r.symbol,
-            name: r.base_asset,
-            pair: r.pair,
-            price: r.current_price,
-            change24h: r.change_24h,
-            high24h: Math.round(r.current_price * 1.04 * 100) / 100,
-            low24h: Math.round(r.current_price * 0.96 * 100) / 100,
-            volume24h: r.volume_24h,
-            icon: r.symbol === 'BTC' ? '₿' : r.symbol === 'ETH' ? 'Ξ' : r.symbol === 'SOL' ? '◎' : r.symbol === 'AVAX' ? '▲' : r.symbol === 'XRP' ? '✕' : r.symbol === 'DOGE' ? 'Ð' : '◈',
-          }));
+          const mapped: CryptoAsset[] = res.results.map((r) => {
+            const factor = r.current_price < 1 ? 10000 : 100;
+            return {
+              symbol: r.symbol,
+              name: r.base_asset,
+              pair: r.pair,
+              price: r.current_price,
+              change24h: r.change_24h,
+              high24h: r.high_24h ?? Math.round(r.current_price * 1.04 * factor) / factor,
+              low24h: r.low_24h ?? Math.round(r.current_price * 0.96 * factor) / factor,
+              volume24h: r.volume_24h,
+              icon: r.symbol === 'BTC' ? '₿' : r.symbol === 'ETH' ? 'Ξ' : r.symbol === 'SOL' ? '◎' : r.symbol === 'AVAX' ? '▲' : r.symbol === 'XRP' ? '✕' : r.symbol === 'DOGE' ? 'Ð' : '◈',
+            };
+          });
           setSearchResults(mapped);
         }
       } catch (e) {
         console.warn('[Search] Backend search notice:', e);
       }
-    }, 120);
+    }, q ? 120 : 0);
 
     return () => clearTimeout(timer);
-  }, [searchQuery, assets]);
+  }, [searchQuery, assets, assetDropdownOpen]);
 
   // Format countdown string
   const formatCountdown = (seconds: number) => {

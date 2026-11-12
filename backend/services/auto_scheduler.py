@@ -16,7 +16,7 @@ class AutoTradingScheduler:
     - Iterates across monitored high-liquidity crypto pairs (BTC/USDT, ETH/USDT, SOL/USDT).
     - Automatically injects persistent open positions & previous trade history context into LangGraph.
     - Evaluates consensus conviction (Gemini 3.7 Flash, NVIDIA DeepSeek V4 Pro, OpenAI).
-    - If conviction >= 80% and not already exposed, auto-executes virtual paper trade and persists to disk.
+    - If conviction >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD (65%) and not already exposed, auto-executes virtual paper trade and persists to disk.
     """
 
     def __init__(self, interval_seconds: int = 1800):
@@ -275,13 +275,14 @@ class AutoTradingScheduler:
                 is_buy = signal.value in ["STRONG BUY", "BUY"]
 
                 # 🔄 AUTOMATIC TREND FLIP / INVERSION:
-                # If we hold a legacy SHORT but new consensus is a strong BUY (>= 80%), auto-close the short to catch the long!
+                # If we hold a legacy SHORT but new consensus is a strong BUY (>= 72%), auto-close the short to catch the long!
+                trend_flip_threshold = settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD + 7.0
                 if existing_pos:
-                    if existing_pos.side == PositionSide.SHORT and is_buy and confidence >= 80.0:
+                    if existing_pos.side == PositionSide.SHORT and is_buy and confidence >= trend_flip_threshold:
                         print(f"[AutoTrader Trend Flip] Auto-closing legacy SHORT {pair} to flip into high-conviction BUY ({confidence}%).")
                         paper_engine.close_position_manually(existing_pos.position_id, current_price)
                         existing_pos = None
-                    elif existing_pos.side == PositionSide.LONG and is_short and confidence >= 80.0:
+                    elif existing_pos.side == PositionSide.LONG and is_short and confidence >= trend_flip_threshold:
                         print(f"[AutoTrader Trend Flip] Auto-closing legacy LONG {pair} to flip into high-conviction SELL ({confidence}%).")
                         paper_engine.close_position_manually(existing_pos.position_id, current_price)
                         existing_pos = None
@@ -299,9 +300,9 @@ class AutoTradingScheduler:
                     if getattr(deepseek_stage.toxic_flow_detected, "value", False):
                         deepseek_gate_pass = False
                         print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek detected toxic predatory flow.")
-                    elif not getattr(deepseek_stage.high_probability_edge, "value", True):
+                    elif not getattr(deepseek_stage.high_probability_edge, "value", True) and confidence < settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
                         deepseek_gate_pass = False
-                        print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek found no statistically significant edge.")
+                        print(f"[AutoTrader DeepSeek Gate] {pair} entry blocked: NVIDIA DeepSeek found no statistically significant edge ({confidence:.1f}% < {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}%).")
 
                     # Directional Agreement Guard between System 1 (DeepSeek) & System 2 (Arbiter):
                     deepseek_bias = str(getattr(deepseek_stage.execution_bias, "value", "NEUTRAL")).upper()
@@ -360,13 +361,13 @@ class AutoTradingScheduler:
                         print(f"[AutoTrader Quarantine Gate] {pair} entry blocked: {quarantine_status['reason']} (Current Conf={confidence}%, Vol={curr_vol:.2f}x)")
 
                 # ========================================================
-                # 🛑 RISK GUARD 9: Minimum Risk-to-Reward Ratio (>= 1.50x)
+                # 🛑 RISK GUARD 9: Minimum Risk-to-Reward Ratio (>= 1.30x)
                 # ========================================================
                 plan = response.stage5.execution_plan
                 plan_rr = float(plan.get("risk_reward_ratio", 1.5) if isinstance(plan, dict) else getattr(plan, "risk_reward_ratio", 1.5) or 1.5)
-                rr_gate_pass = plan_rr >= 1.50
+                rr_gate_pass = plan_rr >= 1.30
                 if not rr_gate_pass:
-                    print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.50x requirement.")
+                    print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.30x requirement.")
 
                 can_execute = (
                     confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and
@@ -382,11 +383,17 @@ class AutoTradingScheduler:
                     rr_gate_pass
                 )
 
+                plan_tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
+                plan_tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
+                plan_sl = plan.get("stop_loss") if isinstance(plan, dict) else getattr(plan, "stop_loss", None)
+
                 if can_execute:
-                    plan = response.stage5.execution_plan
                     eq = float(paper_engine.total_equity or paper_engine.cash_balance or 10000.0)
                     avail_cash = float(paper_engine.cash_balance or 0.0)
-                    target_pct = 0.15 if confidence >= 88.0 else (0.11 if confidence >= 82.0 else 0.08)
+                    target_pct = (
+                        0.15 if confidence >= 85.0
+                        else (0.11 if confidence >= 78.0 else (0.08 if confidence >= 70.0 else 0.06))
+                    )
                     default_auto_size = max(400.0, round(eq * target_pct, 2))
                     raw_pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
                     pos_size = max(default_auto_size, raw_pos_size) if raw_pos_size > 0 else default_auto_size
@@ -396,7 +403,10 @@ class AutoTradingScheduler:
                     usable_cash = max(100.0, avail_cash - safe_cash_buffer)
                     plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
                     if not plan_lev or int(plan_lev) < 1:
-                        plan_lev = 10 if confidence >= 88.0 else (7 if confidence >= 82.0 else 5)
+                        plan_lev = (
+                            10 if confidence >= 85.0
+                            else (7 if confidence >= 78.0 else (5 if confidence >= 70.0 else 4))
+                        )
                     max_sys_lev = getattr(paper_engine, "max_leverage", 20)
                     chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
                     if (pos_size / chosen_leverage) > usable_cash:
@@ -421,9 +431,9 @@ class AutoTradingScheduler:
                     default_tp2 = atr_fallbacks["take_profit_2"]
                     default_sl = atr_fallbacks["stop_loss"]
 
-                    tp1 = plan.get("take_profit_1") or default_tp1 if isinstance(plan, dict) else (getattr(plan, "take_profit_1", None) or default_tp1)
-                    tp2 = plan.get("take_profit_2") or default_tp2 if isinstance(plan, dict) else (getattr(plan, "take_profit_2", None) or default_tp2)
-                    sl = plan.get("stop_loss") or default_sl if isinstance(plan, dict) else (getattr(plan, "stop_loss", None) or default_sl)
+                    tp1 = plan_tp1 or default_tp1
+                    tp2 = plan_tp2 or default_tp2
+                    sl = plan_sl or default_sl
 
                     # Sanity check: Ensure SL is directionally sound
                     if is_short and sl <= entry_p:
@@ -431,18 +441,13 @@ class AutoTradingScheduler:
                     elif not is_short and sl >= entry_p:
                         sl = default_sl
 
+                    plan_tp1, plan_tp2, plan_sl = tp1, tp2, sl
+
                     atr_val = plan.get("atr_14") if isinstance(plan, dict) else None
                     chandelier_mult = plan.get("chandelier_multiplier", 2.5) if isinstance(plan, dict) else 2.5
                     order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
                     wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
                     discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
-
-                    # Dynamic Leverage Scaling (>3x up to max_leverage):
-                    plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
-                    if not plan_lev or int(plan_lev) < 1:
-                        plan_lev = 10 if confidence >= 88.0 else (7 if confidence >= 82.0 else 5)
-                    max_sys_lev = getattr(paper_engine, "max_leverage", 20)
-                    chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
 
                     exec_time_ms = round((time.time() - pair_start_time) * 1000, 1)
                     order_req = PlacePaperOrderRequest(
@@ -466,7 +471,7 @@ class AutoTradingScheduler:
                     pos = paper_engine.execute_order(order_req, current_price)
                     executed = True
                     pos_info = pos.dict()
-                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} with {chosen_leverage}x leverage in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, {confidence}% conviction)")
+                    print(f"[AutoTrader Cycle #{self.cycle_count}] AUTO-EXECUTED {order_side.value} {pair} @ ${entry_p:,.2f} with {chosen_leverage}x leverage in {exec_time_ms}ms (SL: ${sl}, TP1: ${tp1}, TP2: ${tp2}, {confidence}% conviction)")
                 else:
                     skip_reason = None
                     if already_open:
@@ -499,6 +504,9 @@ class AutoTradingScheduler:
                     "price": current_price,
                     "signal": signal.value,
                     "confidence": confidence,
+                    "take_profit_1": plan_tp1,
+                    "take_profit_2": plan_tp2,
+                    "stop_loss": plan_sl,
                     "executed": executed,
                     "position": pos_info,
                     "already_open": already_open,
