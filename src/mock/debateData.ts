@@ -35,10 +35,17 @@ export function getMockPipelineData(
     isShort = true;
   }
 
-  // Swing calibrated targets: TP1 7.8%, TP2 15.0%, SL 3.4% (R:R > 1:2.29)
-  const target1 = isShort ? Math.round(p * 0.922 * 100) / 100 : Math.round(p * 1.078 * 100) / 100;
-  const target2 = isShort ? Math.round(p * 0.850 * 100) / 100 : Math.round(p * 1.150 * 100) / 100;
-  const stopLoss = isShort ? Math.round(p * 1.034 * 100) / 100 : Math.round(p * 0.966 * 100) / 100;
+  // Champion Strategy Dynamic ATR Geometry (TP1 1.80x SL, TP2 4.50x SL, SL 1.6x ATR)
+  const high = asset.high24h || p * 1.025;
+  const low = asset.low24h || p * 0.975;
+  const atr = Math.max(p * 0.015, Math.abs(high - low) * 0.5);
+  const slDist = Math.min(p * 0.025, atr * 1.6);
+  const tp1Dist = slDist * 1.8;
+  const tp2Dist = slDist * 4.5;
+
+  const target1 = isShort ? Math.round((p - tp1Dist) * 100) / 100 : Math.round((p + tp1Dist) * 100) / 100;
+  const target2 = isShort ? Math.round((p - tp2Dist) * 100) / 100 : Math.round((p + tp2Dist) * 100) / 100;
+  const stopLoss = isShort ? Math.round((p + slDist) * 100) / 100 : Math.round((p - slDist) * 100) / 100;
 
   const patternName = isShort ? 'Bearish Supply Breakdown' : change < 0.2 ? 'Consolidation Range' : 'Ascending Triangle Breakout';
   const patternType = isShort ? 'bearish' : change < 0.2 ? 'neutral' : 'bullish';
@@ -204,7 +211,7 @@ export function getMockPipelineData(
         takeProfit1: target1,
         takeProfit2: target2,
         stopLoss: stopLoss,
-        effectiveRR: 2.29,
+        effectiveRR: 1.80,
         suggestedLeverage: '3x - 5x Cross',
         recommendedPositionUSD: 5000.0,
         timeHorizon: '12h - 48h (Swing)',
@@ -308,8 +315,8 @@ export const RECENT_SIGNALS_FEED: LiveSignalRecord[] = [
     timeframe: '1D',
     signal: 'STRONG BUY',
     consensusScore: 94.6,
-    entry: 78150.00,
-    target: 81432.30,
+    entry: 71700.00,
+    target: 74200.00,
     status: 'In Progress',
     pnlPercent: 1.85,
   },
@@ -320,8 +327,8 @@ export const RECENT_SIGNALS_FEED: LiveSignalRecord[] = [
     timeframe: '4H',
     signal: 'BUY',
     consensusScore: 89.2,
-    entry: 2448.00,
-    target: 2552.00,
+    entry: 2015.00,
+    target: 2110.00,
     status: 'In Progress',
     pnlPercent: 2.40,
   },
@@ -332,8 +339,8 @@ export const RECENT_SIGNALS_FEED: LiveSignalRecord[] = [
     timeframe: '1H',
     signal: 'STRONG BUY',
     consensusScore: 92.4,
-    entry: 95.80,
-    target: 99.80,
+    entry: 81.60,
+    target: 85.50,
     status: 'In Progress',
     pnlPercent: 3.15,
   },
@@ -344,8 +351,8 @@ export const RECENT_SIGNALS_FEED: LiveSignalRecord[] = [
     timeframe: '1D',
     signal: 'BUY',
     consensusScore: 87.0,
-    entry: 7.27,
-    target: 7.58,
+    entry: 8.30,
+    target: 8.75,
     status: 'Target Hit',
     pnlPercent: 4.26,
   },
@@ -356,8 +363,8 @@ export const RECENT_SIGNALS_FEED: LiveSignalRecord[] = [
     timeframe: '4H',
     signal: 'BUY',
     consensusScore: 85.5,
-    entry: 1.38,
-    target: 1.44,
+    entry: 1.03,
+    target: 1.08,
     status: 'In Progress',
     pnlPercent: 2.80,
   },

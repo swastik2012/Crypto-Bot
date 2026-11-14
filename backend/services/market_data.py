@@ -126,7 +126,7 @@ class MarketDataService:
     def _analyze_timeframe(self, klines: List[List], tf_label: str, current_price: float) -> TimeframeScreen:
         if not klines or len(klines) < 10:
             # High-fidelity mathematical synthesis if klines are unavailable
-            p = current_price or 78150.0
+            p = current_price or 71700.0
             trend_str = "NEUTRAL"
             rsi_val = 50.0
             return TimeframeScreen(
@@ -229,7 +229,7 @@ class MarketDataService:
             return_exceptions=True
         )
 
-        p = current_price or 78150.0
+        p = current_price or 71700.0
         if isinstance(k_15m, list) and k_15m:
             try:
                 p = float(k_15m[-1][4])
@@ -344,7 +344,7 @@ class MarketDataService:
         Replaces static percentages with dynamic volatility bands, eliminating wick-outs
         during high-volatility expansions and tightening risk during low-volatility regimes.
         """
-        p = current_price or 78150.0
+        p = current_price or 71700.0
         prec = 4 if p < 1.0 else 2
 
         if override_atr and override_atr > 0.0:
@@ -378,17 +378,17 @@ class MarketDataService:
         else:
             vol_regime = "Normal Volatility"
 
-        # 3. Calculate distance with safety clamping (0.9% min SL distance, strict 1.8% max SL distance)
+        # 3. Calculate distance with safety clamping (1.0% min SL distance, strict 2.0% max SL distance)
         # Prevents high-leverage outliers while maintaining volatility adaptation
-        sl_distance = max(p * 0.009, min(p * 0.018, atr * sl_multiplier))
-        tp1_distance = max(p * 0.015, max(sl_distance * 1.50, atr * tp1_multiplier))
-        tp2_distance = max(p * 0.030, max(sl_distance * 3.00, atr * tp2_multiplier))
+        sl_distance = max(p * 0.010, min(p * 0.020, atr * sl_multiplier))
+        tp1_distance = max(p * 0.018, max(sl_distance * 1.80, atr * tp1_multiplier))
+        tp2_distance = max(p * 0.045, max(sl_distance * 4.50, atr * tp2_multiplier))
 
-        # Guarantee strong asymmetric R:R (TP1 >= 1.50x SL, TP2 >= 3.00x SL)
-        if tp1_distance < (sl_distance * 1.50):
-            tp1_distance = round(sl_distance * 1.50, prec)
-        if tp2_distance < (sl_distance * 3.00):
-            tp2_distance = round(sl_distance * 3.00, prec)
+        # Guarantee strong asymmetric R:R (TP1 >= 1.80x SL, TP2 >= 4.50x SL)
+        if tp1_distance < (sl_distance * 1.80):
+            tp1_distance = round(sl_distance * 1.80, prec)
+        if tp2_distance < (sl_distance * 4.50):
+            tp2_distance = round(sl_distance * 4.50, prec)
 
         # 4. Synthesize Geometry based on direction
         dir_upper = direction.upper()

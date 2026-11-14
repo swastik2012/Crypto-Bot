@@ -100,6 +100,7 @@ export const App: React.FC = () => {
   }, []);
 
   // Asset & Chart Interval State (Default: 1H, with localStorage persistence)
+  const [assetsList, setAssetsList] = useState<CryptoAsset[]>(SUPPORTED_ASSETS);
   const [selectedAsset, setSelectedAsset] = useState<CryptoAsset>(SUPPORTED_ASSETS[0]);
   const [timeInterval, setTimeInterval] = useState<TimeInterval>(() => {
     try {
@@ -108,6 +109,33 @@ export const App: React.FC = () => {
     } catch {}
     return '1H';
   });
+
+  // Fetch Live Curated Supported Assets on Mount
+  useEffect(() => {
+    let isMounted = true;
+    const loadLiveAssets = async () => {
+      const liveAssets = await api.fetchSupportedAssets();
+      if (liveAssets && liveAssets.length > 0 && isMounted) {
+        setAssetsList(liveAssets);
+        setSelectedAsset((prev) => {
+          const match = liveAssets.find((a) => a.symbol === prev.symbol);
+          if (match) {
+            return {
+              ...prev,
+              price: match.price,
+              change24h: match.change24h,
+              high24h: match.high24h,
+              low24h: match.low24h,
+              volume24h: match.volume24h,
+            };
+          }
+          return prev;
+        });
+      }
+    };
+    loadLiveAssets();
+    return () => { isMounted = false; };
+  }, []);
 
   const handleTimeIntervalChange = useCallback((newInterval: TimeInterval) => {
     setTimeInterval(newInterval);
@@ -451,7 +479,7 @@ export const App: React.FC = () => {
   // Quick-switch to asset clicked in Recent Signals Feed
   const handleSelectSignalSymbol = useCallback((symbol: string) => {
     const cleanBase = symbol.split('/')[0].toUpperCase();
-    const found = SUPPORTED_ASSETS.find(
+    const found = assetsList.find(
       (a) => a.pair.toUpperCase() === symbol.toUpperCase() || a.symbol.toUpperCase() === cleanBase
     );
     if (found) {
@@ -567,6 +595,45 @@ export const App: React.FC = () => {
     syncAnalysis();
     return () => { isMounted = false; };
   }, [selectedAsset.symbol, timeInterval]);
+
+  // Keep Consensus Baseline and targets in lockstep with real-time live prices
+  useEffect(() => {
+    if (isAnalyzing) return;
+    setPipelineData((prev) => {
+      if (!prev || !prev.stage5) return prev;
+      const sig = prev.stage5.consensusSignal;
+      const currentEntry = (prev.stage5.executionPlan as any)?.wholesale_limit_entry || prev.stage5.executionPlan?.recommendedEntry;
+      if (sig === 'HOLD' && currentEntry !== selectedAsset.price) {
+        const p = selectedAsset.price;
+        const atr = Math.max(p * 0.015, Math.abs((selectedAsset.high24h || p * 1.025) - (selectedAsset.low24h || p * 0.975)) * 0.5);
+        const slDist = Math.min(p * 0.025, atr * 1.6);
+        const tp1Dist = slDist * 1.8;
+        const tp2Dist = slDist * 4.5;
+        const prec = p < 1.0 ? 4 : 2;
+        const ceiling = Number((p + tp1Dist).toFixed(prec));
+        const extension = Number((p + tp2Dist).toFixed(prec));
+        const floor = Number((p - slDist).toFixed(prec));
+
+        return {
+          ...prev,
+          asset: selectedAsset,
+          stage5: {
+            ...prev.stage5,
+            executionPlan: {
+              ...prev.stage5.executionPlan,
+              recommendedEntry: p,
+              takeProfit1: ceiling,
+              takeProfit2: extension,
+              stopLoss: floor,
+              invalidationPrice: floor,
+            },
+            keyInvalidationCondition: `Price violation beyond $${floor.toLocaleString()} invalidates trade thesis and triggers immediate protective exit.`,
+          },
+        };
+      }
+      return prev;
+    });
+  }, [selectedAsset.price, selectedAsset.symbol, isAnalyzing]);
 
   // Update Open Positions Real-time PnL when market price ticks (zero allocations when 0 positions or identical price)
   useEffect(() => {
@@ -735,9 +802,15 @@ export const App: React.FC = () => {
     const rawStage1Signal = res.stage1?.initial_thesis?.direction;
     const stage1Signal = (typeof rawStage1Signal === 'object' ? rawStage1Signal?.value : rawStage1Signal) || (signalVal.includes('SELL') ? 'SHORT' : 'LONG');
 
-    const defaultTp1 = stage1Signal === 'SHORT' ? asset.price * 0.922 : asset.price * 1.078;
-    const defaultTp2 = stage1Signal === 'SHORT' ? asset.price * 0.850 : asset.price * 1.150;
-    const defaultSl = stage1Signal === 'SHORT' ? asset.price * 1.034 : asset.price * 0.966;
+    const p = asset.price;
+    const atr = Math.max(p * 0.015, Math.abs((asset.high24h || p * 1.025) - (asset.low24h || p * 0.975)) * 0.5);
+    const slDist = Math.min(p * 0.025, atr * 1.6);
+    const tp1Dist = slDist * 1.8;
+    const tp2Dist = slDist * 4.5;
+
+    const defaultTp1 = stage1Signal === 'SHORT' ? Math.round((p - tp1Dist) * 100) / 100 : Math.round((p + tp1Dist) * 100) / 100;
+    const defaultTp2 = stage1Signal === 'SHORT' ? Math.round((p - tp2Dist) * 100) / 100 : Math.round((p + tp2Dist) * 100) / 100;
+    const defaultSl = stage1Signal === 'SHORT' ? Math.round((p + slDist) * 100) / 100 : Math.round((p - slDist) * 100) / 100;
 
     return {
       asset,
@@ -963,11 +1036,13 @@ export const App: React.FC = () => {
         consensusConfidence: confVal,
         executionPlan: {
           recommendedEntry: res.stage5?.execution_plan?.recommended_entry || asset.price,
+          wholesale_limit_entry: res.stage5?.execution_plan?.wholesale_limit_entry,
+          sweep_discount_pct: res.stage5?.execution_plan?.sweep_discount_pct,
           takeProfit1: res.stage5?.execution_plan?.take_profit_1 || defaultTp1,
           takeProfit2: res.stage5?.execution_plan?.take_profit_2 || defaultTp2,
           stopLoss: res.stage5?.execution_plan?.stop_loss || defaultSl,
           invalidationPrice: res.stage5?.execution_plan?.stop_loss || defaultSl,
-          effectiveRR: res.stage5?.execution_plan?.effective_rr || 2.20,
+          effectiveRR: res.stage5?.execution_plan?.risk_reward_ratio || res.stage5?.execution_plan?.effective_rr || 1.80,
           suggestedLeverage: res.stage5?.execution_plan?.suggested_leverage || '3x - 5x Cross',
           timeHorizon: res.stage5?.execution_plan?.time_horizon || '12h - 48h (Swing)',
           recommendedPositionUSD: res.stage5?.execution_plan?.recommended_position_usd,
@@ -1134,7 +1209,7 @@ export const App: React.FC = () => {
         darkMode={darkMode}
         onToggleTheme={toggleTheme}
         selectedAsset={selectedAsset}
-        assets={SUPPORTED_ASSETS}
+        assets={assetsList}
         onSelectAsset={setSelectedAsset}
         onOpenConfig={() => setIsConfigOpen(true)}
         onOpenLearningPlaybook={() => setIsLearningModalOpen(true)}

@@ -101,10 +101,10 @@ CRITICAL DIRECTIVES:
   },
   "initial_thesis": {
     "direction": "SHORT",
-    "suggested_entry": 78150.00,
-    "take_profit_1": 74867.70,
-    "take_profit_2": 72679.50,
-    "stop_loss": 79791.15
+    "suggested_entry": 71700.00,
+    "take_profit_1": 68670.00,
+    "take_profit_2": 66680.00,
+    "stop_loss": 73200.00
   }
 }`,
   },
@@ -255,10 +255,10 @@ ARBITRATION MANDATES:
   "consensus_signal": "STRONG SELL",
   "consensus_confidence": 92.0,
   "execution_plan": {
-    "recommended_entry": 78150.00,
-    "take_profit_1": 74867.70,
-    "take_profit_2": 72679.50,
-    "stop_loss": 79791.15,
+    "recommended_entry": 71700.00,
+    "take_profit_1": 68670.00,
+    "take_profit_2": 66680.00,
+    "stop_loss": 73200.00,
     "effective_rr": 2.15,
     "suggested_leverage": "3x - 5x Cross",
     "recommended_position_usd": 5000.0

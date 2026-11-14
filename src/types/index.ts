@@ -272,6 +272,8 @@ export interface Stage5GeminiArbiterOutput {
   consensusConfidence: number; // 0-100%
   executionPlan: {
     recommendedEntry: number;
+    wholesale_limit_entry?: number;
+    sweep_discount_pct?: number;
     takeProfit1: number;
     takeProfit2: number;
     stopLoss: number;

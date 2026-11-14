@@ -439,16 +439,17 @@ class VirtualPaperEngine:
             # ==============================================================
             # ATR estimation: use assigned ATR from Stage 1 or dynamic candle proxy
             atr_val = pos.chandelier_atr or max(current_price * 0.018, abs(current_price - pos.entry_price) * 0.25)
-            multiplier = pos.chandelier_multiplier or 2.5
+            multiplier = pos.chandelier_multiplier or 2.8
             is_runner = (pos.take_profit_1 is None) or pos.trailing_stop_active
 
             # Pre-TP1 Dynamic Breakeven & Profit Lock Engine:
-            # 1. Early Breakeven Lock: If price advances >= +0.80% or >= 40% toward TP1, secure entry at BE + fee buffer.
-            # 2. Profit Lock: If price advances >= 70% toward TP1, lock +0.25% net profit.
+            # 1. Breakeven Lock: Only lock entry at BE + fee buffer when price advances >= 65% toward TP1,
+            #    giving 1H crypto setups sufficient breathing room to develop without premature shakeouts.
+            # 2. Profit Lock: If price advances >= 85% toward TP1, lock +0.25% net profit.
             prec = 4 if current_price < 1 else 2
             tp1_dist_pct = (abs(pos.take_profit_1 - pos.entry_price) / pos.entry_price) if (pos.take_profit_1 and pos.entry_price > 0) else 0.015
-            be_trigger_pct = min(0.008, tp1_dist_pct * 0.40)
-            profit_lock_trigger_pct = tp1_dist_pct * 0.70
+            be_trigger_pct = tp1_dist_pct * 0.65
+            profit_lock_trigger_pct = tp1_dist_pct * 0.85
 
             if pos.stop_loss and price_delta_pct >= profit_lock_trigger_pct:
                 if pos.side == PositionSide.LONG:

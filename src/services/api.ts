@@ -2,6 +2,7 @@
  * AetherTrade AI Frontend API Client
  * Dynamically supports local dev (http://127.0.0.1:8000) and Vercel Serverless
  */
+import type { CryptoAsset } from '../types';
 
 const isLocalhost = typeof window !== 'undefined' && (
   window.location.hostname === 'localhost' || 
@@ -141,6 +142,22 @@ export const api = {
     return null;
   },
 
+  // 1b. Fetch Curated Supported Assets with Live Prices from Backend
+  async fetchSupportedAssets(): Promise<CryptoAsset[] | null> {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/supported-assets`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.assets && Array.isArray(data.assets)) {
+          return data.assets;
+        }
+      }
+    } catch {
+      // Offline fallback
+    }
+    return null;
+  },
+
   // 2. Fuzzy Symbol Search
   async searchSymbol(query: string, preferredQuote: string = 'USDT'): Promise<SymbolSearchResult> {
     try {
@@ -162,8 +179,8 @@ export const api = {
           quote_asset: preferredQuote,
           exchange: 'BINANCE',
           match_score: 100,
-          current_price: 78150,
-          change_24h: -1.41,
+          current_price: 71700,
+          change_24h: -3.5,
           volume_24h: '$32.4B',
         },
         results: [],

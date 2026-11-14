@@ -164,7 +164,7 @@ async def run_stage1_gemini_vision(
     base_sym = symbol.split("/")[0].upper()
     from backend.services.symbol_resolver import symbol_resolver
     match_info = symbol_resolver.resolve(base_sym, limit=1)
-    effective_price = current_price or (mtf_raw.current_price if mtf_raw else (match_info.best_match.current_price if match_info.best_match else 78150.0))
+    effective_price = current_price or (mtf_raw.current_price if mtf_raw else (match_info.best_match.current_price if match_info.best_match else 71700.0))
     change_24h = match_info.best_match.change_24h if match_info.best_match else 0.0
     high_24h = round(effective_price * 1.035, 2)
     low_24h = round(effective_price * 0.965, 2)
@@ -312,12 +312,11 @@ async def run_stage1_gemini_vision(
                     continue
 
     # Dynamic High-Fidelity Technical Calculation based on live market metrics & Fibonacci pivots
-    p = current_price or 78150.0
-    latency = 380
     base_sym = symbol.split("/")[0].upper()
-
-    # Determine asset directional bias and indicators from 24h market momentum
     from backend.services.symbol_resolver import symbol_resolver
+    resolved_info = symbol_resolver.resolve(base_sym, limit=1)
+    p = current_price or (resolved_info.best_match.current_price if resolved_info.best_match else 71700.0)
+    latency = 380
     match_info = symbol_resolver.resolve(base_sym, limit=1)
     change_24h = match_info.best_match.change_24h if match_info.best_match else 0.0
     vol_str = match_info.best_match.volume_24h if match_info.best_match else "$120M"

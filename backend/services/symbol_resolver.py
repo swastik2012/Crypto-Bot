@@ -12,11 +12,11 @@ DEFAULT_CRYPTO_PAIRS: List[Dict] = [
         "base_asset": "BTC",
         "name": "Bitcoin",
         "aliases": ["btc", "bitcoin", "btcusdt", "xbt", "digital gold"],
-        "base_price": 78150.00,
-        "change_24h": -1.41,
+        "base_price": 71700.00,
+        "change_24h": -3.50,
         "volume_24h": "$32.4B",
-        "high24h": 79560.00,
-        "low24h": 77850.00,
+        "high24h": 74800.00,
+        "low24h": 71200.00,
         "exchange": "BINANCE",
     },
     {
@@ -24,11 +24,11 @@ DEFAULT_CRYPTO_PAIRS: List[Dict] = [
         "base_asset": "ETH",
         "name": "Ethereum",
         "aliases": ["eth", "ether", "ethereum", "ethusdt", "vitalik"],
-        "base_price": 2450.00,
-        "change_24h": -1.22,
+        "base_price": 2015.00,
+        "change_24h": -2.80,
         "volume_24h": "$18.6B",
-        "high24h": 2485.00,
-        "low24h": 2415.00,
+        "high24h": 2085.00,
+        "low24h": 1980.00,
         "exchange": "BINANCE",
     },
     {
@@ -36,11 +36,11 @@ DEFAULT_CRYPTO_PAIRS: List[Dict] = [
         "base_asset": "SOL",
         "name": "Solana",
         "aliases": ["sol", "solana", "solusdt", "sol usdt"],
-        "base_price": 95.80,
-        "change_24h": -2.37,
+        "base_price": 81.60,
+        "change_24h": -3.50,
         "volume_24h": "$8.9B",
-        "high24h": 98.80,
-        "low24h": 95.30,
+        "high24h": 85.20,
+        "low24h": 80.40,
         "exchange": "BINANCE",
     },
     {
@@ -48,11 +48,11 @@ DEFAULT_CRYPTO_PAIRS: List[Dict] = [
         "base_asset": "AVAX",
         "name": "Avalanche",
         "aliases": ["avax", "avalanche", "avaxusdt"],
-        "base_price": 7.27,
-        "change_24h": -3.15,
+        "base_price": 8.30,
+        "change_24h": -2.90,
         "volume_24h": "$1.2B",
-        "high24h": 7.54,
-        "low24h": 7.22,
+        "high24h": 8.70,
+        "low24h": 8.20,
         "exchange": "BINANCE",
     },
     {
@@ -60,11 +60,11 @@ DEFAULT_CRYPTO_PAIRS: List[Dict] = [
         "base_asset": "XRP",
         "name": "XRP",
         "aliases": ["xrp", "ripple", "xrpusdt"],
-        "base_price": 1.38,
-        "change_24h": -6.74,
+        "base_price": 1.03,
+        "change_24h": -2.50,
         "volume_24h": "$2.1B",
-        "high24h": 1.48,
-        "low24h": 1.37,
+        "high24h": 1.07,
+        "low24h": 1.02,
         "exchange": "BINANCE",
     },
     {
@@ -331,6 +331,36 @@ class CryptoSymbolResolver:
 
         best_match = ranked_results[0] if ranked_results else None
         return SymbolSearchResponse(query=query, best_match=best_match, results=ranked_results)
+
+    def get_curated_assets(self) -> List[Dict]:
+        self.refresh_live_binance_prices()
+        icon_map = {
+            "BTC": "₿",
+            "ETH": "Ξ",
+            "SOL": "◎",
+            "AVAX": "🔺",
+            "XRP": "✕",
+            "BNB": "🪙",
+            "ADA": "₳",
+            "DOGE": "Ð",
+        }
+        assets = []
+        for entry in self.pairs_db[:5]:  # Primary 5 core assets
+            sym = entry["symbol"]
+            p = entry["base_price"]
+            prec = 4 if p < 1.0 else 2
+            assets.append({
+                "symbol": sym,
+                "name": entry["name"],
+                "pair": f"{sym}/USDT",
+                "price": round(p, prec),
+                "change24h": round(entry.get("change_24h", 0.0), 2),
+                "high24h": round(entry.get("high24h", p * 1.025), prec),
+                "low24h": round(entry.get("low24h", p * 0.975), prec),
+                "volume24h": entry.get("volume_24h", "$1.0B"),
+                "icon": icon_map.get(sym, "🪙"),
+            })
+        return assets
 
     def _format_matched_symbol(self, entry: Dict, preferred_quote: str, score: float) -> MatchedSymbol:
         quote = preferred_quote.upper()

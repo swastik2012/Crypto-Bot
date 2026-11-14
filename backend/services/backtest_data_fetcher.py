@@ -37,7 +37,7 @@ def fetch_binance_1y_klines(symbol: str = "BTCUSDT", interval: str = "1h", days:
     print(f"[DataFetcher] 🌐 Downloading {days}-day ({interval}) historical data for {clean_sym} from Binance...")
 
     while current_start < now_ms:
-        url = f"https://api.binance.com/api/v3/klines?symbol={clean_sym}&interval={interval}&startTime={current_start}&limit=1000"
+        url = f"https://data-api.binance.vision/api/v3/klines?symbol={clean_sym}&interval={interval}&startTime={current_start}&limit=1000"
         req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"})
         
         try:

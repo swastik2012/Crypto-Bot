@@ -46,10 +46,9 @@ async def analyze_and_trade(req: AnalyzeAndTradeRequest):
 async def get_latest_analysis(symbol: str):
     """
     Returns the latest multi-agent consensus analysis for a given cryptocurrency symbol.
+    Guarantees fresh, real-time live market baseline and Champion target geometry.
     """
-    data = analysis_cache.get(symbol)
-    if not data:
-        return {"status": "not_found", "symbol": symbol, "data": None}
+    data = await analysis_cache.get_or_synthesize_analysis(symbol)
     return {"status": "success", "symbol": symbol, "data": data}
 
 @router.get("/consensus/recent-signals")

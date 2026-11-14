@@ -162,7 +162,7 @@ class AutoTradingScheduler:
             try:
                 base_sym = pair.split("/")[0]
                 match_res = symbol_resolver.resolve(base_sym, limit=1)
-                current_price = match_res.best_match.current_price if match_res.best_match else 78150.0
+                current_price = match_res.best_match.current_price if match_res.best_match else 71700.0
                 change_24h = match_res.best_match.change_24h if match_res.best_match else 0.0
 
                 # ========================================================

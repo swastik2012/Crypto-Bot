@@ -15,3 +15,11 @@ async def search_symbol(req: SymbolSearchRequest):
         preferred_quote=req.preferred_quote or "USDT",
         limit=req.limit or 6
     )
+
+@router.get("/supported-assets")
+async def get_supported_assets():
+    """
+    Returns curated list of primary trading assets with real-time Binance prices and 24h stats.
+    """
+    assets = symbol_resolver.get_curated_assets()
+    return {"status": "success", "assets": assets}

@@ -53,7 +53,7 @@ class MultiAgentConsensusPipeline:
             from backend.services.symbol_resolver import symbol_resolver
             base_sym = symbol.split("/")[0].upper()
             match_info = symbol_resolver.resolve(base_sym, limit=1)
-            current_price = match_info.best_match.current_price if match_info.best_match else 78150.0
+            current_price = match_info.best_match.current_price if match_info.best_match else 71700.0
 
         # MACROECONOMIC EVENT CIRCUIT BREAKER ENGINE (Phase 5: CPI, PPI, FOMC, NFP Lockouts)
         macro_status = macro_calendar_service.check_circuit_breaker()

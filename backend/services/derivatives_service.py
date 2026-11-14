@@ -100,7 +100,7 @@ class DerivativesService:
             return self._cache[clean_key]["data"]
 
         clean_sym = self._clean_symbol(symbol)
-        p = current_price or 78150.0
+        p = current_price or 71700.0
 
         # Concurrent async gather of Binance Futures endpoints
         (funding_pct, mark_p, index_p), (oi_usd, oi_delta_pct), (buy_ratio, buy_vol, sell_vol) = await asyncio.gather(
