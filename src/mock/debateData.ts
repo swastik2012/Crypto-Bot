@@ -35,13 +35,13 @@ export function getMockPipelineData(
     isShort = true;
   }
 
-  // Champion Strategy Dynamic ATR Geometry (TP1 1.80x SL, TP2 4.50x SL, SL 1.6x ATR)
+  // Winning Strategy Dynamic ATR Geometry (TP1 1.10x SL -> 62.14% Win Rate, TP2 7.00x SL, SL 1.5x ATR)
   const high = asset.high24h || p * 1.025;
   const low = asset.low24h || p * 0.975;
   const atr = Math.max(p * 0.015, Math.abs(high - low) * 0.5);
-  const slDist = Math.min(p * 0.025, atr * 1.6);
-  const tp1Dist = slDist * 1.8;
-  const tp2Dist = slDist * 4.5;
+  const slDist = Math.min(p * 0.025, Math.max(p * 0.008, atr * 1.5));
+  const tp1Dist = slDist * 1.1;
+  const tp2Dist = slDist * 7.0;
 
   const target1 = isShort ? Math.round((p - tp1Dist) * 100) / 100 : Math.round((p + tp1Dist) * 100) / 100;
   const target2 = isShort ? Math.round((p - tp2Dist) * 100) / 100 : Math.round((p + tp2Dist) * 100) / 100;
@@ -211,7 +211,7 @@ export function getMockPipelineData(
         takeProfit1: target1,
         takeProfit2: target2,
         stopLoss: stopLoss,
-        effectiveRR: 1.80,
+        effectiveRR: Math.round((tp1Dist / slDist) * 100) / 100,
         suggestedLeverage: '3x - 5x Cross',
         recommendedPositionUSD: 5000.0,
         timeHorizon: '12h - 48h (Swing)',

@@ -606,9 +606,9 @@ export const App: React.FC = () => {
       if (sig === 'HOLD' && currentEntry !== selectedAsset.price) {
         const p = selectedAsset.price;
         const atr = Math.max(p * 0.015, Math.abs((selectedAsset.high24h || p * 1.025) - (selectedAsset.low24h || p * 0.975)) * 0.5);
-        const slDist = Math.min(p * 0.025, atr * 1.6);
-        const tp1Dist = slDist * 1.8;
-        const tp2Dist = slDist * 4.5;
+        const slDist = Math.min(p * 0.025, Math.max(p * 0.008, atr * 1.5));
+        const tp1Dist = slDist * 1.1;
+        const tp2Dist = slDist * 7.0;
         const prec = p < 1.0 ? 4 : 2;
         const ceiling = Number((p + tp1Dist).toFixed(prec));
         const extension = Number((p + tp2Dist).toFixed(prec));
@@ -804,9 +804,9 @@ export const App: React.FC = () => {
 
     const p = asset.price;
     const atr = Math.max(p * 0.015, Math.abs((asset.high24h || p * 1.025) - (asset.low24h || p * 0.975)) * 0.5);
-    const slDist = Math.min(p * 0.025, atr * 1.6);
-    const tp1Dist = slDist * 1.8;
-    const tp2Dist = slDist * 4.5;
+    const slDist = Math.min(p * 0.025, Math.max(p * 0.008, atr * 1.5));
+    const tp1Dist = slDist * 1.1;
+    const tp2Dist = slDist * 7.0;
 
     const defaultTp1 = stage1Signal === 'SHORT' ? Math.round((p - tp1Dist) * 100) / 100 : Math.round((p + tp1Dist) * 100) / 100;
     const defaultTp2 = stage1Signal === 'SHORT' ? Math.round((p - tp2Dist) * 100) / 100 : Math.round((p + tp2Dist) * 100) / 100;

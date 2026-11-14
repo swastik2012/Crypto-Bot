@@ -1,0 +1,46 @@
+{
+  "params": {
+    "min_adx": 20.0,
+    "min_vol_ratio": 0.95,
+    "sl_atr_mult": 1.5,
+    "tp1_rr": 1.1,
+    "tp2_rr": 7.0,
+    "chand_mult": 2.8,
+    "be_floor_pct": 0.45,
+    "partial_scale": 0.25
+  },
+  "trades": 140,
+  "win_rate": 62.14,
+  "net_pnl": 2583.34,
+  "pf": 1.93,
+  "max_dd": 3.7,
+  "trade_stats": {
+    "total_trades": 140,
+    "win_trades": 87,
+    "loss_trades": 53,
+    "win_rate_pct": 62.14,
+    "avg_win_usd": 61.52,
+    "avg_loss_usd": 52.24,
+    "total_gross_wins_usd": 5352.21,
+    "total_gross_losses_usd": 2768.86,
+    "profit_factor": 1.93
+  },
+  "btc": {
+    "trades": 63,
+    "wins": 40,
+    "losses": 23,
+    "win_rate": 63.49,
+    "profit_factor": 2.22,
+    "net_pnl": 1288.16,
+    "max_drawdown_pct": 2.5
+  },
+  "xrp": {
+    "trades": 77,
+    "wins": 47,
+    "losses": 30,
+    "win_rate": 61.04,
+    "profit_factor": 1.75,
+    "net_pnl": 1295.18,
+    "max_drawdown_pct": 3.7
+  }
+}
