@@ -106,7 +106,7 @@ export const App: React.FC = () => {
     try {
       const saved = localStorage.getItem('crypto_bot_active_timeframe') as TimeInterval | null;
       if (saved) return saved;
-    } catch {}
+    } catch { }
     return '1H';
   });
 
@@ -141,11 +141,11 @@ export const App: React.FC = () => {
     setTimeInterval(newInterval);
     try {
       localStorage.setItem('crypto_bot_active_timeframe', newInterval);
-    } catch {}
+    } catch { }
   }, []);
 
   // Auto-Trader 30-Minute Status
-  const [autoTraderStatus, setAutoTraderStatus] = useState<AutoTraderStatus | null>({
+  const [autoTraderStatus, setAutoTraderStatus] = useState<AutoTraderStatus | null>(() => ({
     is_running: true,
     interval_seconds: 1800,
     seconds_until_next_cycle: 1740,
@@ -154,7 +154,7 @@ export const App: React.FC = () => {
     cycle_count: 1,
     active_positions_count: 0,
     recent_logs: [],
-  });
+  }));
 
   // Macro Calendar Status State (Phase 5)
   const [macroStatus, setMacroStatus] = useState<MacroCalendarStatus | null>(null);
@@ -337,7 +337,7 @@ export const App: React.FC = () => {
               }
               try {
                 localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(sigData.signals));
-              } catch {}
+              } catch { }
               return sigData.signals;
             });
 
@@ -467,7 +467,7 @@ export const App: React.FC = () => {
         }
         try {
           localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(res.signals));
-        } catch {}
+        } catch { }
       }
     } catch (e) {
       console.warn('[App] Error loading recent consensus signals:', e);
@@ -486,7 +486,7 @@ export const App: React.FC = () => {
       setSelectedAsset(found);
       window.scrollTo({ top: 120, behavior: 'smooth' });
     }
-  }, []);
+  }, [assetsList]);
 
   // Agent Config State
   const [agentConfig, setAgentConfig] = useState<AgentConfigState>({
@@ -532,7 +532,7 @@ export const App: React.FC = () => {
     const val = cashBalance.toString();
     if (val !== lastCashRef.current) {
       lastCashRef.current = val;
-      try { localStorage.setItem(STORAGE_KEYS.CASH_BALANCE, val); } catch {}
+      try { localStorage.setItem(STORAGE_KEYS.CASH_BALANCE, val); } catch { }
     }
   }, [cashBalance]);
 
@@ -544,7 +544,7 @@ export const App: React.FC = () => {
         lastPositionsRef.current = val;
         localStorage.setItem(STORAGE_KEYS.OPEN_POSITIONS, val);
       }
-    } catch {}
+    } catch { }
   }, [openPositions]);
 
   const lastHistoryRef = useRef<string>('');
@@ -555,7 +555,7 @@ export const App: React.FC = () => {
         lastHistoryRef.current = val;
         localStorage.setItem(STORAGE_KEYS.TRADE_HISTORY, val);
       }
-    } catch {}
+    } catch { }
   }, [tradeHistory]);
 
   // Modals State
@@ -633,7 +633,7 @@ export const App: React.FC = () => {
       }
       return prev;
     });
-  }, [selectedAsset.price, selectedAsset.symbol, isAnalyzing]);
+  }, [selectedAsset, isAnalyzing]);
 
   // Update Open Positions Real-time PnL when market price ticks (zero allocations when 0 positions or identical price)
   useEffect(() => {
@@ -1181,7 +1181,7 @@ export const App: React.FC = () => {
           const updated = [freshRecord, ...filtered].slice(0, 15);
           try {
             localStorage.setItem(STORAGE_KEYS.RECENT_SIGNALS, JSON.stringify(updated));
-          } catch {}
+          } catch { }
           return updated;
         });
       }
@@ -1200,7 +1200,7 @@ export const App: React.FC = () => {
 
   return (
     <div className="relative min-h-screen w-full max-w-full overflow-x-hidden flex flex-col font-sans bg-slate-100 dark:bg-[#070A11] text-slate-900 dark:text-slate-100 transition-colors duration-300">
-      
+
       {/* Ambient Liquid Glowing Blur Bubbles in Background */}
       <LiquidBackground />
 
