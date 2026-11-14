@@ -18,6 +18,7 @@ import {
 import { GlassCard } from '../common/GlassCard';
 import { Badge } from '../common/Badge';
 import { useCurrency } from '../../context/CurrencyContext';
+import { CapitalGainsGraph } from './CapitalGainsGraph';
 
 export interface OpenPositionItem {
   position_id: string;
@@ -154,7 +155,7 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
   onResetAccount,
 }) => {
   const { formatPrice } = useCurrency();
-  const [activeTab, setActiveTab] = useState<'OPEN' | 'HISTORY'>('OPEN');
+  const [activeTab, setActiveTab] = useState<'OPEN' | 'HISTORY' | 'GRAPH'>('OPEN');
   const [selectedAssetFilter, setSelectedAssetFilter] = useState<string>('ALL');
   const [historyLimit, setHistoryLimit] = useState<number | 'ALL'>('ALL');
   const [historySortOrder, setHistorySortOrder] = useState<'NEWEST' | 'OLDEST'>('NEWEST');
@@ -238,6 +239,17 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
             >
               <History className="w-3 h-3" />
               <span>History ({history.length})</span>
+            </button>
+            <button
+              onClick={() => setActiveTab('GRAPH')}
+              className={`px-3 py-1 rounded-lg transition-all flex items-center gap-1.5 ${
+                activeTab === 'GRAPH'
+                  ? 'bg-cyan-500/25 text-cyan-900 dark:text-cyan-300 shadow-sm border border-cyan-500/40'
+                  : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100'
+              }`}
+            >
+              <TrendingUp className="w-3 h-3" />
+              <span>Graph</span>
             </button>
           </div>
 
@@ -664,6 +676,15 @@ export const OpenPositionsCard: React.FC<OpenPositionsCardProps> = ({
             </>
           )}
         </div>
+      )}
+
+      {/* Tab 3: Interactive Capital Gains/Loss Graph */}
+      {activeTab === 'GRAPH' && (
+        <CapitalGainsGraph
+          history={history}
+          positions={positions}
+          initialCapital={10000}
+        />
       )}
 
     </GlassCard>
