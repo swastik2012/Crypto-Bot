@@ -1,0 +1,26 @@
+name: Deploy to Oracle Cloud VM
+
+on:
+  push:
+    branches:
+      - vm
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Remote Deployment
+        uses: appleboy/ssh-action@v1.0.3
+        if: env.VM_HOST != ''
+        env:
+          VM_HOST: ${{ secrets.VM_HOST }}
+          VM_USER: ${{ secrets.VM_USER || 'ubuntu' }}
+          VM_KEY: ${{ secrets.VM_SSH_KEY }}
+        with:
+          host: ${{ secrets.VM_HOST }}
+          username: ${{ secrets.VM_USER || 'ubuntu' }}
+          key: ${{ secrets.VM_SSH_KEY }}
+          script: |
+            if [ -f ~/Crypto-Bot/scripts/update_from_git.sh ]; then
+              ~/Crypto-Bot/scripts/update_from_git.sh
+            fi
