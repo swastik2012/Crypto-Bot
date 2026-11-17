@@ -63,9 +63,17 @@ echo -e "${GREEN}✓ System packages installed.${NC}"
 # 3. FIREWALL / PORT 80 & 443 INGRESS CONFIGURATION
 echo -e "\n${YELLOW}Step 3: Configuring OS Firewall for HTTP (Port 80) and HTTPS (Port 443)...${NC}"
 if command -v iptables >/dev/null 2>&1; then
-    # Oracle Cloud Linux distributions have a default reject rule on INPUT
-    sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT 1 -p tcp --dport 80 -j ACCEPT
-    sudo iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT 2>/dev/null || sudo iptables -I INPUT 1 -p tcp --dport 443 -j ACCEPT
+    # Ensure port 80 and 443 rules are placed BEFORE the default REJECT rule
+    sudo iptables -D INPUT -p tcp -m state --state NEW --dport 80 -j ACCEPT 2>/dev/null || true
+    sudo iptables -D INPUT -p tcp -m state --state NEW --dport 443 -j ACCEPT 2>/dev/null || true
+    REJECT_LINE=\$(sudo iptables -L INPUT -n --line-numbers | grep "REJECT" | head -n 1 | awk '{print \$1}')
+    if [ -n "\$REJECT_LINE" ]; then
+        sudo iptables -I INPUT "\$REJECT_LINE" -p tcp -m state --state NEW --dport 80 -j ACCEPT
+        sudo iptables -I INPUT "\$REJECT_LINE" -p tcp -m state --state NEW --dport 443 -j ACCEPT
+    else
+        sudo iptables -A INPUT -p tcp -m state --state NEW --dport 80 -j ACCEPT
+        sudo iptables -A INPUT -p tcp -m state --state NEW --dport 443 -j ACCEPT
+    fi
     if command -v netfilter-persistent >/dev/null 2>&1; then
         sudo netfilter-persistent save || true
     elif command -v service >/dev/null 2>&1; then
