@@ -50,13 +50,13 @@ echo -e "${GREEN}✓ Memory tuning applied (swappiness=20, vfs_cache_pressure=50
 echo -e "\n${YELLOW}Step 2: Installing system packages (Nginx, Python3, Git, etc.)...${NC}"
 if command -v apt-get >/dev/null 2>&1; then
     sudo apt-get update -y
-    sudo apt-get install -y python3 python3-venv python3-pip nginx git curl iptables-persistent netfilter-persistent
+    sudo apt-get install -y python3 python3-venv python3-pip nginx git curl nodejs npm iptables-persistent netfilter-persistent
 elif command -v dnf >/dev/null 2>&1; then
     sudo dnf update -y
-    sudo dnf install -y python3 python3-pip nginx git curl firewalld
+    sudo dnf install -y python3 python3-pip nginx git curl nodejs npm firewalld
 elif command -v yum >/dev/null 2>&1; then
     sudo yum update -y
-    sudo yum install -y python3 python3-pip nginx git curl
+    sudo yum install -y python3 python3-pip nginx git curl nodejs npm
 fi
 echo -e "${GREEN}✓ System packages installed.${NC}"
 
