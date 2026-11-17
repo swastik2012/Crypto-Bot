@@ -107,7 +107,7 @@ echo -e "${GREEN}✓ Python virtual environment ready with requirements.${NC}"
 chmod 755 /home/"$CURRENT_USER"
 chmod -R 755 "$APP_DIR/dist"
 
-# 6. NGINX REVERSE PROXY CONFIGURATION
+# 6. NGINX REVERSE PROXY CONFIGURATION WITH SSL
 echo -e "\n${YELLOW}Step 5: Configuring Nginx reverse proxy...${NC}"
 NGINX_CONF="/etc/nginx/sites-available/crypto-bot"
 if [ ! -d "/etc/nginx/sites-available" ]; then
@@ -116,10 +116,25 @@ if [ ! -d "/etc/nginx/sites-available" ]; then
 fi
 
 sudo tee "$NGINX_CONF" > /dev/null <<EOF
+# HTTP -> Redirect all to HTTPS
 server {
     listen 80 default_server;
     listen [::]:80 default_server;
     server_name _;
+    return 301 https://130.210.6.163.sslip.io\$request_uri;
+}
+
+# HTTPS Server with Let's Encrypt SSL
+server {
+    listen 443 ssl default_server;
+    listen [::]:443 ssl default_server;
+    http2 on;
+    server_name 130.210.6.163.sslip.io _;
+
+    ssl_certificate /etc/letsencrypt/live/130.210.6.163.sslip.io/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/130.210.6.163.sslip.io/privkey.pem;
+    include /etc/letsencrypt/options-ssl-nginx.conf;
+    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
 
     client_max_body_size 50M;
 
@@ -153,6 +168,7 @@ server {
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
     }
 
     # WebSocket Real-Time Crypto Streaming
@@ -163,6 +179,7 @@ server {
         proxy_set_header Connection "upgrade";
         proxy_set_header Host \$host;
         proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_read_timeout 86400s;
         proxy_send_timeout 86400s;
     }
