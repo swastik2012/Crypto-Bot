@@ -184,7 +184,7 @@ class MultiAgentConsensusPipeline:
             auto_execute and
             (is_buy_sig or is_sell_sig) and
             stage5_res.consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and
-            plan_rr >= 1.30 and
+            plan_rr >= 1.20 and
             not directional_conflict and
             not macro_status.lockout_active and
             not btc_block and

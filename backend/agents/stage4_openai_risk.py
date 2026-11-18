@@ -230,7 +230,7 @@ async def run_stage4_openai_risk(
         "Your sole duty is to protect fund capital by ruthlessly searching for reasons NOT to take the trade.\n\n"
         "MANDATORY INSTITUTIONAL RISK AUDIT CHECKLIST:\n"
         "1. LIQUIDITY TRAPS & SWEEPS: Check if price has merely swept prior session highs/lows to trigger retail stop-runs before reversing. Compute false_breakout_probability (0.0 to 100.0).\n"
-        "2. ASYMMETRIC R:R HURDLE: Verify that the trade achieves at least 1:1.5 R:R to TP1 (with TP2 >= 2.5x). Only penalize safety_score (< 55) if R:R < 1.3.\n"
+        "2. ASYMMETRIC R:R HURDLE: Verify that the trade achieves at least 1:1.5 R:R to TP1 (with TP2 >= 2.5x). Only penalize safety_score (< 55) if R:R < 1.2.\n"
         "3. NEWS & MOMENTUM EXHAUSTION: Check if Stage 2's macro news catalyst is already priced in ('buy the rumor, sell the news').\n"
         "4. CHOP & COUNTER-TREND VETO: If multi-timeframe alignment opposes the 1D Macro Tide or price is trapped in consolidation, enforce an immediate VETO (safety_score < 50, issue macro_trap_alert).\n"
         "5. DERIVATIVES ORDER FLOW & CVD: Verify that funding rates are not crowded (> +0.03% or < -0.03%) and Cumulative Volume Delta does not show buyer/seller exhaustion.\n\n"
@@ -339,9 +339,9 @@ async def run_stage4_openai_risk(
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 700,
+                    "max_tokens": 380,
                 }
-                async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=2.5)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
                     resp = await client.post(
                         f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                         headers=nv_headers,
@@ -380,7 +380,7 @@ async def run_stage4_openai_risk(
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 from langchain_core.messages import HumanMessage
                 llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=10.0)
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=6.0)
                 parsed = extract_llm_json(resp.content)
                 if parsed and ("safety_score" in parsed or "false_breakout_probability" in parsed):
                     safety_score = float(parsed.get("safety_score", safety_score))

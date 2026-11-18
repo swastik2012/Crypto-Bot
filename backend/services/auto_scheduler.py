@@ -361,13 +361,13 @@ class AutoTradingScheduler:
                         print(f"[AutoTrader Quarantine Gate] {pair} entry blocked: {quarantine_status['reason']} (Current Conf={confidence}%, Vol={curr_vol:.2f}x)")
 
                 # ========================================================
-                # 🛑 RISK GUARD 9: Minimum Risk-to-Reward Ratio (>= 1.30x)
+                # 🛑 RISK GUARD 9: Minimum Risk-to-Reward Ratio (>= 1.20x)
                 # ========================================================
                 plan = response.stage5.execution_plan
                 plan_rr = float(plan.get("risk_reward_ratio", 1.5) if isinstance(plan, dict) else getattr(plan, "risk_reward_ratio", 1.5) or 1.5)
-                rr_gate_pass = plan_rr >= 1.30
+                rr_gate_pass = plan_rr >= 1.20
                 if not rr_gate_pass:
-                    print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.30x requirement.")
+                    print(f"[AutoTrader R:R Gate] {pair} entry blocked: Risk/Reward ratio {plan_rr:.2f} is below minimum 1.20x requirement.")
 
                 can_execute = (
                     confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and

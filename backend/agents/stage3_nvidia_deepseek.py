@@ -126,10 +126,10 @@ async def run_stage3_nvidia_deepseek(
                         {"role": "user", "content": user_prompt},
                     ],
                     "temperature": 0.1,
-                    "max_tokens": 1200,
+                    "max_tokens": 450,
                 }
                 req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
+                async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
                     resp = await client.post(
                         api_endpoint,
                         headers=headers,

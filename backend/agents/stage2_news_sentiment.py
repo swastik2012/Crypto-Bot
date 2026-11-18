@@ -190,9 +190,9 @@ async def run_stage2_news_sentiment(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 1200,
+                "max_tokens": 400,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=headers,
@@ -225,7 +225,7 @@ async def run_stage2_news_sentiment(
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 from langchain_core.messages import HumanMessage
                 llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=settings.GEMINI_API_KEY, temperature=0.2, max_retries=0)
-                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=12.0)
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
                 raw_text = resp.content
                 if "```json" in raw_text:
                     json_str = raw_text.split("```json")[1].split("```")[0].strip()

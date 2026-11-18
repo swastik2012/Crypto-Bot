@@ -384,8 +384,8 @@ async def run_stage5_gemini_arbiter(
         "Your duty is to impartially reconcile the multi-agent debate across: "
         "Stage 1 (Vision Technicals), Stage 2 (News Macro Gist), Stage 3 (Quant Monte Carlo Proof), and Stage 4 (Devil's Advocate Risk Guard).\n\n"
         "ARBITRATION MANDATES FOR BALANCED PROFITABILITY:\n"
-        f"1. RISK VETO COMPLIANCE: If Stage 4 flags false_breakout_probability >= 50.0%, safety_score < 55, OR Stage 3 flags R:R < 1.3 or severe negative EV, issue 'HOLD' (Neutral Stand Aside).\n"
-        f"2. CONVICTION CRITERIA: Issue 'BUY' or 'SELL' on constructive directional setups when consensus agreement >= {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}% and R:R >= 1.3. Issue 'STRONG BUY' or 'STRONG SELL' when consensus agreement >= 80.0%, multi-timeframe concordance is at least 2/3, and zero critical macro trap alerts.\n"
+        f"1. RISK VETO COMPLIANCE: If Stage 4 flags false_breakout_probability >= 50.0%, safety_score < 55, OR Stage 3 flags R:R < 1.2 or severe negative EV, issue 'HOLD' (Neutral Stand Aside).\n"
+        f"2. CONVICTION CRITERIA: Issue 'BUY' or 'SELL' on constructive directional setups when consensus agreement >= {settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:.1f}% and R:R >= 1.2. Issue 'STRONG BUY' or 'STRONG SELL' when consensus agreement >= 80.0%, multi-timeframe concordance is at least 2/3, and zero critical macro trap alerts.\n"
         "3. PROFIT HARVESTING DISCIPLINE: Provide concise institutional synthesis, exact TP1 (2.0x ATR, 50% scale-out with trailing stop locked), TP2 (4.0x ATR runner), and precise structural invalidation.\n\n"
         "Return ONLY a valid JSON object matching this schema:\n"
         "{\n"
@@ -419,7 +419,7 @@ async def run_stage5_gemini_arbiter(
                 from langchain_google_genai import ChatGoogleGenerativeAI
                 from langchain_core.messages import HumanMessage
                 llm = ChatGoogleGenerativeAI(model=candidate_model, google_api_key=gemini_key, temperature=0.1, max_retries=0)
-                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=12.0)
+                resp = await asyncio.wait_for(llm.ainvoke([HumanMessage(content=f"{system_prompt}\n\n{user_prompt}")]), timeout=7.0)
                 raw_text = resp.content
                 if "```json" in raw_text:
                     json_str = raw_text.split("```json")[1].split("```")[0].strip()
@@ -476,9 +476,9 @@ async def run_stage5_gemini_arbiter(
                     {"role": "user", "content": user_prompt},
                 ],
                 "temperature": 0.1,
-                "max_tokens": 1200,
+                "max_tokens": 380,
             }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(18.0, connect=3.0)) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
                 resp = await client.post(
                     f"{settings.NVIDIA_ENDPOINT}/chat/completions",
                     headers=nv_headers,

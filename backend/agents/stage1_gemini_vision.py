@@ -64,7 +64,7 @@ CRITICAL DIRECTIVES FOR MAXIMUM PROFITABILITY:
    - take_profit_1: Dynamic ATR Target 1 (2.0x ATR_14). 50% scale-out level with trailing stop locked to break-even.
    - take_profit_2: Dynamic ATR Target 2 (4.0x ATR_14) macro expansion runner to capture maximum volatility trend.
    - stop_loss: Structural invalidation placed safely beyond key swing order blocks (1.5x ATR_14 distance, clamped between 1.2% min and 5.5% max).
-   - STRICT ASYMMETRY RULE: Minimum 1:1.33 R:R to TP1, and >= 1:2.67 blended R:R to TP2. If R:R < 1.33, reject as "NEUTRAL".
+   - STRICT ASYMMETRY RULE: Minimum 1:1.20 R:R to TP1, and >= 1:2.40 blended R:R to TP2. If R:R < 1.20, reject as "NEUTRAL".
 
 Return ONLY a valid JSON object matching this schema:
 {
@@ -228,7 +228,7 @@ async def run_stage1_gemini_vision(
                 else:
                     msg = HumanMessage(content=f"{STAGE1_SYSTEM_PROMPT}\n\n{prompt_text}")
 
-                response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=12.0)
+                response = await asyncio.wait_for(llm.ainvoke([msg]), timeout=7.0)
                 raw_text = response.content
                 if "```json" in raw_text:
                     json_str = raw_text.split("```json")[1].split("```")[0].strip()
