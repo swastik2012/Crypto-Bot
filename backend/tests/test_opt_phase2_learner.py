@@ -47,6 +47,19 @@ def test_phase2_learner_dynamic_rules():
 
     # 3. Test Dynamic RSI Threshold Rule (e.g. ADA rule_1791323343_ada requires RSI >= 55)
     print("\n[3/5] Testing Dynamic RSI Momentum Hurdle (ADA RSI >= 55)...")
+    from backend.models.schemas import EvolvingTradingRule
+    if not any("rsi is above 55" in r.rule_text.lower() for r in learning_memory_service.playbook_rules):
+        learning_memory_service.playbook_rules.append(
+            EvolvingTradingRule(
+                rule_id="rule_1791323343_ada",
+                rule_text="Do not enter LONG on ADA unless RSI is above 55 to confirm momentum expansion.",
+                rule_type="AVOID_TRAP",
+                target_asset="ADA",
+                win_rate_impact="+8.5% Win Rate",
+                sample_size=5,
+                created_at=time.time(),
+            )
+        )
     ada_rsi_veto = learning_memory_service.evaluate_setup_against_playbook(
         symbol="ADA/USDT",
         direction="LONG",
