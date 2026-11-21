@@ -334,17 +334,17 @@ class MarketDataService:
         current_price: float,
         direction: str = "LONG",
         timeframe: str = "15m",
-        sl_multiplier: float = 1.5,
-        tp1_multiplier: float = 1.65,
-        tp2_multiplier: float = 10.5,
+        sl_multiplier: float = 1.4,
+        tp1_multiplier: float = 2.10,
+        tp2_multiplier: float = 5.0,
         override_atr: Optional[float] = None,
     ) -> Dict:
         """
         Calculates volatility-adaptive stop-loss and take-profit targets using 14-period ATR.
         Optimized for >= 60% win rate & maximized net realized PnL via Asymmetric Target Laddering:
-        - SL = 1.5x ATR
-        - TP1 = 1.10x SL distance (1.65x ATR) -> 62.14% win rate breakout target
-        - TP2 = 7.00x SL distance (10.5x ATR) -> extended macro Fibonacci expansion runner
+        - SL = 1.4x ATR
+        - TP1 = 1.45x-1.50x SL distance (2.10x ATR) -> robust profit-taking target
+        - TP2 = 3.50x-5.00x SL distance (5.00x ATR) -> macro Fibonacci expansion runner
         """
         p = current_price or 71700.0
         prec = 4 if p < 1.0 else 2
@@ -380,17 +380,17 @@ class MarketDataService:
         else:
             vol_regime = "Normal Volatility"
 
-        # 3. Calculate distance with safety clamping (0.8% min SL distance, strict 2.5% max SL distance)
+        # 3. Calculate distance with safety clamping (0.8% min SL distance, strict 2.2% max SL distance)
         # Prevents high-leverage outliers while maintaining volatility adaptation
-        sl_distance = max(p * 0.008, min(p * 0.025, atr * sl_multiplier))
-        tp1_distance = max(p * 0.010, max(sl_distance * 1.10, atr * tp1_multiplier))
-        tp2_distance = max(p * 0.050, max(sl_distance * 7.00, atr * tp2_multiplier))
+        sl_distance = max(p * 0.008, min(p * 0.022, atr * sl_multiplier))
+        tp1_distance = max(p * 0.012, max(sl_distance * 1.45, atr * tp1_multiplier))
+        tp2_distance = max(p * 0.035, max(sl_distance * 3.50, atr * tp2_multiplier))
 
-        # Guarantee winning asymmetric R:R (TP1 >= 1.10x SL for >=62% WR, TP2 >= 7.00x SL runner)
-        if tp1_distance < (sl_distance * 1.10):
-            tp1_distance = round(sl_distance * 1.10, prec)
-        if tp2_distance < (sl_distance * 7.00):
-            tp2_distance = round(sl_distance * 7.00, prec)
+        # Guarantee winning asymmetric R:R (TP1 >= 1.45x SL for optimal expectancy, TP2 >= 3.50x SL runner)
+        if tp1_distance < (sl_distance * 1.45):
+            tp1_distance = round(sl_distance * 1.45, prec)
+        if tp2_distance < (sl_distance * 3.50):
+            tp2_distance = round(sl_distance * 3.50, prec)
 
         # 4. Synthesize Geometry based on direction
         dir_upper = direction.upper()

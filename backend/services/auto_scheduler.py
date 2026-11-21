@@ -390,18 +390,7 @@ class AutoTradingScheduler:
                 if can_execute:
                     eq = float(paper_engine.total_equity or paper_engine.cash_balance or 10000.0)
                     avail_cash = float(paper_engine.cash_balance or 0.0)
-                    target_pct = (
-                        0.12 if confidence >= 85.0
-                        else (0.09 if confidence >= 78.0 else (0.06 if confidence >= 70.0 else 0.045))
-                    )
-                    default_auto_size = max(350.0, round(eq * target_pct, 2))
-                    raw_pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
-                    # For lower conviction (<75%), use conservative sizing to guard drawdown
-                    pos_size = raw_pos_size if (raw_pos_size > 0 and confidence >= 75.0) else default_auto_size
 
-                    # Maintain 15% cash reserve buffer for margin stability
-                    safe_cash_buffer = eq * 0.15
-                    usable_cash = max(100.0, avail_cash - safe_cash_buffer)
                     plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
                     if not plan_lev or int(plan_lev) < 1:
                         plan_lev = (
@@ -410,6 +399,21 @@ class AutoTradingScheduler:
                         )
                     max_sys_lev = getattr(paper_engine, "max_leverage", 20)
                     chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
+
+                    target_pct = (
+                        0.25 if confidence >= 85.0
+                        else (0.20 if confidence >= 78.0 else (0.16 if confidence >= 70.0 else 0.12))
+                    )
+                    default_auto_size = max(1200.0, round(eq * target_pct, 2))
+                    raw_pos_size = plan.get("recommended_position_usd", default_auto_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_auto_size)
+                    if raw_pos_size and raw_pos_size < default_auto_size:
+                        pos_size = max(default_auto_size, round(raw_pos_size * chosen_leverage, 2))
+                    else:
+                        pos_size = max(default_auto_size, raw_pos_size) if raw_pos_size > 0 else default_auto_size
+
+                    # Maintain 15% cash reserve buffer for margin stability
+                    safe_cash_buffer = eq * 0.15
+                    usable_cash = max(100.0, avail_cash - safe_cash_buffer)
                     if (pos_size / chosen_leverage) > usable_cash:
                         pos_size = round(usable_cash * chosen_leverage, 2)
 

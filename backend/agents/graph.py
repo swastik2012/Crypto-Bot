@@ -193,23 +193,6 @@ class MultiAgentConsensusPipeline:
         ):
             account_eq = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
             conf = stage5_res.consensus_confidence
-            target_pct = (
-                0.15 if conf >= 85.0
-                else (0.11 if conf >= 78.0 else (0.08 if conf >= 70.0 else 0.06))
-            )
-            default_fallback_size = max(400.0, round(account_eq * target_pct, 2))
-            raw_pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
-            pos_size = max(default_fallback_size, raw_pos_size) if raw_pos_size > 0 else default_fallback_size
-            entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
-            tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
-            tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
-            sl = plan.get("stop_loss") if isinstance(plan, dict) else getattr(plan, "stop_loss", None)
-
-            atr_val = plan.get("atr_14") if isinstance(plan, dict) else None
-            chandelier_mult = plan.get("chandelier_multiplier", 2.5) if isinstance(plan, dict) else 2.5
-            order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
-            wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
-            discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
 
             # Dynamic Leverage Scaling (>3x up to max_leverage):
             plan_lev = plan.get("recommended_leverage") if isinstance(plan, dict) else getattr(plan, "recommended_leverage", None)
@@ -220,6 +203,27 @@ class MultiAgentConsensusPipeline:
                 )
             max_sys_lev = getattr(paper_engine, "max_leverage", 20)
             chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
+
+            target_pct = (
+                0.25 if conf >= 85.0
+                else (0.20 if conf >= 78.0 else (0.16 if conf >= 70.0 else 0.12))
+            )
+            default_fallback_size = max(1200.0, round(account_eq * target_pct, 2))
+            raw_pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
+            if raw_pos_size and raw_pos_size < default_fallback_size:
+                pos_size = max(default_fallback_size, round(raw_pos_size * chosen_leverage, 2))
+            else:
+                pos_size = max(default_fallback_size, raw_pos_size) if raw_pos_size > 0 else default_fallback_size
+            entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
+            tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
+            tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
+            sl = plan.get("stop_loss") if isinstance(plan, dict) else getattr(plan, "stop_loss", None)
+
+            atr_val = plan.get("atr_14") if isinstance(plan, dict) else None
+            chandelier_mult = plan.get("chandelier_multiplier", 2.5) if isinstance(plan, dict) else 2.5
+            order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
+            wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
+            discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
 
             exec_latency_ms = round((time.time() - pipeline_start) * 1000, 1)
             order_req = PlacePaperOrderRequest(
