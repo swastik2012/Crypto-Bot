@@ -69,6 +69,8 @@ async def run_stage5_gemini_arbiter(
     mtf_align = getattr(mtf, "alignment_score", "3/3 FULL CONFLUENCE") if not isinstance(mtf, dict) else mtf.get("alignment_score", "3/3 FULL CONFLUENCE")
     trend_1d = _get_mtf_trend_1d(mtf)
     trend_4h = _get_mtf_trend_4h(mtf)
+    screen_4h_obj = (getattr(mtf, "screen_4h", None) if not isinstance(mtf, dict) else mtf.get("screen_4h")) if mtf else None
+    fresh_4h_cross = (getattr(screen_4h_obj, "fresh_ema_cross", "NONE") if not isinstance(screen_4h_obj, dict) else screen_4h_obj.get("fresh_ema_cross", "NONE")) if screen_4h_obj else "NONE"
 
     from backend.services.market_data import market_data_service
     atr_plan = await market_data_service.calculate_dynamic_atr_targets(
@@ -272,6 +274,11 @@ async def run_stage5_gemini_arbiter(
                 (openai_score * 0.25),
                 1
             )
+            # Numba-validated 4H Fresh EMA20/EMA50 Crossover Exhaustion Rule
+            if fresh_4h_cross == "FRESH_GOLDEN_CROSS_20_ABOVE_50":
+                consensus_confidence = min(98.0, round(consensus_confidence + 5.0, 1))
+            elif fresh_4h_cross == "FRESH_DEATH_CROSS_20_BELOW_50":
+                consensus_confidence = max(20.0, round(consensus_confidence - 8.0, 1))
             if consensus_confidence >= 80.0 and fakeout_risk < 35.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_SELL
             elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and fakeout_risk < 50.0:
@@ -362,6 +369,11 @@ async def run_stage5_gemini_arbiter(
                 else:
                     rs_mod = getattr(relative_strength, "long_conviction_modifier", 0.0)
                 consensus_confidence = max(20.0, min(98.0, round(consensus_confidence + rs_mod, 1)))
+            # Numba-validated 4H Fresh EMA20/EMA50 Crossover Exhaustion Rule
+            if fresh_4h_cross == "FRESH_GOLDEN_CROSS_20_ABOVE_50":
+                consensus_confidence = max(20.0, round(consensus_confidence - 8.0, 1))
+            elif fresh_4h_cross == "FRESH_DEATH_CROSS_20_BELOW_50":
+                consensus_confidence = min(98.0, round(consensus_confidence + 5.0, 1))
             if consensus_confidence >= 80.0 and fakeout_risk < 35.0 and ("3/3" in mtf_align or "2/3" in mtf_align):
                 signal = SignalAction.STRONG_BUY
             elif consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and fakeout_risk < 50.0:
@@ -535,9 +547,41 @@ async def run_stage5_gemini_arbiter(
     trade_grade_badge = adj.get("trade_grade_badge") or (getattr(kelly_schema, "trade_grade_badge", "🔹 Grade A (Half-Kelly 0.50x)") if kelly_schema else "🔹 Grade A (Half-Kelly 0.50x)")
     kappa_used = adj.get("kappa_used") or (getattr(kelly_schema, "kappa_used", 0.50) if kelly_schema else 0.50)
 
-    wholesale_limit = deriv_dict.get("liquidation_sweep_entry") or entry
-    order_type_rec = deriv_dict.get("recommended_order_type", "LIMIT")
-    discount_pct_val = deriv_dict.get("sweep_discount_pct", 0.0)
+    final_dir = (
+        "SHORT" if signal in [SignalAction.SELL, SignalAction.STRONG_SELL]
+        else ("LONG" if signal in [SignalAction.BUY, SignalAction.STRONG_BUY] else (direction if direction in ["LONG", "SHORT"] else "LONG"))
+    )
+
+    from backend.services.derivatives_service import derivatives_service
+    if deriv_dict:
+        sweep_data_dir = derivatives_service.calculate_liquidation_sweep_zone(
+            symbol=symbol,
+            current_price=current_price,
+            direction=final_dir,
+            atr_14=atr_plan.get("atr_14"),
+            funding_rate_8h_pct=float(deriv_dict.get("funding_rate_8h_pct", 0.0) or 0.0),
+            predatory_liquidation_risk=str(deriv_dict.get("predatory_liquidation_risk", "LOW")),
+        )
+        wholesale_limit = sweep_data_dir["wholesale_limit_entry"]
+        order_type_rec = sweep_data_dir["recommended_order_type"]
+        discount_pct_val = sweep_data_dir["discount_pct"]
+        sweep_zone_low_val = sweep_data_dir["sweep_zone_low"]
+        sweep_zone_high_val = sweep_data_dir["sweep_zone_high"]
+        sniping_rationale_val = sweep_data_dir["sniping_rationale"]
+        carry_data_dir = derivatives_service.evaluate_funding_carry(
+            symbol=symbol,
+            funding_rate_8h_pct=float(deriv_dict.get("funding_rate_8h_pct", 0.0) or 0.0),
+            direction=final_dir,
+            position_size_usd=1000.0,
+        )
+    else:
+        wholesale_limit = entry
+        order_type_rec = "LIMIT"
+        discount_pct_val = 0.0
+        sweep_zone_low_val = None
+        sweep_zone_high_val = None
+        sniping_rationale_val = None
+        carry_data_dir = {}
 
     # Dynamic Leverage Recommendation Engine:
     # Strictly align leverage with Conviction & Setup Quality to prevent outsized losses:
@@ -561,37 +605,50 @@ async def run_stage5_gemini_arbiter(
     else:
         rec_leverage = 1
 
-    # Mathematical Risk:Reward & Directional Target Geometry Guard:
-    # Ensure TP1 distance is AT LEAST 1.45x SL distance and matches signal direction
-    risk_dist = abs(entry - sl) if (sl and entry) else 0.0
-    reward_dist = abs(tp1 - entry) if (tp1 and entry) else 0.0
+    # Mathematical Risk:Reward & Directional Target Geometry Guard (measured from ACTUAL effective entry!):
+    effective_entry = wholesale_limit if (order_type_rec == "LIMIT" and wholesale_limit) else entry
+    is_dir_valid = bool(tp1 and sl and effective_entry) and (
+        (final_dir == "SHORT" and tp1 < effective_entry < sl) or
+        (final_dir == "LONG" and sl < effective_entry < tp1)
+    )
+    risk_dist = abs(effective_entry - sl) if (sl and effective_entry) else 0.0
+    reward_dist = abs(tp1 - effective_entry) if (tp1 and effective_entry) else 0.0
     measured_rr = (reward_dist / risk_dist) if risk_dist > 0 else 0.0
 
-    # If LLM thesis gave inverted or weak R:R (< 1.45), enforce institutional ATR target geometry
-    if measured_rr < 1.45 or not tp1 or not sl:
-        tp1 = atr_plan["take_profit_1"]
-        tp2 = atr_plan["take_profit_2"]
-        sl = atr_plan["stop_loss"]
+    # If LLM thesis or sweep offset gave inverted or weak R:R (< 1.45) relative to actual fill price,
+    # recompute asymmetric ATR target geometry anchored at effective_entry!
+    if (not is_dir_valid) or measured_rr < 1.45 or not tp1 or not sl:
+        atr_plan_eff = await market_data_service.calculate_dynamic_atr_targets(
+            symbol=symbol,
+            current_price=effective_entry,
+            direction=final_dir,
+            timeframe=timeframe,
+            override_atr=atr_plan.get("atr_14"),
+        )
+        tp1 = atr_plan_eff["take_profit_1"]
+        tp2 = atr_plan_eff["take_profit_2"]
+        sl = atr_plan_eff["stop_loss"]
+        atr_plan = atr_plan_eff
 
     exec_plan = {
         "recommended_entry": entry,
         "take_profit_1": tp1,
         "take_profit_2": tp2,
         "stop_loss": sl,
-        "effective_rr": atr_plan.get("risk_reward_tp1", stage3.risk_reward_ratio),
-        "risk_reward_ratio": atr_plan.get("risk_reward_tp1", stage3.risk_reward_ratio),
+        "effective_rr": round(abs(tp1 - effective_entry) / max(1e-8, abs(effective_entry - sl)), 2),
+        "risk_reward_ratio": round(abs(tp1 - effective_entry) / max(1e-8, abs(effective_entry - sl)), 2),
         "atr_14": atr_plan.get("atr_14"),
         "atr_pct": atr_plan.get("atr_pct"),
         "volatility_regime": atr_plan.get("volatility_regime"),
         "order_type": order_type_rec,
         "wholesale_limit_entry": wholesale_limit,
         "sweep_discount_pct": discount_pct_val,
-        "sweep_zone_low": deriv_dict.get("sweep_zone_low"),
-        "sweep_zone_high": deriv_dict.get("sweep_zone_high"),
-        "sniping_rationale": deriv_dict.get("sniping_rationale"),
-        "funding_carry_apr": deriv_dict.get("annualized_carry_apr", 0.0),
-        "carry_regime": deriv_dict.get("carry_regime", "NEUTRAL_CARRY"),
-        "carry_cashflow_8h_usd": deriv_dict.get("carry_cashflow_8h_usd", 0.0),
+        "sweep_zone_low": sweep_zone_low_val,
+        "sweep_zone_high": sweep_zone_high_val,
+        "sniping_rationale": sniping_rationale_val,
+        "funding_carry_apr": carry_data_dir.get("annualized_carry_apr", deriv_dict.get("annualized_carry_apr", 0.0)),
+        "carry_regime": carry_data_dir.get("carry_regime", deriv_dict.get("carry_regime", "NEUTRAL_CARRY")),
+        "carry_cashflow_8h_usd": carry_data_dir.get("cashflow_per_8h_usd", deriv_dict.get("carry_cashflow_8h_usd", 0.0)),
         "trade_grade": trade_grade,
         "trade_grade_badge": trade_grade_badge,
         "kappa_used": kappa_used,

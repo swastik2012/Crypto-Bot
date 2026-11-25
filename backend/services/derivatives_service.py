@@ -90,11 +90,13 @@ class DerivativesService:
         symbol: str,
         current_price: Optional[float] = None,
         price_change_24h: float = 0.0,
+        direction: str = "LONG",
     ) -> DerivativesMicrostructure:
         """
         Aggregates all derivatives order flow metrics and performs institutional synthesis.
         """
-        clean_key = symbol.upper()
+        dir_norm = "SHORT" if direction.upper() in ["SHORT", "SELL", "BEARISH", "STRONG SELL"] else "LONG"
+        clean_key = f"{symbol.upper()}_{dir_norm}"
         now = time.time()
         if clean_key in self._cache and (now - self._cache[clean_key]["time"]) < self._cache_ttl:
             return self._cache[clean_key]["data"]
@@ -162,7 +164,7 @@ class DerivativesService:
         sweep_data = self.calculate_liquidation_sweep_zone(
             symbol=symbol,
             current_price=p,
-            direction="LONG",
+            direction=dir_norm,
             funding_rate_8h_pct=funding_pct,
             predatory_liquidation_risk=pred_risk,
         )
@@ -171,17 +173,19 @@ class DerivativesService:
         carry_data = self.evaluate_funding_carry(
             symbol=symbol,
             funding_rate_8h_pct=funding_pct,
-            direction="LONG",
+            direction=dir_norm,
             position_size_usd=1000.0,
         )
 
+        edge_sign = "-" if dir_norm == "LONG" else "+"
+        edge_label = "discount" if dir_norm == "LONG" else "premium"
         summary = (
             f"Derivatives Flow: Funding={funding_pct:+.4f}% ({funding_regime}, {carry_data['carry_regime']}), "
             f"Carry APR={carry_data['annualized_carry_apr']:+.1f}%, "
             f"OI=${oi_usd/1e6:.1f}M ({oi_delta_pct:+.1f}% 1h: {oi_interp}), "
             f"Taker Buy Ratio={buy_ratio:.2f} ({cvd_divergence}). "
             f"Predatory Liquidation Risk={pred_risk}. "
-            f"Wholesale Sniper Limit: ${sweep_data['wholesale_limit_entry']:,.2f} (-{sweep_data['discount_pct']}% discount)."
+            f"Wholesale Sniper Limit ({dir_norm}): ${sweep_data['wholesale_limit_entry']:,.4f} ({edge_sign}{sweep_data['discount_pct']}% {edge_label})."
         )
 
         result = DerivativesMicrostructure(

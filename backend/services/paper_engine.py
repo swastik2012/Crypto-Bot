@@ -241,13 +241,22 @@ class VirtualPaperEngine:
         is_wholesale_sniper = False
         spread_savings_usd = 0.0
 
-        # Phase 3: Wholesale Limit Sniping Engine
+        # Phase 3: Wholesale Limit Sniping Engine (with strict directional validity guard)
         if getattr(order, "order_type", "MARKET") == "LIMIT" and getattr(order, "wholesale_limit_price", None):
-            entry_price = float(order.wholesale_limit_price)
-            is_wholesale_sniper = True
-            spread_diff = abs(current_market_price - entry_price)
-            spread_savings_usd = round(spread_diff * (order.size_usd / entry_price), 2)
-            print(f"[PaperEngine Sniper] 🎯 WHOLESALE LIMIT SNIPER FILLED: {order.symbol} @ ${entry_price:,.2f} (Saved ${spread_savings_usd:,.2f} vs retail market chase @ ${current_market_price:,.2f})")
+            limit_p = float(order.wholesale_limit_price)
+            is_valid_limit = (
+                (order.side == PositionSide.LONG and 0 < limit_p <= current_market_price) or
+                (order.side == PositionSide.SHORT and limit_p >= current_market_price)
+            )
+            if is_valid_limit:
+                entry_price = limit_p
+                is_wholesale_sniper = True
+                spread_diff = (current_market_price - entry_price) if order.side == PositionSide.LONG else (entry_price - current_market_price)
+                spread_savings_usd = round(max(0.0, spread_diff) * (order.size_usd / entry_price), 2)
+                print(f"[PaperEngine Sniper] 🎯 WHOLESALE LIMIT SNIPER FILLED: {order.symbol} @ ${entry_price:,.4f} (Saved ${spread_savings_usd:,.2f} vs retail market chase @ ${current_market_price:,.4f})")
+            else:
+                entry_price = current_market_price
+                print(f"[PaperEngine Guard] Ignored non-favorable {order.side.value} limit ${limit_p:,.4f} vs market ${current_market_price:,.4f}; filled at market.")
         
         size_usd = order.size_usd
         margin_required = size_usd / leverage

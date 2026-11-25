@@ -205,15 +205,13 @@ class MultiAgentConsensusPipeline:
             chosen_leverage = min(max(1, int(plan_lev)), max_sys_lev)
 
             target_pct = (
-                0.25 if conf >= 85.0
-                else (0.20 if conf >= 78.0 else (0.16 if conf >= 70.0 else 0.12))
+                0.22 if conf >= 85.0
+                else (0.18 if conf >= 78.0 else (0.15 if conf >= 70.0 else 0.12))
             )
             default_fallback_size = max(1200.0, round(account_eq * target_pct, 2))
+            max_notional_cap = max(1200.0, round(account_eq * 0.25, 2))
             raw_pos_size = plan.get("recommended_position_usd", default_fallback_size) if isinstance(plan, dict) else getattr(plan, "recommended_position_usd", default_fallback_size)
-            if raw_pos_size and raw_pos_size < default_fallback_size:
-                pos_size = max(default_fallback_size, round(raw_pos_size * chosen_leverage, 2))
-            else:
-                pos_size = max(default_fallback_size, raw_pos_size) if raw_pos_size > 0 else default_fallback_size
+            pos_size = min(max_notional_cap, max(default_fallback_size, raw_pos_size)) if raw_pos_size > 0 else default_fallback_size
             entry_p = plan.get("recommended_entry", current_price) if isinstance(plan, dict) else getattr(plan, "recommended_entry", current_price)
             tp1 = plan.get("take_profit_1") if isinstance(plan, dict) else getattr(plan, "take_profit_1", None)
             tp2 = plan.get("take_profit_2") if isinstance(plan, dict) else getattr(plan, "take_profit_2", None)
@@ -224,6 +222,31 @@ class MultiAgentConsensusPipeline:
             order_type_val = plan.get("order_type", "LIMIT") if isinstance(plan, dict) else "LIMIT"
             wholesale_limit = plan.get("wholesale_limit_entry") if isinstance(plan, dict) else None
             discount_pct = plan.get("sweep_discount_pct", 0.0) if isinstance(plan, dict) else 0.0
+
+            is_short_order = "SELL" in stage5_res.consensus_signal.value
+            eff_entry = entry_p
+            if order_type_val == "LIMIT" and wholesale_limit:
+                wl = float(wholesale_limit)
+                if (not is_short_order and 0 < wl <= current_price) or (is_short_order and wl >= current_price):
+                    eff_entry = wl
+
+            is_dir_valid = bool(tp1 and sl and eff_entry) and (
+                (is_short_order and tp1 < eff_entry < sl) or
+                (not is_short_order and sl < eff_entry < tp1)
+            )
+            eff_rr = (abs(tp1 - eff_entry) / abs(eff_entry - sl)) if (tp1 and sl and eff_entry and abs(eff_entry - sl) > 0) else 0.0
+            if (not is_dir_valid) or eff_rr < 1.45:
+                from backend.services.market_data import market_data_service
+                atr_recalc = await market_data_service.calculate_dynamic_atr_targets(
+                    symbol=symbol,
+                    current_price=eff_entry,
+                    direction="SHORT" if is_short_order else "LONG",
+                    timeframe=timeframe,
+                    override_atr=atr_val,
+                )
+                tp1 = atr_recalc["take_profit_1"]
+                tp2 = atr_recalc["take_profit_2"]
+                sl = atr_recalc["stop_loss"]
 
             exec_latency_ms = round((time.time() - pipeline_start) * 1000, 1)
             order_req = PlacePaperOrderRequest(
