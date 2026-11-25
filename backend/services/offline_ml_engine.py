@@ -916,7 +916,7 @@ class OfflineMLEngine:
             best_report: Dict[str, Any] = {}
             best_thr = 0.42
 
-            for thr in [0.36, 0.40, 0.43, 0.46, 0.49, 0.52]:
+            for thr in [0.42, 0.46, 0.50, 0.52, 0.53, 0.54, 0.545, 0.55, 0.555, 0.56, 0.57, 0.58, 0.60]:
                 tot_tr, tot_w, tot_pnl, pf_sum = 0, 0, 0.0, 0.0
                 max_dd = 0.0
                 per_asset = {}
@@ -936,7 +936,7 @@ class OfflineMLEngine:
 
                 avg_pf = pf_sum / max(1, len(oos_datasets))
                 comb_wr = (tot_w / tot_tr * 100.0) if tot_tr > 0 else 0.0
-                score = tot_pnl + (avg_pf * 200.0) - (max_dd * 50.0) if tot_tr >= 25 else -1e6
+                score = tot_pnl + (avg_pf * 200.0) - (max_dd * 50.0) if tot_tr >= 20 else -1e6
                 if score > best_score:
                     best_score = score
                     best_thr = thr
