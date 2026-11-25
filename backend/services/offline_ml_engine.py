@@ -955,8 +955,8 @@ class OfflineMLEngine:
             is_promoted = (
                 best_report.get("oos_trades", 0) >= 20
                 and best_report.get("oos_net_pnl", 0.0) > 0.0
-                and best_report.get("oos_profit_factor", 0.0) >= 1.15
-                and best_report.get("oos_win_rate_pct", 0.0) >= 40.0
+                and best_report.get("oos_profit_factor", 0.0) >= 1.20
+                and best_report.get("oos_win_rate_pct", 0.0) >= 36.0
             )
 
             real_cnt = len(X_real)
