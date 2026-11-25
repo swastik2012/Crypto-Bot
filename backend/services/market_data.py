@@ -804,6 +804,8 @@ class MarketDataService:
             lower_wick_ratio = (min(c_close, c_open) - c_low) / bar_range
 
         ema_gap_pct = abs(ema_20 - ema_50) / p * 100.0 if p > 0 else 0.0
+        ret_1h_pct = ((p - closes[-2]) / closes[-2] * 100.0) if (len(closes) >= 2 and closes[-2] > 0) else 0.0
+        ret_4h_pct = ((p - closes[-5]) / closes[-5] * 100.0) if (len(closes) >= 5 and closes[-5] > 0) else 0.0
 
         indicators = {
             "rsi": round(rsi, 2),
@@ -815,6 +817,8 @@ class MarketDataService:
             "current_price": p,
             "ema_20": round(ema_20, prec),
             "ema_50": round(ema_50, prec),
+            "ret_1h_pct": round(ret_1h_pct, 3),
+            "ret_4h_pct": round(ret_4h_pct, 3),
         }
 
         # 1. Pre-filter Filter A: Dead Low-Volatility Chop

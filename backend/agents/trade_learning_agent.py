@@ -17,10 +17,10 @@ class TradeLearningAgent:
     def __init__(self):
         self.endpoint = settings.NVIDIA_ENDPOINT or "https://integrate.api.nvidia.com/v1"
         self.preferred_models = [
-            settings.NVIDIA_REASONING_MODEL or "meta/llama-3.2-11b-vision-instruct",
-            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
-            "meta/llama-3.2-11b-vision-instruct",
-            "openai/gpt-oss-20b",
+            settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
+            "nvidia/nemotron-3.5-bolt-e4b",
+            "minimaxai/minimax-m3.1-flash",
+            "nvidia/nemotron-3-ultra-550b-a55b",
         ]
 
     async def analyze_trade(
@@ -76,67 +76,65 @@ class TradeLearningAgent:
         )
 
         parsed_json = None
-        model_used = "nvidia/nemotron-3.5-lightning-30b-a3b"
+        model_used = settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b"
 
         is_official_deepseek = bool(effective_key and effective_key.startswith("sk-"))
         api_endpoint = "https://api.deepseek.com/chat/completions" if is_official_deepseek else f"{self.endpoint}/chat/completions"
         provider_name = "DeepSeek Official (Trade Learner)" if is_official_deepseek else "NVIDIA NIM (Trade Learner)"
-        candidate_models = ["deepseek-reasoner", "deepseek-chat"] if is_official_deepseek else [
-            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
-            "meta/llama-3.2-11b-vision-instruct",
-            "openai/gpt-oss-20b",
-            settings.NVIDIA_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
-        ]
 
         if effective_key and not effective_key.startswith("your-") and not effective_key.startswith("nvapi-***"):
-            for cand in candidate_models:
-                try:
-                    payload = {
-                        "model": cand,
-                        "messages": [
-                            {"role": "system", "content": system_prompt},
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        "temperature": 0.2,
-                        "max_tokens": 1500,
-                    }
-                    async with httpx.AsyncClient(timeout=httpx.Timeout(20.0, connect=4.0)) as client:
-                        resp = await client.post(
-                            api_endpoint,
-                            headers={
-                                "Authorization": f"Bearer {effective_key}",
-                                "Content-Type": "application/json",
-                            },
-                            json=payload,
-                        )
-                        if resp.status_code == 200:
-                            data = resp.json()
-                            raw_content = data["choices"][0]["message"].get("content") or ""
-                            clean_text = raw_content.strip()
-                            if "```json" in clean_text:
-                                clean_text = clean_text.split("```json")[1].split("```")[0].strip()
-                            elif "```" in clean_text:
-                                clean_text = clean_text.split("```")[1].split("```")[0].strip()
-                            elif "{" in clean_text and "}" in clean_text:
-                                last_b = clean_text.rfind("}")
-                                first_b = clean_text.find("{")
-                                clean_text = clean_text[first_b:last_b+1]
-
-                            parsed_json = json.loads(clean_text)
-                            model_used = cand
-                            telemetry_service.log_call(
-                                provider=provider_name,
-                                model=model_used,
-                                endpoint=api_endpoint,
-                                request_payload={"symbol": symbol, "pnl": pnl_usd, "outcome": outcome},
-                                response_payload=parsed_json,
-                                latency_ms=round((time.time() - start_ts) * 1000),
-                                status="SUCCESS",
-                                status_code=200,
+            if is_official_deepseek:
+                for cand in ["deepseek-reasoner", "deepseek-chat"]:
+                    try:
+                        payload = {
+                            "model": cand,
+                            "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                            "temperature": 0.2,
+                            "max_tokens": 800,
+                        }
+                        async with httpx.AsyncClient(timeout=httpx.Timeout(12.0, connect=3.0)) as client:
+                            resp = await client.post(
+                                api_endpoint,
+                                headers={"Authorization": f"Bearer {effective_key}", "Content-Type": "application/json"},
+                                json=payload,
                             )
-                            break
-                except Exception as e:
-                    continue
+                            if resp.status_code == 200:
+                                from backend.services.gemini_guard import extract_llm_json
+                                parsed_json = extract_llm_json(resp.json()["choices"][0]["message"])
+                                if parsed_json and "root_cause_analysis" in parsed_json:
+                                    model_used = cand
+                                    break
+                    except Exception:
+                        continue
+            else:
+                from backend.services.gemini_guard import call_nvidia_nim_json
+                res_nv = await call_nvidia_nim_json(
+                    api_key=effective_key,
+                    endpoint=self.endpoint,
+                    system_prompt=system_prompt,
+                    user_prompt=user_prompt,
+                    preferred_model=model_used,
+                    role="fast",
+                    max_tokens=600,
+                    timeout_s=9.0,
+                    required_keys=["root_cause_analysis", "actionable_rule"],
+                )
+                if res_nv["ok"]:
+                    parsed_json = res_nv["parsed"]
+                    model_used = res_nv["model"]
+                    telemetry_service.record_call(
+                        provider=provider_name,
+                        model=model_used,
+                        stage="Post-Mortem Trade Audit",
+                        endpoint=api_endpoint,
+                        prompt_text=user_prompt[:500],
+                        response_text=json.dumps(parsed_json)[:500],
+                        request_summary={"symbol": symbol, "pnl": pnl_usd, "outcome": outcome},
+                        response_summary=parsed_json,
+                        latency_ms=res_nv["latency_ms"],
+                        status="SUCCESS",
+                        status_code=200,
+                    )
 
         # Deterministic Algorithmic Fallback if AI endpoint is offline
         if not parsed_json:

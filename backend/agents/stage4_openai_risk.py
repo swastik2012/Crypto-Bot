@@ -313,61 +313,42 @@ async def run_stage4_openai_risk(
                 OpenAIQuotaGuard.mark_exhausted(err_msg)
             print(f"[Stage 4 OpenAI Notice]: {err_msg} - falling over to NVIDIA NIM...")
     elif not OpenAIQuotaGuard.is_available():
-        print("[Stage 4 OpenAI Notice]: OpenAI in quota exhaustion cooldown. Routing directly to NVIDIA NIM Flagship Risk Officer...")
+        ml_pred = indicators.get("_offline_ml_pred") if isinstance(indicators, dict) else None
+        if isinstance(ml_pred, dict) and ml_pred.get("can_replace_cloud_ai") and float(ml_pred.get("autonomy_weight", 0.0)) >= 0.55:
+            model_name = f"offline-ml/{ml_pred.get('model_version', 'v1')}"
+            active_provider = f"Offline ML Risk Guard ({ml_pred.get('autonomy_weight', 0.0)*100:.0f}% autonomy)"
+            parsed_successfully = True
+        else:
+            print("[Stage 4 OpenAI Notice]: OpenAI in quota exhaustion cooldown. Routing directly to NVIDIA NIM Flagship Risk Officer...")
 
-    # 2. Reroute to NVIDIA NIM Models (NVIDIA Flagship 120B / Lightning 30B Reasoning Models)
+    # 2. Reroute to Live Free NVIDIA NIM Latest Models (Verified Fast & Flagship Cascade)
     if not parsed_successfully and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
-        nv_candidates = [
-            settings.NVIDIA_RISK_MODEL or "nvidia/nemotron-3.5-super-vl-120b-a12b",
-            settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b",
-        ]
-        # Remove duplicates while preserving order
-        seen = set()
-        nv_candidates = [c for c in nv_candidates if c and not (c in seen or seen.add(c))]
-
-        nv_headers = {
-            "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-            "Content-Type": "application/json",
-        }
-
-        for candidate_model in nv_candidates:
-            try:
-                nv_payload = {
-                    "model": candidate_model,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 380,
-                }
-                async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
-                    resp = await client.post(
-                        f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                        headers=nv_headers,
-                        json=nv_payload,
-                    )
-                    if resp.status_code == 200:
-                        data = resp.json()
-                        choice = data.get("choices", [{}])[0].get("message", {})
-                        parsed = extract_llm_json(choice)
-                        if parsed and ("safety_score" in parsed or "false_breakout_probability" in parsed):
-                            safety_score = float(parsed.get("safety_score", safety_score))
-                            false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
-                            order_block_status = parsed.get("order_block_status", order_block_status)
-                            macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
-                            critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
-                            critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
-                            model_name = candidate_model
-                            active_provider = f"NVIDIA NIM ({candidate_model.split('/')[-1]})"
-                            parsed_successfully = True
-                            print(f"[Stage 4 NVIDIA Reroute Success]: Audited via {candidate_model} (Safety Score: {safety_score}, Fakeout Prob: {false_breakout_prob}%)")
-                            break
-                    else:
-                        print(f"[Stage 4 NVIDIA Risk Officer Notice]: {candidate_model} returned HTTP {resp.status_code}")
-            except Exception as e:
-                err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-                print(f"[Stage 4 NVIDIA Risk Officer Notice]: {candidate_model} - {err_msg}")
+        from backend.services.gemini_guard import call_nvidia_nim_json
+        res_nv = await call_nvidia_nim_json(
+            api_key=settings.NVIDIA_API_KEY,
+            endpoint=settings.NVIDIA_ENDPOINT,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            preferred_model=settings.NVIDIA_RISK_MODEL,
+            role="flagship",
+            max_tokens=480,
+            timeout_s=7.5,
+            required_keys=["safety_score", "false_breakout_probability"],
+        )
+        if res_nv["ok"]:
+            parsed = res_nv["parsed"]
+            safety_score = float(parsed.get("safety_score", safety_score))
+            false_breakout_prob = float(parsed.get("false_breakout_probability", false_breakout_prob))
+            order_block_status = parsed.get("order_block_status", order_block_status)
+            macro_trap_alert = parsed.get("macro_trap_alert", macro_trap_alert)
+            critique_gemini = parsed.get("critique_of_gemini", critique_gemini)
+            critique_nvidia = parsed.get("critique_of_nvidia", critique_nvidia)
+            model_name = res_nv["model"]
+            active_provider = f"NVIDIA NIM ({model_name.split('/')[-1]})"
+            parsed_successfully = True
+            print(f"[Stage 4 NVIDIA Reroute Success]: Audited via {model_name} in {res_nv['latency_ms']}ms (Safety Score: {safety_score}, Fakeout Prob: {false_breakout_prob}%)")
+        else:
+            print("[Stage 4 NVIDIA Risk Officer Notice]: NVIDIA NIM cascade fell back to deterministic quant risk guard.")
 
     # 3. Tertiary Failover: Google Gemini (Cascading)
     target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
@@ -403,7 +384,6 @@ async def run_stage4_openai_risk(
                 else:
                     err_msg = str(e) or f"{type(e).__name__} (request timed out)"
                     print(f"[Stage 4 LLM Risk Notice]: {err_msg}")
-                    continue
                     continue
 
     # HARD RISK GUARD: Veto Counter-Trend Shorting in Bullish Macro Regime

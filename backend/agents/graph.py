@@ -121,6 +121,16 @@ class MultiAgentConsensusPipeline:
         # Backward compatibility reference for downstream stages
         stage_jev_res = stage_deepseek_res
 
+        # Pre-compute Offline ML prediction (Numba-verified local meta-labeler) for Stage 4 & Stage 5 progressive AI bypass
+        from backend.services.offline_ml_engine import offline_ml_engine
+        ind_with_ml = dict(indicators or {})
+        ind_with_ml.setdefault("current_price", current_price)
+        ind_with_ml["_offline_ml_pred"] = offline_ml_engine.predict_setup(
+            symbol=symbol,
+            indicators=ind_with_ml,
+            mtf_data=getattr(stage1_res, "multi_timeframe_confluence", None),
+        )
+
         # STAGE 5: OpenAI Risk & Counter-Trend Validator (Ingests Stages 1-4, Jev & Derivatives Microstructure)
         stage4_res, msg4 = await run_stage4_openai_risk(
             symbol=symbol,
@@ -134,7 +144,7 @@ class MultiAgentConsensusPipeline:
             derivatives_data=derivatives_data,
             macro_status=macro_status,
             btc_gatekeeper=btc_gatekeeper,
-            indicators=indicators,
+            indicators=ind_with_ml,
         )
         debate_stream.append(msg4)
 
@@ -155,7 +165,7 @@ class MultiAgentConsensusPipeline:
             macro_status=macro_status,
             btc_gatekeeper=btc_gatekeeper,
             relative_strength=relative_strength,
-            indicators=indicators,
+            indicators=ind_with_ml,
         )
         debate_stream.append(msg5)
 

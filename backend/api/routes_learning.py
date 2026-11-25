@@ -24,6 +24,27 @@ async def get_trading_playbook():
         "rules": [r.dict() for r in learning_memory_service.playbook_rules],
     }
 
+@router.get("/rules")
+async def get_trading_rules_alias():
+    """Alias for /playbook expected by frontend dashboard."""
+    return {
+        "status": "success",
+        "count": len(learning_memory_service.playbook_rules),
+        "rules": [r.dict() for r in learning_memory_service.playbook_rules],
+    }
+
+@router.get("/offline-model")
+async def get_offline_ml_status():
+    """Returns status, Numba walk-forward backtest metrics, and autonomy weight of the self-trained Offline ML Model."""
+    from backend.services.offline_ml_engine import offline_ml_engine
+    return {"status": "success", "model": offline_ml_engine.get_status()}
+
+@router.post("/train-offline-model")
+async def trigger_offline_ml_training(force: bool = True):
+    """Retrains the Offline ML model on executed trades + AI learnings and validates via Numba backtest."""
+    from backend.services.offline_ml_engine import offline_ml_engine
+    return await offline_ml_engine.train_and_backtest_daily(force=force)
+
 @router.get("/post-mortems")
 async def get_trade_post_mortems(limit: int = Query(50, ge=1, le=150)):
     """

@@ -37,7 +37,7 @@ async def run_stage3_nvidia_deepseek(
     thesis = stage1_res.initial_thesis or {}
     direction = str(thesis.get("direction", "LONG")).upper()
     news_sentiment_score = stage2_res.sentiment_score
-    rsi_val = float(stage1_res.rsi_status.get("value", 50.0))
+    rsi_val = float(stage1_res.rsi_status.get("value") or stage1_res.rsi_status.get("rsi_14") or 50.0)
 
     # Extract Derivatives Microstructure
     funding_rate = 0.01
@@ -79,12 +79,14 @@ async def run_stage3_nvidia_deepseek(
         '  "bias_probabilities": {"BUY": float, "HOLD": float, "SELL": float},\n'
         '  "chain_of_thought": "Concise step-by-step quantitative reasoning (max 3 sentences)",\n'
         '  "summary": "1-2 sentence executive operational verdict"\n'
-        "}"
+        "}\n"
+        "Treat LONG and SHORT setups symmetrically: if Stage 1 high-reliability pattern (>=0.80) aligns with Stage 2 directional sentiment and Predatory Risk is LOW without counter-trend MTF warnings, evaluate high_probability_edge as true and set execution_bias to BUY (for LONG) or SELL (for SHORT), never NEUTRAL."
     )
 
+    pat_rel = stage1_res.patterns[0].reliability if stage1_res.patterns else 0.70
     user_prompt = (
         f"ASSET: {symbol} | CURRENT PRICE: ${current_price:,.2f}\n"
-        f"STAGE 1 VISION: Proposed Direction: {direction} | Pattern: {stage1_res.patterns[0].name if stage1_res.patterns else 'Consolidation'} | RSI(14): {rsi_val:.1f} | MTF Alignment: {mtf_align} (Counter-Trend Warning: {has_mtf_warning})\n"
+        f"STAGE 1 VISION: Proposed Direction: {direction} | Pattern: {stage1_res.patterns[0].name if stage1_res.patterns else 'Consolidation'} (Rel={pat_rel:.2f}) | RSI(14): {rsi_val:.1f} | Volume: {stage1_res.volume_analysis[:120]} | MTF Alignment: {mtf_align} (Counter-Trend Warning: {has_mtf_warning})\n"
         f"STAGE 2 NEWS: Sentiment Score: {news_sentiment_score}/100 ({stage2_res.sentiment_label}) | Macro Catalyst: {stage2_res.macro_narrative[:120]}\n"
         f"DERIVATIVES ORDER FLOW (Binance Futures):\n"
         f"- 8h Funding Rate: {funding_rate:+.4f}% ({funding_reg})\n"
@@ -99,42 +101,25 @@ async def run_stage3_nvidia_deepseek(
     api_endpoint = "https://api.deepseek.com/chat/completions" if is_official_deepseek else f"{endpoint}/chat/completions"
     provider_name = "DeepSeek Official" if is_official_deepseek else "NVIDIA NIM (DeepSeek / Reasoning)"
 
-    if is_official_deepseek:
-        candidate_models = ["deepseek-reasoner"]
-    else:
-        # Verified live high-speed models on NVIDIA NIM: meta/llama-3.2-11b-vision-instruct
-        candidate_models = [
-            settings.NVIDIA_DEEPSEEK_MODEL or "meta/llama-3.2-11b-vision-instruct",
-        ]
-
-    model_used = candidate_models[0]
+    model_used = settings.NVIDIA_DEEPSEEK_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b"
     parsed_json = None
     telemetry_status = "FALLBACK"
     raw_response_text = ""
 
     if effective_key and not effective_key.startswith("your-") and not effective_key.startswith("nvapi-***"):
-        for cand in candidate_models:
-            try:
-                headers = {
-                    "Authorization": f"Bearer {effective_key}",
-                    "Content-Type": "application/json",
-                }
-                payload = {
-                    "model": cand,
-                    "messages": [
-                        {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": user_prompt},
-                    ],
-                    "temperature": 0.1,
-                    "max_tokens": 450,
-                }
-                req_start = time.time()
-                async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
-                    resp = await client.post(
-                        api_endpoint,
-                        headers=headers,
-                        json=payload,
-                    )
+        if is_official_deepseek:
+            for cand in ["deepseek-reasoner", "deepseek-chat"]:
+                try:
+                    headers = {"Authorization": f"Bearer {effective_key}", "Content-Type": "application/json"}
+                    payload = {
+                        "model": cand,
+                        "messages": [{"role": "system", "content": system_prompt}, {"role": "user", "content": user_prompt}],
+                        "temperature": 0.1,
+                        "max_tokens": 600,
+                    }
+                    req_start = time.time()
+                    async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
+                        resp = await client.post(api_endpoint, headers=headers, json=payload)
                     req_latency = round((time.time() - req_start) * 1000)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -143,39 +128,61 @@ async def run_stage3_nvidia_deepseek(
                         parsed_json = extract_llm_json(choice.get("message", {}))
                         reasoning_cot = choice["message"].get("reasoning_content") or ""
                         raw_response_text = choice["message"].get("content") or reasoning_cot
-
-                        if parsed_json and reasoning_cot and (not parsed_json.get("chain_of_thought") or len(parsed_json.get("chain_of_thought", "")) < 20):
-                            parsed_json["chain_of_thought"] = reasoning_cot[:400]
-
                         if parsed_json and ("execution_bias" in parsed_json or "confidence" in parsed_json):
                             model_used = cand
                             telemetry_status = "SUCCESS"
                             telemetry_service.record_call(
-                                provider=provider_name,
-                                model=model_used,
-                                stage="Stage 3: DeepSeek Reasoning & Order Flow",
-                                endpoint=api_endpoint,
+                                provider=provider_name, model=model_used,
+                                stage="Stage 3: DeepSeek Reasoning & Order Flow", endpoint=api_endpoint,
                                 prompt_text=f"{system_prompt}\n\n=== USER INPUT & ORDER FLOW ===\n{user_prompt}",
                                 response_text=raw_response_text or json.dumps(parsed_json, indent=2),
                                 request_summary={"model": cand, "symbol": symbol, "funding_rate": funding_rate, "cvd": cvd_div},
-                                response_summary={
-                                    "execution_bias": parsed_json.get("execution_bias"),
-                                    "market_regime": parsed_json.get("market_regime"),
-                                    "confidence": parsed_json.get("confidence"),
-                                    "toxic_flow_detected": parsed_json.get("toxic_flow_detected"),
-                                },
-                                latency_ms=req_latency,
-                                status="SUCCESS",
-                                status_code=200,
+                                response_summary={"execution_bias": parsed_json.get("execution_bias"), "market_regime": parsed_json.get("market_regime"), "confidence": parsed_json.get("confidence"), "toxic_flow_detected": parsed_json.get("toxic_flow_detected")},
+                                latency_ms=req_latency, status="SUCCESS", status_code=200,
                             )
                             break
-                    else:
-                        print(f"[Stage 3 Reasoning Candidate {cand}] Status {resp.status_code}: {resp.text[:120]}")
-                        break
-            except Exception as e:
-                err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-                print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {err_msg}")
-                continue
+                except Exception as e:
+                    print(f"[Stage 3 Reasoning Notice]: Candidate {cand} failed: {e}")
+                    continue
+        else:
+            from backend.services.gemini_guard import call_nvidia_nim_json
+            res_nv = await call_nvidia_nim_json(
+                api_key=effective_key,
+                endpoint=endpoint,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                preferred_model=model_used,
+                role="fast",
+                max_tokens=500,
+                timeout_s=7.0,
+                required_keys=["execution_bias", "confidence"],
+            )
+            if res_nv["ok"]:
+                parsed_json = res_nv["parsed"]
+                reasoning_cot = res_nv["reasoning_cot"]
+                raw_response_text = res_nv["raw_text"]
+                model_used = res_nv["model"]
+                telemetry_status = "SUCCESS"
+                if parsed_json and reasoning_cot and len(str(parsed_json.get("chain_of_thought", ""))) < 20:
+                    parsed_json["chain_of_thought"] = reasoning_cot[:400]
+                telemetry_service.record_call(
+                    provider=provider_name,
+                    model=model_used,
+                    stage="Stage 3: DeepSeek Reasoning & Order Flow",
+                    endpoint=api_endpoint,
+                    prompt_text=f"{system_prompt}\n\n=== USER INPUT & ORDER FLOW ===\n{user_prompt}",
+                    response_text=raw_response_text or json.dumps(parsed_json, indent=2),
+                    request_summary={"model": model_used, "symbol": symbol, "funding_rate": funding_rate, "cvd": cvd_div},
+                    response_summary={
+                        "execution_bias": parsed_json.get("execution_bias"),
+                        "market_regime": parsed_json.get("market_regime"),
+                        "confidence": parsed_json.get("confidence"),
+                        "toxic_flow_detected": parsed_json.get("toxic_flow_detected"),
+                    },
+                    latency_ms=res_nv["latency_ms"],
+                    status="SUCCESS",
+                    status_code=200,
+                )
 
     # Deterministic Institutional Algorithmic Fallback if API fails or unavailable
     if not parsed_json:
@@ -226,12 +233,12 @@ async def run_stage3_nvidia_deepseek(
 
     # Compile Typed Question Results
     raw_bias = str(parsed_json.get("execution_bias", "NEUTRAL")).upper().strip()
+    edge_bool = bool(parsed_json.get("high_probability_edge", True))
     if "SELL" in raw_bias and "BUY" not in raw_bias:
         bias_val = "SELL"
     elif "BUY" in raw_bias and "SELL" not in raw_bias:
         bias_val = "BUY"
-    elif "SELL" in raw_bias and "BUY" in raw_bias:
-        # LLM echoed schema placeholder ("BUY | SELL | NEUTRAL") - infer from setup direction
+    elif ("SELL" in raw_bias and "BUY" in raw_bias) or (edge_bool and raw_bias == "NEUTRAL"):
         bias_val = "SELL" if direction in ["SHORT", "SELL", "BEARISH"] else ("BUY" if direction in ["LONG", "BUY", "BULLISH"] else "NEUTRAL")
     else:
         bias_val = "NEUTRAL"

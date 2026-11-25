@@ -87,7 +87,17 @@ class AutoTradingScheduler:
     async def trigger_cycle_now(self) -> Dict[str, Any]:
         return await self._execute_cycle()
 
+    async def _maybe_schedule_daily_ml_retrain(self):
+        try:
+            from backend.services.offline_ml_engine import offline_ml_engine
+            if offline_ml_engine.needs_daily_retrain(max_age_hours=24.0) and not offline_ml_engine.is_training:
+                print("[AutoTrader OfflineML] Triggering scheduled daily Offline ML training & Numba backtest verification...")
+                asyncio.create_task(offline_ml_engine.train_and_backtest_daily())
+        except Exception as e:
+            print(f"[AutoTrader OfflineML Notice]: {e}")
+
     async def _run_loop(self):
+        await self._maybe_schedule_daily_ml_retrain()
         if not self.last_run_timestamp:
             await self._execute_cycle()
 
@@ -103,6 +113,7 @@ class AutoTradingScheduler:
                         paper_engine.get_state()
 
                 if self.is_running:
+                    await self._maybe_schedule_daily_ml_retrain()
                     await self._execute_cycle()
             except asyncio.CancelledError:
                 break

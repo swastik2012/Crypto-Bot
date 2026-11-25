@@ -31,22 +31,22 @@ class Settings(BaseSettings):
     NVIDIA_MODEL: str = os.getenv("NVIDIA_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
     NVIDIA_ENDPOINT: str = os.getenv("NVIDIA_ENDPOINT", "https://integrate.api.nvidia.com/v1")
     NVIDIA_DEEPSEEK_MODEL: str = os.getenv("NVIDIA_DEEPSEEK_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
-    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_KIMI_MODEL: str = os.getenv("NVIDIA_KIMI_MODEL", "minimaxai/minimax-m3.1-flash")
     NVIDIA_REASONING_MODEL: str = os.getenv("NVIDIA_REASONING_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
-    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
-    NVIDIA_RISK_MODEL: str = os.getenv("NVIDIA_RISK_MODEL", "nvidia/nemotron-3.5-lightning-30b-a3b")
+    NVIDIA_FLAGSHIP_MODEL: str = os.getenv("NVIDIA_FLAGSHIP_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
+    NVIDIA_RISK_MODEL: str = os.getenv("NVIDIA_RISK_MODEL", "nvidia/nemotron-3-ultra-550b-a55b")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-flash-lite-latest")
     OPENAI_MODEL: str = os.getenv("OPENAI_MODEL", "gpt-4o")
 
     # Model Defaults
     DEFAULT_GEMINI_MODEL: str = "gemini-flash-lite-latest"
     DEFAULT_NVIDIA_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    DEFAULT_NVIDIA_FLAGSHIP_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    DEFAULT_NVIDIA_RISK_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    DEFAULT_NVIDIA_FLAGSHIP_MODEL: str = "nvidia/nemotron-3-ultra-550b-a55b"
+    DEFAULT_NVIDIA_RISK_MODEL: str = "nvidia/nemotron-3-ultra-550b-a55b"
     DEFAULT_NVIDIA_ENDPOINT: str = "https://integrate.api.nvidia.com/v1"
     DEFAULT_OPENAI_MODEL: str = "gpt-4o"
     DEFAULT_DEEPSEEK_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
-    DEFAULT_KIMI_MODEL: str = "nvidia/nemotron-3.5-lightning-30b-a3b"
+    DEFAULT_KIMI_MODEL: str = "minimaxai/minimax-m3.1-flash"
     
     # Paper Trading Defaults
     DEFAULT_STARTING_BALANCE: float = 10000.0

@@ -70,11 +70,12 @@ Analyze correlation risk with currently open positions, liquidity sweep traps, a
                 OpenAIQuotaGuard.mark_exhausted(err_msg)
             print(f"[Stage 3 OpenAI Notice] Note on endpoint: {err_msg} - failing over to NVIDIA NIM...")
 
-    # 2. NVIDIA NIM Reroute: Nemotron Lightning / Super VL
+    # 2. NVIDIA NIM Reroute: Live verified free models (Nemotron Lightning / Ultra / Bolt / MiniMax)
     if not gemini_critique and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
         try:
-            nv_model = settings.NVIDIA_REASONING_MODEL or "nvidia/nemotron-3.5-lightning-30b-a3b"
-            nv_prompt = f"""You are the Chief Risk Officer for crypto trade auditing on {symbol}.
+            from backend.services.gemini_guard import NvidiaQuotaGuard
+            for nv_model in NvidiaQuotaGuard.build_candidates(settings.NVIDIA_RISK_MODEL, role="flagship"):
+                nv_prompt = f"""You are the Chief Risk Officer for crypto trade auditing on {symbol}.
 Evaluate correlation and liquidity sweep traps for this setup:
 - Direction: {stage1.initial_thesis.get('direction', 'LONG')}
 - Monte Carlo Win Rate: {stage2.monte_carlo_win_rate}%
@@ -82,26 +83,31 @@ Portfolio context:
 {risk_portfolio_str}
 
 Provide a concise 2-sentence institutional risk audit critique."""
-            async with httpx.AsyncClient(timeout=httpx.Timeout(10.0, connect=2.5)) as http_client:
-                nv_resp = await http_client.post(
-                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                    headers={"Authorization": f"Bearer {settings.NVIDIA_API_KEY}", "Content-Type": "application/json"},
-                    json={
-                        "model": nv_model,
-                        "messages": [{"role": "user", "content": nv_prompt}],
-                        "temperature": 0.2,
-                        "max_tokens": 500,
-                    },
-                )
-                if nv_resp.status_code == 200:
-                    choice = nv_resp.json().get("choices", [{}])[0].get("message", {})
-                    raw_text = choice.get("content") or choice.get("reasoning_content") or ""
-                    clean_text = raw_text.strip()
-                    gemini_critique = f"NVIDIA Risk Critique: {clean_text[:220]}"
-                    nvidia_critique = f"NVIDIA Risk Critique: {clean_text[220:440]}"
-                    model_name = nv_model
-                    latency = int((time.time() - start_time) * 1000)
-                    print(f"[Stage 3 NVIDIA Reroute Success]: Audited via {nv_model}")
+                payload = {
+                    "model": nv_model,
+                    "messages": [{"role": "user", "content": nv_prompt}],
+                    "temperature": 0.2,
+                    "max_tokens": 400,
+                }
+                if "lightning" in nv_model.lower():
+                    payload["chat_template_kwargs"] = {"enable_thinking": False}
+                async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.5)) as http_client:
+                    nv_resp = await http_client.post(
+                        f"{settings.NVIDIA_ENDPOINT}/chat/completions",
+                        headers={"Authorization": f"Bearer {settings.NVIDIA_API_KEY}", "Content-Type": "application/json"},
+                        json=payload,
+                    )
+                    if nv_resp.status_code == 200:
+                        choice = nv_resp.json().get("choices", [{}])[0].get("message", {})
+                        raw_text = choice.get("content") or choice.get("reasoning_content") or ""
+                        clean_text = raw_text.strip()
+                        if clean_text:
+                            gemini_critique = f"NVIDIA Risk Critique: {clean_text[:220]}"
+                            nvidia_critique = f"NVIDIA Risk Critique: {clean_text[220:440]}"
+                            model_name = nv_model
+                            latency = int((time.time() - start_time) * 1000)
+                            print(f"[Stage 3 NVIDIA Reroute Success]: Audited via {nv_model}")
+                            break
         except Exception as e:
             print(f"[Stage 3 NVIDIA Notice]: {e}")
 

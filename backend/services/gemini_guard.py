@@ -185,12 +185,16 @@ class OpenAIQuotaGuard:
         Record a 429 quota exhaustion or rate limit for OpenAI.
         Bypasses subsequent OpenAI calls and routes instantly to NVIDIA NIM.
         """
+        msg_lower = str(error_msg).lower()
+        if any(k in msg_lower for k in ["no credits", "insufficient_quota", "billing", "exceeded your current quota"]):
+            cooldown_seconds = max(cooldown_seconds, 86400.0)
         now = time.time()
         cls._exhausted_until = now + cooldown_seconds
         cls._last_error_msg = str(error_msg)[:300]
         cls._failover_count += 1
-        mins = int(cooldown_seconds / 60)
-        print(f"[OpenAI Quota Guard] ⚠️ OpenAI credits exhausted or rate limited (429) - {mins}m cooldown active. Rerouting all OpenAI tasks to NVIDIA NIM flagship reasoning models.")
+        hours = cooldown_seconds / 3600.0
+        dur_str = f"{int(hours)}h" if hours >= 1.0 else f"{int(cooldown_seconds / 60)}m"
+        print(f"[OpenAI Quota Guard] ⚠️ OpenAI credits exhausted or rate limited (429) - {dur_str} cooldown active. Rerouting all OpenAI tasks to NVIDIA NIM free latest models.")
 
     @classmethod
     def get_status(cls) -> Dict[str, Any]:
@@ -293,4 +297,137 @@ def extract_llm_json(message: Any) -> Dict[str, Any]:
                     parsed[key] = val
 
     return parsed
+
+
+class NvidiaQuotaGuard:
+    """
+    Adaptive Circuit Breaker & Model Cascade for Live Free NVIDIA NIM Endpoints.
+    Maintains verified sub-second and flagship models:
+      - Fast / DeepSeek-class: nvidia/nemotron-3.5-lightning-30b-a3b (non-thinking ~630ms),
+        nvidia/nemotron-3.5-bolt-e4b (~530-1300ms), minimaxai/minimax-m3.1-flash (~2.7-4.9s),
+        nvidia/nemotron-3-ultra-550b-a55b (~5.6s)
+    Automatically avoids 404 / ReadTimeout models for a short cooldown.
+    """
+    FAST_CASCADE: List[str] = [
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nvidia/nemotron-3.5-bolt-e4b",
+        "minimaxai/minimax-m3.1-flash",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+    ]
+    FLAGSHIP_CASCADE: List[str] = [
+        "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "nvidia/nemotron-3-ultra-550b-a55b",
+        "minimaxai/minimax-m3.1-flash",
+        "nvidia/nemotron-3.5-bolt-e4b",
+    ]
+    DEPRECATED_MODELS = {
+        "nvidia/nemotron-3.5-super-vl-120b-a12b",  # Consistently ReadTimeout >12s
+        "meta/llama-3.2-11b-vision-instruct",     # Removed from NVIDIA NIM catalog
+        "openai/gpt-oss-20b",                     # Removed from NVIDIA NIM catalog
+        "google/gemma-3-12b-it",                  # Returns HTTP 404
+        "google/gemma-3-4b-it",                   # Returns HTTP 404
+        "moonshotai/kimi-k3.1-pro",               # Consistently ReadTimeout >12s
+        "z-ai/glm-5.3-flash",                     # Consistently ReadTimeout >12s
+    }
+
+    _cooldowns: Dict[str, float] = {}
+
+    @classmethod
+    def is_available(cls, model: str) -> bool:
+        if not model or model in cls.DEPRECATED_MODELS:
+            return False
+        return time.time() >= cls._cooldowns.get(model, 0.0)
+
+    @classmethod
+    def mark_failed(cls, model: str, seconds: float = 300.0):
+        if model:
+            cls._cooldowns[model] = time.time() + seconds
+
+    @classmethod
+    def build_candidates(cls, preferred: Optional[str] = None, role: str = "fast") -> List[str]:
+        base = cls.FLAGSHIP_CASCADE if role == "flagship" else cls.FAST_CASCADE
+        ordered = []
+        if preferred and preferred not in cls.DEPRECATED_MODELS:
+            ordered.append(preferred)
+        for m in base:
+            if m not in ordered:
+                ordered.append(m)
+        avail = [m for m in ordered if cls.is_available(m)]
+        return avail if avail else list(cls.FAST_CASCADE)
+
+
+async def call_nvidia_nim_json(
+    api_key: str,
+    endpoint: str,
+    system_prompt: str,
+    user_prompt: str,
+    preferred_model: Optional[str] = None,
+    role: str = "fast",
+    max_tokens: int = 500,
+    timeout_s: float = 8.0,
+    required_keys: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """
+    Calls the fastest healthy live NVIDIA NIM model and returns:
+      {"ok": bool, "model": str, "parsed": dict, "raw_text": str, "reasoning_cot": str, "latency_ms": int}
+    Automatically sets enable_thinking=False for nemotron-3.5-lightning-30b-a3b so it returns JSON in ~630ms.
+    """
+    import httpx
+    candidates = NvidiaQuotaGuard.build_candidates(preferred_model, role=role)
+    url = f"{endpoint.rstrip('/')}/chat/completions"
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+
+    for cand in candidates:
+        t0 = time.time()
+        try:
+            payload: Dict[str, Any] = {
+                "model": cand,
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "temperature": 0.1,
+                "max_tokens": max_tokens,
+            }
+            # Disable hidden chain-of-thought token bloat on Nemotron-3.5-Lightning so JSON completes in ~630ms
+            if "lightning" in cand.lower():
+                payload["chat_template_kwargs"] = {"enable_thinking": False}
+            elif "ultra" in cand.lower() or "minimax" in cand.lower():
+                payload["max_tokens"] = max(max_tokens, 750)
+
+            eff_timeout = max(timeout_s, 10.0) if "ultra" in cand.lower() else timeout_s
+            async with httpx.AsyncClient(timeout=httpx.Timeout(eff_timeout, connect=2.5)) as client:
+                resp = await client.post(url, headers=headers, json=payload)
+
+            lat = round((time.time() - t0) * 1000)
+            if resp.status_code == 200:
+                data = resp.json()
+                choice = data.get("choices", [{}])[0].get("message", {})
+                parsed = extract_llm_json(choice)
+                cot = choice.get("reasoning_content") or ""
+                raw_text = choice.get("content") or cot
+                if parsed and (not required_keys or any(k in parsed for k in required_keys)):
+                    return {
+                        "ok": True,
+                        "model": cand,
+                        "parsed": parsed,
+                        "raw_text": raw_text,
+                        "reasoning_cot": cot,
+                        "latency_ms": lat,
+                    }
+            elif resp.status_code in (404, 429, 503):
+                NvidiaQuotaGuard.mark_failed(cand, seconds=600.0)
+            else:
+                NvidiaQuotaGuard.mark_failed(cand, seconds=180.0)
+        except Exception:
+            NvidiaQuotaGuard.mark_failed(cand, seconds=180.0)
+
+    return {
+        "ok": False,
+        "model": candidates[0] if candidates else "nvidia/nemotron-3.5-lightning-30b-a3b",
+        "parsed": {},
+        "raw_text": "",
+        "reasoning_cot": "",
+        "latency_ms": 0,
+    }
 

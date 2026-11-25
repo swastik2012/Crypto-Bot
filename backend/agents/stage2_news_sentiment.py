@@ -173,46 +173,34 @@ async def run_stage2_news_sentiment(
     start_time = time.time()
     latency_ms = 350
 
-    from backend.services.gemini_guard import GeminiQuotaGuard, extract_llm_json
+    from backend.services.gemini_guard import GeminiQuotaGuard, call_nvidia_nim_json
 
-    # Call NVIDIA NIM API or Gemini fallback with live news articles
+    # Call NVIDIA NIM API (with live verified cascade & enable_thinking=False optimization)
     parsed_successfully = False
     if nvidia_key and not nvidia_key.startswith("your-"):
-        try:
-            headers = {
-                "Authorization": f"Bearer {nvidia_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 400,
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
-                resp = await client.post(
-                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choice = data.get("choices", [{}])[0].get("message", {})
-                    parsed = extract_llm_json(choice)
-                    if parsed and "sentiment_score" in parsed:
-                        sentiment_label = parsed.get("sentiment_label", sentiment_label)
-                        sentiment_score = float(parsed.get("sentiment_score", sentiment_score))
-                        news_gist = parsed.get("news_gist", news_gist)
-                        key_catalysts = parsed.get("key_catalysts", key_catalysts)
-                        macro_narrative = parsed.get("macro_narrative", macro_narrative)
-                        source_breakdown = parsed.get("source_sentiment_breakdown", source_breakdown)
-                        parsed_successfully = True
-        except Exception as e:
-            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-            print(f"[Stage 2 NVIDIA Notice]: {err_msg}")
+        res_nv = await call_nvidia_nim_json(
+            api_key=nvidia_key,
+            endpoint=settings.NVIDIA_ENDPOINT,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            preferred_model=model_name,
+            role="fast",
+            max_tokens=450,
+            timeout_s=7.0,
+            required_keys=["sentiment_score", "sentiment_label"],
+        )
+        if res_nv["ok"]:
+            parsed = res_nv["parsed"]
+            sentiment_label = parsed.get("sentiment_label", sentiment_label)
+            sentiment_score = float(parsed.get("sentiment_score", sentiment_score))
+            news_gist = parsed.get("news_gist", news_gist)
+            key_catalysts = parsed.get("key_catalysts", key_catalysts)
+            macro_narrative = parsed.get("macro_narrative", macro_narrative)
+            source_breakdown = parsed.get("source_sentiment_breakdown", source_breakdown)
+            model_name = res_nv["model"]
+            parsed_successfully = True
+        else:
+            print("[Stage 2 NVIDIA Notice]: All NVIDIA NIM candidates busy, trying secondary failover...")
 
     # If NVIDIA NIM didn't return 200, invoke Google Gemini on the live news stream if available
     target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")

@@ -417,12 +417,76 @@ async def run_stage5_gemini_arbiter(
         f"Arbitrate final consensus verdict and synthesize execution plan."
     )
 
+    # Offline ML Meta-Labeling & Progressive Cloud AI Replacement
+    from backend.services.offline_ml_engine import offline_ml_engine
+    ind_for_ml = dict(ind_dict)
+    ind_for_ml.setdefault("current_price", current_price)
+    offline_pred = (
+        indicators.get("_offline_ml_pred")
+        if isinstance(indicators, dict) and isinstance(indicators.get("_offline_ml_pred"), dict)
+        else offline_ml_engine.predict_setup(symbol, indicators=ind_for_ml, mtf_data=mtf)
+    )
+    offline_ml_active = bool(offline_pred.get("available"))
+    cloud_ai_replaced = False
+    offline_sig_str = str(offline_pred.get("signal", "HOLD"))
+    offline_conf = float(offline_pred.get("confidence", 50.0))
+    offline_auto_w = float(offline_pred.get("autonomy_weight", 0.0))
+    offline_promoted = bool(offline_pred.get("is_promoted", False))
+
+    if offline_ml_active and not veto_active:
+        sig_dir_bull = signal in [SignalAction.BUY, SignalAction.STRONG_BUY]
+        sig_dir_bear = signal in [SignalAction.SELL, SignalAction.STRONG_SELL]
+        ml_agrees = (
+            (offline_sig_str == "BUY" and (sig_dir_bull or direction in ["LONG", "BULLISH"])) or
+            (offline_sig_str == "SELL" and (sig_dir_bear or direction in ["SHORT", "BEARISH"]))
+        )
+        ml_opposes = (
+            (offline_sig_str == "BUY" and (sig_dir_bear or direction in ["SHORT", "BEARISH"])) or
+            (offline_sig_str == "SELL" and (sig_dir_bull or direction in ["LONG", "BULLISH"]))
+        )
+        if ml_agrees:
+            consensus_confidence = round(
+                min(98.0, consensus_confidence * (1.0 - offline_auto_w * 0.5) + offline_conf * (offline_auto_w * 0.5)),
+                1,
+            )
+            if consensus_confidence >= settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD and signal == SignalAction.HOLD and fakeout_risk < 50.0:
+                if direction in ["SHORT", "SELL", "BEARISH"]:
+                    signal = SignalAction.SELL
+                elif direction in ["LONG", "BUY", "BULLISH"]:
+                    signal = SignalAction.BUY
+        elif ml_opposes and offline_promoted:
+            consensus_confidence = round(max(25.0, consensus_confidence - (offline_auto_w * 18.0)), 1)
+            if consensus_confidence < settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
+                signal = SignalAction.HOLD
+        elif offline_sig_str == "HOLD" and offline_promoted and offline_conf < 45.0:
+            consensus_confidence = round(max(30.0, consensus_confidence * (1.0 - offline_auto_w * 0.2)), 1)
+            if consensus_confidence < settings.AUTO_EXECUTE_CONFIDENCE_THRESHOLD:
+                signal = SignalAction.HOLD
+
     from backend.services.gemini_guard import GeminiQuotaGuard
 
-    # If Gemini API Key is present and quota is available, invoke Gemini LLM for dynamic synthesis
+    # Progressive Cloud AI Bypass when Numba-validated Offline ML is promoted and autonomous
     parsed_arbiter = False
+    if offline_pred.get("can_replace_cloud_ai") and offline_promoted:
+        if not veto_active:
+            if offline_sig_str == "BUY" and direction not in ["SHORT", "SELL", "BEARISH"]:
+                signal = SignalAction.STRONG_BUY if consensus_confidence >= 80.0 and fakeout_risk < 35.0 else SignalAction.BUY
+            elif offline_sig_str == "SELL" and direction not in ["LONG", "BUY", "BULLISH"]:
+                signal = SignalAction.STRONG_SELL if consensus_confidence >= 80.0 and fakeout_risk < 35.0 else SignalAction.SELL
+            elif offline_sig_str == "HOLD" and signal != SignalAction.HOLD:
+                signal = SignalAction.HOLD
+            summary = (
+                f"Offline ML Sovereign Arbiter ({offline_pred.get('model_version')}, Numba-Verified Autonomy {offline_auto_w*100:.0f}%): "
+                f"Issued {signal.value} ({consensus_confidence}% blended conviction, ML={offline_conf}%) on {symbol}. "
+                f"MTF={mtf_align}, Stage 3 Monte Carlo R:R=1:{stage3.risk_reward_ratio}, Stage 4 Safety={stage4.safety_score}%."
+            )
+        model_name = f"offline-ml/{offline_pred.get('model_version', 'v1')}"
+        parsed_arbiter = True
+        cloud_ai_replaced = True
+
+    # If Gemini API Key is present and quota is available, invoke Gemini LLM for dynamic synthesis
     target_engine = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
-    if gemini_key and not gemini_key.startswith("AIzaSy***") and target_engine:
+    if not parsed_arbiter and gemini_key and not gemini_key.startswith("AIzaSy***") and target_engine:
         cascade_models = [target_engine] + [m for m in GeminiQuotaGuard.DEFAULT_CASCADE_ORDER if m != target_engine]
         for candidate_model in cascade_models:
             if not GeminiQuotaGuard.is_available(candidate_model):
@@ -471,50 +535,35 @@ async def run_stage5_gemini_arbiter(
                     print(f"[Stage 5 Gemini Arbiter Notice] LLM synthesis fallback ({candidate_model}): {err_msg}")
                     continue
 
-    from backend.services.gemini_guard import GeminiQuotaGuard, extract_llm_json
+    from backend.services.gemini_guard import GeminiQuotaGuard, extract_llm_json, call_nvidia_nim_json
 
     # Fallback to NVIDIA NIM for consensus arbitration if Gemini is unavailable
     if not parsed_arbiter and settings.NVIDIA_API_KEY and not settings.NVIDIA_API_KEY.startswith("your-"):
-        try:
-            nv_model = settings.NVIDIA_FLAGSHIP_MODEL or settings.DEFAULT_NVIDIA_MODEL or "nvidia/nemotron-3.5-super-vl-120b-a12b"
-            nv_headers = {
-                "Authorization": f"Bearer {settings.NVIDIA_API_KEY}",
-                "Content-Type": "application/json",
-            }
-            nv_payload = {
-                "model": nv_model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 380,
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(7.0, connect=2.0)) as client:
-                resp = await client.post(
-                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                    headers=nv_headers,
-                    json=nv_payload,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choice = data.get("choices", [{}])[0].get("message", {})
-                    parsed = extract_llm_json(choice)
-                    if parsed and "consensus_signal" in parsed and not veto_active:
-                        sig_str = parsed.get("consensus_signal", signal.value).upper()
-                        for sa in SignalAction:
-                            if sa.value == sig_str:
-                                signal = sa
-                                break
-                        consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
-                        summary = parsed.get("executive_summary", summary)
-                        invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
-                        model_name = nv_model
-                        parsed_arbiter = True
-                        print(f"[Stage 5 NVIDIA Reroute Success]: Arbitrated via {nv_model} ({signal.value}, {consensus_confidence}%)")
-        except Exception as e:
-            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-            print(f"[Stage 5 NVIDIA Notice]: {err_msg}")
+        res_nv = await call_nvidia_nim_json(
+            api_key=settings.NVIDIA_API_KEY,
+            endpoint=settings.NVIDIA_ENDPOINT,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            preferred_model=settings.NVIDIA_FLAGSHIP_MODEL,
+            role="flagship",
+            max_tokens=450,
+            timeout_s=7.5,
+            required_keys=["consensus_signal", "consensus_confidence"],
+        )
+        if res_nv["ok"]:
+            parsed = res_nv["parsed"]
+            if parsed and "consensus_signal" in parsed and not veto_active:
+                sig_str = parsed.get("consensus_signal", signal.value).upper()
+                for sa in SignalAction:
+                    if sa.value == sig_str:
+                        signal = sa
+                        break
+                consensus_confidence = float(parsed.get("consensus_confidence", consensus_confidence))
+                summary = parsed.get("executive_summary", summary)
+                invalidation_cond = parsed.get("key_invalidation_condition", invalidation_cond)
+                model_name = res_nv["model"]
+                parsed_arbiter = True
+                print(f"[Stage 5 NVIDIA Reroute Success]: Arbitrated via {model_name} in {res_nv['latency_ms']}ms ({signal.value}, {consensus_confidence}%)")
 
     open_positions: List[Dict] = account_state.get("open_positions", [])
     equity = float(account_state.get("total_equity", account_state.get("cash_balance", 10000.0)) or 10000.0)
@@ -723,6 +772,11 @@ async def run_stage5_gemini_arbiter(
             "carry_regime": deriv_dict.get("carry_regime", "NEUTRAL_CARRY"),
             "carry_cashflow_8h_usd": deriv_dict.get("carry_cashflow_8h_usd", 0.0),
             "dual_brain_alignment": "ALIGNED (System 1 + System 2)" if dual_brain_aligned else "DIVERGENT",
+            "offline_ml_signal": offline_sig_str,
+            "offline_ml_confidence": offline_conf,
+            "offline_ml_autonomy_weight": offline_auto_w,
+            "offline_ml_promoted": offline_promoted,
+            "cloud_ai_replaced": cloud_ai_replaced,
             "overall_agreement": f"Confluence ({consensus_confidence}%) - {signal.value}",
         },
         playbook_veto=playbook_veto,

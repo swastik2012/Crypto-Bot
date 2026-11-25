@@ -377,46 +377,33 @@ async def run_stage3_nvidia_nim(
     start_time = time.time()
     latency_ms = 410
 
+    from backend.services.gemini_guard import GeminiQuotaGuard, call_nvidia_nim_json
+
     parsed_successfully = False
     if nvidia_key and not nvidia_key.startswith("your-"):
-        try:
-            headers = {
-                "Authorization": f"Bearer {nvidia_key}",
-                "Content-Type": "application/json",
-            }
-            payload = {
-                "model": model_name,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "temperature": 0.1,
-                "max_tokens": 450,
-            }
-            async with httpx.AsyncClient(timeout=httpx.Timeout(8.0, connect=2.0)) as client:
-                resp = await client.post(
-                    f"{settings.NVIDIA_ENDPOINT}/chat/completions",
-                    headers=headers,
-                    json=payload,
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    choice = data.get("choices", [{}])[0].get("message", {})
-                    from backend.services.gemini_guard import extract_llm_json
-                    parsed = extract_llm_json(choice)
-                    if parsed and "stress_test_score" in parsed:
-                        stress_score = float(parsed.get("stress_test_score", stress_score))
-                        calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
-                        mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
-                        verdict = parsed.get("verdict", verdict)
-                        adjustments = parsed.get("adjustments_proposed", adjustments)
-                        math_proof = parsed.get("mathematical_proof", math_proof)
-                        parsed_successfully = True
-        except Exception as e:
-            err_msg = str(e) or f"{type(e).__name__} (request timed out)"
-            print(f"[Stage 3 NVIDIA Quant Notice]: {err_msg}")
-
-    from backend.services.gemini_guard import GeminiQuotaGuard
+        res_nv = await call_nvidia_nim_json(
+            api_key=nvidia_key,
+            endpoint=settings.NVIDIA_ENDPOINT,
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            preferred_model=model_name,
+            role="fast",
+            max_tokens=500,
+            timeout_s=7.0,
+            required_keys=["stress_test_score", "verdict"],
+        )
+        if res_nv["ok"]:
+            parsed = res_nv["parsed"]
+            stress_score = float(parsed.get("stress_test_score", stress_score))
+            calculated_rr = float(parsed.get("risk_reward_ratio", calculated_rr))
+            mc_win_rate = float(parsed.get("monte_carlo_win_rate", mc_win_rate))
+            verdict = parsed.get("verdict", verdict)
+            adjustments = parsed.get("adjustments_proposed", adjustments)
+            math_proof = parsed.get("mathematical_proof", math_proof)
+            model_name = res_nv["model"]
+            parsed_successfully = True
+        else:
+            print("[Stage 3 NVIDIA Quant Notice]: NVIDIA NIM candidates returned incomplete output, cascading...")
 
     # If NVIDIA NIM didn't return 200, invoke Google Gemini if quota available
     target_gemini = GeminiQuotaGuard.get_available_model(settings.GEMINI_MODEL or "gemini-flash-lite-latest")
