@@ -30,6 +30,7 @@ htmlcov/
 # Local database & paper trade persistence
 backend/data/*.json
 backend/data/vm_sync/
+backend/backups/
 backend/data/historical_candles/*_latest.json
 !backend/data/.gitkeep
 
