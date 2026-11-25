@@ -482,29 +482,52 @@ class OfflineMLEngine:
     def __init__(self):
         self.model_data: Dict[str, Any] = {}
         self.is_training: bool = False
+        self._model_mtime: float = 0.0
         self._load_model()
 
     def _load_model(self):
         if MODEL_FILE.exists():
             try:
+                self._model_mtime = MODEL_FILE.stat().st_mtime
                 with open(MODEL_FILE, "r") as f:
                     self.model_data = json.load(f)
             except Exception as e:
                 print(f"[OfflineML] Notice loading model artifact: {e}")
                 self.model_data = {}
 
+    def _reload_if_updated(self):
+        if MODEL_FILE.exists():
+            try:
+                mt = MODEL_FILE.stat().st_mtime
+                if mt > self._model_mtime:
+                    self._load_model()
+            except Exception:
+                pass
+
     def _save_model(self):
         DATA_DIR.mkdir(parents=True, exist_ok=True)
         with open(MODEL_FILE, "w") as f:
             json.dump(self.model_data, f, indent=2)
+        try:
+            self._model_mtime = MODEL_FILE.stat().st_mtime
+        except Exception:
+            pass
 
     def needs_daily_retrain(self, max_age_hours: float = 24.0) -> bool:
+        from backend.config import settings
+        if not getattr(settings, "ENABLE_LOCAL_ML_TRAINING", True):
+            return False
+        self._reload_if_updated()
         if not self.model_data or not self.model_data.get("weights"):
             return True
         last_ts = float(self.model_data.get("last_trained_at", 0.0) or 0.0)
         return (time.time() - last_ts) >= (max_age_hours * 3600.0)
 
-    def _extract_knowledge_priors(self) -> Dict[str, Dict[str, float]]:
+    def _extract_knowledge_priors(self, source_data_dir: Optional[Path] = None) -> Dict[str, Dict[str, float]]:
+        d_dir = source_data_dir or DATA_DIR
+        learnings_f = d_dir / "trade_learnings.json"
+        paper_f = d_dir / "paper_account.json"
+        playbook_f = d_dir / "trade_playbook.json"
         stats: Dict[str, Dict[str, float]] = {}
 
         def _acc(key: str, win: Optional[bool], conf_adj: float):
@@ -517,9 +540,9 @@ class OfflineMLEngine:
             elif win is False:
                 stats[key]["losses"] += 1.0
 
-        if LEARNINGS_FILE.exists():
+        if learnings_f.exists():
             try:
-                for l in json.load(open(LEARNINGS_FILE)):
+                for l in json.load(open(learnings_f)):
                     sym = str(l.get("symbol", "")).split("/")[0].upper()
                     side = str(l.get("side", "LONG")).upper()
                     out = str(l.get("outcome", "")).upper()
@@ -530,9 +553,9 @@ class OfflineMLEngine:
             except Exception:
                 pass
 
-        if PAPER_FILE.exists():
+        if paper_f.exists():
             try:
-                pa = json.load(open(PAPER_FILE))
+                pa = json.load(open(paper_f))
                 for t in pa.get("trade_history", []):
                     sym = str(t.get("symbol", "")).split("/")[0].upper()
                     side = str(t.get("side", "LONG")).upper()
@@ -543,9 +566,9 @@ class OfflineMLEngine:
             except Exception:
                 pass
 
-        if PLAYBOOK_FILE.exists():
+        if playbook_f.exists():
             try:
-                pb = json.load(open(PLAYBOOK_FILE))
+                pb = json.load(open(playbook_f))
                 rules = pb.get("rules", []) if isinstance(pb, dict) else pb
                 for r in rules:
                     sym = str(r.get("symbol", "ALL")).split("/")[0].upper()
@@ -623,14 +646,16 @@ class OfflineMLEngine:
         self,
         priors: Dict[str, Dict[str, float]],
         candle_arrays: Dict[str, Tuple[np.ndarray, ...]],
+        source_data_dir: Optional[Path] = None,
     ) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
         X_list: List[List[float]] = []
         y_list: List[float] = []
         w_list: List[float] = []
+        paper_f = (source_data_dir or DATA_DIR) / "paper_account.json"
 
-        if PAPER_FILE.exists():
+        if paper_f.exists():
             try:
-                pa = json.load(open(PAPER_FILE))
+                pa = json.load(open(paper_f))
                 for t in pa.get("trade_history", []):
                     sym_full = str(t.get("symbol", "BTC/USDT")).upper()
                     base_sym = sym_full.split("/")[0]
@@ -783,7 +808,14 @@ class OfflineMLEngine:
         p_gbdt = self._sigmoid(f_b)
         return 0.45 * p_log + 0.55 * p_gbdt
 
-    async def train_and_backtest_daily(self, force: bool = False) -> Dict[str, Any]:
+    async def train_and_backtest_daily(self, force: bool = False, source_data_dir: Optional[Path] = None) -> Dict[str, Any]:
+        from backend.config import settings
+        if not getattr(settings, "ENABLE_LOCAL_ML_TRAINING", True):
+            return {
+                "status": "disabled_on_host",
+                "message": "Offline ML training/testing is disabled on this hosting-only VM (ENABLE_LOCAL_ML_TRAINING=false). Train locally and sync offline_ml_model.json.",
+                "model_summary": self.get_status(),
+            }
         if self.is_training:
             return {"status": "already_running"}
         if not force and not self.needs_daily_retrain():
@@ -792,7 +824,7 @@ class OfflineMLEngine:
         self.is_training = True
         t0 = time.time()
         try:
-            priors = self._extract_knowledge_priors()
+            priors = self._extract_knowledge_priors(source_data_dir=source_data_dir)
             candles_map = await self._ensure_candle_data(["BTCUSDT", "ETHUSDT", "XRPUSDT"])
             if not candles_map:
                 self.is_training = False
@@ -883,7 +915,7 @@ class OfflineMLEngine:
                         "X_long": X_oos_long, "X_short": X_oos_short,
                     }
 
-            X_real, y_real, w_real = self._build_real_trade_samples(priors, candle_arrays)
+            X_real, y_real, w_real = self._build_real_trade_samples(priors, candle_arrays, source_data_dir=source_data_dir)
             if len(X_real) > 0:
                 X_train_parts.append(X_real)
                 y_train_parts.append(y_real)
@@ -1009,6 +1041,7 @@ class OfflineMLEngine:
         indicators: Optional[Dict[str, Any]] = None,
         mtf_data: Optional[Any] = None,
     ) -> Dict[str, Any]:
+        self._reload_if_updated()
         if not self.model_data or not self.model_data.get("weights"):
             return {
                 "available": False, "signal": "HOLD", "confidence": 50.0,
@@ -1098,10 +1131,13 @@ class OfflineMLEngine:
         }
 
     def get_status(self) -> Dict[str, Any]:
+        from backend.config import settings
+        self._reload_if_updated()
         if not self.model_data:
             return {
                 "trained": False, "is_promoted": False, "autonomy_weight": 0.0,
-                "needs_retrain": True, "numba_available": NUMBA_AVAILABLE,
+                "needs_retrain": self.needs_daily_retrain(), "numba_available": NUMBA_AVAILABLE,
+                "training_enabled_on_host": getattr(settings, "ENABLE_LOCAL_ML_TRAINING", True),
             }
         return {
             "trained": True,
@@ -1111,6 +1147,7 @@ class OfflineMLEngine:
             "last_trained_at": self.model_data.get("last_trained_at"),
             "last_trained_iso": self.model_data.get("last_trained_iso"),
             "needs_retrain": self.needs_daily_retrain(),
+            "training_enabled_on_host": getattr(settings, "ENABLE_LOCAL_ML_TRAINING", True),
             "training_duration_sec": self.model_data.get("training_duration_sec"),
             "train_samples_candle": self.model_data.get("train_samples_candle"),
             "train_samples_real_trades": self.model_data.get("train_samples_real_trades"),

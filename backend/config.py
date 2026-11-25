@@ -57,6 +57,9 @@ class Settings(BaseSettings):
     # Consensus Threshold for Auto-Execution
     AUTO_EXECUTE_CONFIDENCE_THRESHOLD: float = 65.0
 
+    # Offline ML Training Gate (True on local dev/training workstation, False on hosting-only VM)
+    ENABLE_LOCAL_ML_TRAINING: bool = os.getenv("ENABLE_LOCAL_ML_TRAINING", "true").lower() in ("1", "true", "yes")
+
     class Config:
         env_file = str(backend_env) if backend_env.exists() else None
         extra = "allow"

@@ -89,6 +89,8 @@ class AutoTradingScheduler:
 
     async def _maybe_schedule_daily_ml_retrain(self):
         try:
+            if not getattr(settings, "ENABLE_LOCAL_ML_TRAINING", True):
+                return
             from backend.services.offline_ml_engine import offline_ml_engine
             if offline_ml_engine.needs_daily_retrain(max_age_hours=24.0) and not offline_ml_engine.is_training:
                 print("[AutoTrader OfflineML] Triggering scheduled daily Offline ML training & Numba backtest verification...")
